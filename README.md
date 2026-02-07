@@ -184,6 +184,8 @@ This bot now includes production-grade safeguards:
 
 ## Usage
 
+Desktop app instructions: `USAGE.md`
+
 ### Debug API Response
 
 To check what fields the API actually returns (useful for finding liquidity activation rules):

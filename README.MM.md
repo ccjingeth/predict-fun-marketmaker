@@ -174,6 +174,8 @@ npm run setup:approvals
 
 ## 📖 使用指南
 
+桌面端完整使用说明：`USAGE.md`
+
 ### 做市商模式
 
 运行做市商机器人：
