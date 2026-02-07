@@ -1,0 +1,44 @@
+{
+  "name": "predict-fun-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "electron/main.mjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "build:bot": "npm --prefix .. run build",
+    "pack": "npm run build:bot && electron-builder",
+    "dist": "npm run build:bot && electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "fun.predict.desktop",
+    "productName": "Predict.fun Console",
+    "files": [
+      "electron/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist",
+        "to": "bot/dist"
+      },
+      {
+        "from": "../.env.example",
+        "to": "bot/.env.example"
+      },
+      {
+        "from": "../cross-platform-mapping.json",
+        "to": "bot/cross-platform-mapping.json"
+      }
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  }
+}

@@ -1,0 +1,11 @@
+import { contextBridge, ipcRenderer } from 'electron';
+
+contextBridge.exposeInMainWorld('predictBot', {
+  readEnv: () => ipcRenderer.invoke('read-env'),
+  writeEnv: (text) => ipcRenderer.invoke('write-env', text),
+  startBot: (type) => ipcRenderer.invoke('start-bot', type),
+  stopBot: (type) => ipcRenderer.invoke('stop-bot', type),
+  getStatus: () => ipcRenderer.invoke('status'),
+  onLog: (callback) => ipcRenderer.on('bot-log', (_, payload) => callback(payload)),
+  onStatus: (callback) => ipcRenderer.on('bot-status', (_, payload) => callback(payload)),
+});

@@ -1,0 +1,38 @@
+{
+  "name": "predict-fun-market-maker",
+  "version": "2.0.0",
+  "description": "Automated market maker and arbitrage bot for Predict.fun",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "start:mm": "tsx src/index.ts",
+    "start:arb": "tsx src/arbitrage-bot.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "test": "tsx src/test.ts",
+    "debug": "tsx src/debug-api.ts",
+    "check:api": "node scripts/check-api.cjs",
+    "auth:jwt": "tsx src/auth-jwt.ts",
+    "setup:approvals": "tsx src/setup-approvals.ts"
+  },
+  "keywords": [
+    "predict",
+    "market-maker",
+    "arbitrage",
+    "trading-bot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@polymarket/clob-client": "^1.0.0",
+    "@predictdotfun/sdk": "^1.0.0",
+    "ethers": "^6.13.0",
+    "dotenv": "^16.4.5",
+    "axios": "^1.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "tsx": "^4.15.0"
+  }
+}

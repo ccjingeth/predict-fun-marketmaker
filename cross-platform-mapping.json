@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "label": "Example mapping",
+      "predictMarketId": "<condition_id_or_event_id>",
+      "predictQuestion": "<optional exact question>",
+      "polymarketYesTokenId": "",
+      "polymarketNoTokenId": "",
+      "opinionYesTokenId": "",
+      "opinionNoTokenId": ""
+    }
+  ]
+}

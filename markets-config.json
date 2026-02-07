@@ -1,0 +1,29 @@
+{
+  "description": "Manual liquidity activation rules for markets",
+  "note": "Configure rules for each market based on what you see in the Predict.fun UI",
+  "markets": {
+    "example_token_id": {
+      "liquidity_activation": {
+        "active": true,
+        "min_shares": 100,
+        "max_spread_cents": 6,
+        "max_spread": 0.06,
+        "description": "Max spread ±6¢, Min 100 shares"
+      }
+    },
+    "another_token_id": {
+      "liquidity_activation": {
+        "active": true,
+        "min_shares": 50,
+        "max_spread_cents": 3,
+        "max_spread": 0.03,
+        "description": "Max spread ±3¢, Min 50 shares"
+      }
+    }
+  },
+  "global_defaults": {
+    "min_shares": 100,
+    "max_spread_cents": 6,
+    "max_spread": 0.06
+  }
+}

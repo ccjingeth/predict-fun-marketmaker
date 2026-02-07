@@ -1,0 +1,271 @@
+:root {
+  color-scheme: light;
+  --bg: #0f1222;
+  --bg-soft: #151a30;
+  --card: #1b2140;
+  --card-glow: rgba(106, 163, 255, 0.22);
+  --accent: #6aa3ff;
+  --accent-2: #f7c46c;
+  --muted: #9aa3c7;
+  --text: #f2f4ff;
+  --success: #51d1b6;
+  --danger: #ff6b6b;
+  --shadow: 0 20px 40px rgba(10, 14, 32, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Avenir Next", "Avenir", "Futura", "Gill Sans", "Trebuchet MS", sans-serif;
+  background: radial-gradient(circle at top, #2a3158, #0f1222 55%) fixed;
+  color: var(--text);
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  top: -120px;
+  right: -120px;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(106, 163, 255, 0.5), transparent 70%);
+  filter: blur(12px);
+  z-index: -1;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  bottom: -160px;
+  left: -100px;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, rgba(247, 196, 108, 0.45), transparent 70%);
+  filter: blur(20px);
+  z-index: -1;
+}
+
+.app {
+  padding: 32px 36px 40px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 28px;
+  background: linear-gradient(120deg, rgba(27, 33, 64, 0.9), rgba(24, 28, 55, 0.85));
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.topbar h1 {
+  margin: 4px 0 6px;
+  font-size: 30px;
+  letter-spacing: 0.5px;
+}
+
+.topbar p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.eyebrow {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--accent);
+}
+
+.status-pill {
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(106, 163, 255, 0.2);
+  color: var(--accent);
+  font-weight: 600;
+  border: 1px solid rgba(106, 163, 255, 0.4);
+}
+
+.grid {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: 1.1fr 1.6fr 1.3fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.card {
+  background: var(--card);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.card-header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.control-card h3 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.control-block {
+  padding: 12px 12px 14px;
+  border-radius: 14px;
+  background: rgba(21, 26, 48, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.button-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  border: none;
+  cursor: pointer;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+.btn.primary {
+  background: linear-gradient(120deg, #6aa3ff, #8f7bff);
+  color: #0d1020;
+}
+
+.btn.ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text);
+}
+
+.btn.subtle {
+  background: rgba(106, 163, 255, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(106, 163, 255, 0.3);
+}
+
+.status-row {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.status {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(247, 196, 108, 0.15);
+  color: var(--accent-2);
+  font-size: 12px;
+  border: 1px solid rgba(247, 196, 108, 0.35);
+}
+
+.log-card {
+  min-height: 520px;
+}
+
+.log-output {
+  background: #0b0e1d;
+  border-radius: 14px;
+  padding: 14px;
+  font-family: "Menlo", "Consolas", "Courier New", monospace;
+  font-size: 12px;
+  color: #d7dbff;
+  overflow-y: auto;
+  min-height: 420px;
+  max-height: 520px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.log-line {
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.log-line.system {
+  color: var(--accent-2);
+}
+
+.log-line.stderr {
+  color: var(--danger);
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+select {
+  background: #0f1328;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 10px;
+}
+
+.config-card textarea {
+  flex: 1;
+  min-height: 420px;
+  background: #0b0e1d;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  color: #e9ecff;
+  padding: 14px;
+  font-family: "Menlo", "Consolas", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
+@media (max-width: 1200px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .log-output,
+  .config-card textarea {
+    max-height: none;
+  }
+}

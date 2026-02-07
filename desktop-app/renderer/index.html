@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Predict.fun 控制台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Predict.fun Desktop Console</div>
+          <h1>做市与套利操作台</h1>
+          <p>本地运行，控制做市商与套利机器人，查看日志与实时状态。</p>
+        </div>
+        <div class="status-pill" id="globalStatus">未连接</div>
+      </header>
+
+      <main class="grid">
+        <section class="card control-card">
+          <div class="card-header">
+            <h2>运行控制</h2>
+            <span class="badge" id="tradingMode">Dry Run</span>
+          </div>
+
+          <div class="control-block">
+            <h3>做市商</h3>
+            <div class="button-row">
+              <button class="btn primary" id="startMM">启动做市商</button>
+              <button class="btn ghost" id="stopMM">停止</button>
+            </div>
+            <div class="status-row">
+              <span>状态</span>
+              <span id="statusMM" class="status">未运行</span>
+            </div>
+          </div>
+
+          <div class="control-block">
+            <h3>套利机器人</h3>
+            <div class="button-row">
+              <button class="btn primary" id="startArb">启动套利</button>
+              <button class="btn ghost" id="stopArb">停止</button>
+            </div>
+            <div class="status-row">
+              <span>状态</span>
+              <span id="statusArb" class="status">未运行</span>
+            </div>
+          </div>
+
+          <div class="control-block">
+            <h3>快捷操作</h3>
+            <div class="button-row">
+              <button class="btn subtle" id="setDry">切换 Dry Run</button>
+              <button class="btn subtle" id="setLive">切换 Live</button>
+            </div>
+            <p class="hint">切换会修改 .env 中的 ENABLE_TRADING，请记得保存。</p>
+          </div>
+        </section>
+
+        <section class="card log-card">
+          <div class="card-header">
+            <h2>运行日志</h2>
+            <div class="filters">
+              <label>过滤</label>
+              <select id="logFilter">
+                <option value="all">全部</option>
+                <option value="mm">做市商</option>
+                <option value="arb">套利</option>
+              </select>
+              <button class="btn ghost" id="clearLog">清空</button>
+            </div>
+          </div>
+          <div id="logOutput" class="log-output"></div>
+        </section>
+
+        <section class="card config-card">
+          <div class="card-header">
+            <h2>配置 (.env)</h2>
+            <div class="button-row">
+              <button class="btn ghost" id="reloadEnv">重新加载</button>
+              <button class="btn primary" id="saveEnv">保存配置</button>
+            </div>
+          </div>
+          <textarea id="envEditor" spellcheck="false"></textarea>
+          <p class="hint">修改后需要点击“保存配置”，再启动对应机器人。</p>
+        </section>
+      </main>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
