@@ -39,6 +39,7 @@ function ensureUserDataAssets() {
 
   const envPath = path.join(userRoot, '.env');
   const mappingPath = path.join(userRoot, 'cross-platform-mapping.json');
+  const dependencyPath = path.join(userRoot, 'dependency-constraints.json');
 
   if (!fs.existsSync(envPath)) {
     const templatePath = path.join(getProjectRoot(), '.env.example');
@@ -54,6 +55,14 @@ function ensureUserDataAssets() {
         `CROSS_PLATFORM_MAPPING_PATH=${mappingPath}`
       );
     }
+    if (!template.includes('DEPENDENCY_CONSTRAINTS_PATH')) {
+      template = `${template.trim()}\nDEPENDENCY_CONSTRAINTS_PATH=${dependencyPath}\n`;
+    } else {
+      template = template.replace(
+        /DEPENDENCY_CONSTRAINTS_PATH=.*/g,
+        `DEPENDENCY_CONSTRAINTS_PATH=${dependencyPath}`
+      );
+    }
     fs.writeFileSync(envPath, template.endsWith('\n') ? template : `${template}\n`, 'utf8');
   }
 
@@ -63,6 +72,15 @@ function ensureUserDataAssets() {
       fs.copyFileSync(mappingTemplate, mappingPath);
     } else {
       fs.writeFileSync(mappingPath, '{\"entries\":[]}\n', 'utf8');
+    }
+  }
+
+  if (!fs.existsSync(dependencyPath)) {
+    const dependencyTemplate = path.join(getProjectRoot(), 'dependency-constraints.json');
+    if (fs.existsSync(dependencyTemplate)) {
+      fs.copyFileSync(dependencyTemplate, dependencyPath);
+    } else {
+      fs.writeFileSync(dependencyPath, '{\"conditions\":[],\"groups\":[],\"relations\":[]}\n', 'utf8');
     }
   }
 }
@@ -88,6 +106,56 @@ function writeEnvFile(text) {
   fs.writeFileSync(envPath, text.endsWith('\n') ? text : `${text}\n`, 'utf8');
 }
 
+function parseEnv(text) {
+  const map = new Map();
+  text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .forEach((line) => {
+      if (!line || line.startsWith('#')) return;
+      const idx = line.indexOf('=');
+      if (idx < 0) return;
+      const key = line.slice(0, idx).trim();
+      const value = line.slice(idx + 1).trim();
+      if (key) {
+        map.set(key, value);
+      }
+    });
+  return map;
+}
+
+function resolveConfigPath(value, fallbackPath) {
+  if (!value) return fallbackPath;
+  if (path.isAbsolute(value)) return value;
+  return path.join(getProjectRoot(), value);
+}
+
+function resolveMappingPath() {
+  const envText = readEnvFile();
+  const env = parseEnv(envText);
+  const fallback = path.join(getUserDataRoot(), 'cross-platform-mapping.json');
+  return resolveConfigPath(env.get('CROSS_PLATFORM_MAPPING_PATH'), fallback);
+}
+
+function resolveDependencyPath() {
+  const envText = readEnvFile();
+  const env = parseEnv(envText);
+  const fallback = path.join(getUserDataRoot(), 'dependency-constraints.json');
+  return resolveConfigPath(env.get('DEPENDENCY_CONSTRAINTS_PATH'), fallback);
+}
+
+function readTextFile(filePath, fallback = '') {
+  if (!fs.existsSync(filePath)) {
+    return fallback;
+  }
+  return fs.readFileSync(filePath, 'utf8');
+}
+
+function writeTextFile(filePath, text) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, text.endsWith('\n') ? text : `${text}\n`, 'utf8');
+}
+
 function getStatus() {
   return {
     marketMaker: processes.has('mm'),
@@ -111,6 +179,7 @@ function spawnBot(type) {
   const projectRoot = getProjectRoot();
   const envPath = getEnvPath();
   const mappingPath = path.join(getUserDataRoot(), 'cross-platform-mapping.json');
+  const dependencyPath = path.join(getUserDataRoot(), 'dependency-constraints.json');
 
   let command;
   let args;
@@ -135,6 +204,7 @@ function spawnBot(type) {
       ...process.env,
       ENV_PATH: envPath,
       CROSS_PLATFORM_MAPPING_PATH: mappingPath,
+      DEPENDENCY_CONSTRAINTS_PATH: dependencyPath,
     },
     shell: false,
   });
@@ -216,6 +286,18 @@ app.on('window-all-closed', () => {
 ipcMain.handle('read-env', () => readEnvFile());
 ipcMain.handle('write-env', (_, text) => {
   writeEnvFile(text);
+  return { ok: true };
+});
+ipcMain.handle('read-mapping', () => readTextFile(resolveMappingPath(), '{\"entries\":[]}\n'));
+ipcMain.handle('write-mapping', (_, text) => {
+  writeTextFile(resolveMappingPath(), text);
+  return { ok: true };
+});
+ipcMain.handle('read-dependency', () =>
+  readTextFile(resolveDependencyPath(), '{\"conditions\":[],\"groups\":[],\"relations\":[]}\n')
+);
+ipcMain.handle('write-dependency', (_, text) => {
+  writeTextFile(resolveDependencyPath(), text);
   return { ok: true };
 });
 

@@ -14,6 +14,7 @@
 打包版会在用户目录创建配置：
 - macOS：`~/Library/Application Support/Predict.fun Console/bot/.env`
 - macOS 映射文件：`~/Library/Application Support/Predict.fun Console/bot/cross-platform-mapping.json`
+- macOS 依赖套利约束：`~/Library/Application Support/Predict.fun Console/bot/dependency-constraints.json`
 
 桌面端 UI 内可直接编辑 `.env`。
 
@@ -32,6 +33,52 @@
 - `CROSS_PLATFORM_ENABLED=true`
 - `CROSS_PLATFORM_AUTO_EXECUTE=true`
 - 配置 Polymarket / Opinion 的密钥
+
+实时行情（Polymarket WebSocket）：
+- `POLYMARKET_WS_ENABLED=true`
+- `POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market`
+
+实时行情（Predict WebSocket）：
+- `PREDICT_WS_ENABLED=true`
+- `PREDICT_WS_URL=wss://ws.predict.fun/ws`
+- `PREDICT_WS_TOPIC_KEY=token_id`（如不生效可改成 `condition_id`）
+
+实时行情（Opinion WebSocket）：
+- `OPINION_WS_ENABLED=true`
+- `OPINION_WS_URL=wss://ws.opinion.trade`
+- `OPINION_WS_HEARTBEAT_MS=30000`
+
+依赖套利（OR-Tools）：
+- `DEPENDENCY_ARB_ENABLED=true`
+- `DEPENDENCY_CONSTRAINTS_PATH=dependency-constraints.json`
+- 安装 OR-Tools：`pip install ortools`
+
+多结果套利：
+- `MULTI_OUTCOME_ENABLED=true`
+- `MULTI_OUTCOME_MIN_OUTCOMES=3`
+
+自动执行：
+- `ARB_AUTO_EXECUTE=true`
+- `ARB_EXECUTE_TOP_N=1`
+价值错配自动执行：
+- `ARB_AUTO_EXECUTE_VALUE=true`
+扫描频率：
+- `ARB_SCAN_INTERVAL_MS=10000`
+扫描市场数：
+- `ARB_MAX_MARKETS=80`
+并发拉取 orderbook：
+- `ARB_ORDERBOOK_CONCURRENCY=8`
+市场列表缓存：
+- `ARB_MARKETS_CACHE_MS=10000`
+WS 最大可接受延迟：
+- `ARB_WS_MAX_AGE_MS=10000`
+自动执行错误熔断：
+- `ARB_MAX_ERRORS=5`
+- `ARB_ERROR_WINDOW_MS=60000`
+- `ARB_PAUSE_ON_ERROR_MS=60000`
+WS 健康日志：
+- `ARB_WS_HEALTH_LOG_MS=0`（>0 启用，单位毫秒）
+开启后 `npm run start:arb` 会进入持续监控模式
 
 ## 跨平台严格映射（强烈建议）
 
@@ -60,3 +107,9 @@
 
 - 邀请链接：https://predict.fun?ref=B0CE6
 - 推特：@ccjing_eth
+
+## 文档索引
+
+- 新手指南：`docs/BEGINNER_GUIDE.md`
+- 字段说明：`docs/CONFIG_REFERENCE.md`
+- JSON 模板：`docs/JSON_TEMPLATES.md`

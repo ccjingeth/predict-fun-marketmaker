@@ -191,6 +191,132 @@ export class ArbitrageExecutor {
     return execution;
   }
 
+  async executeDependencyArbitrage(opp: ArbitrageOpportunity): Promise<ArbitrageExecution> {
+    const execution: ArbitrageExecution = {
+      opportunityId: `${opp.type}-${opp.marketId}-${Date.now()}`,
+      type: opp.type,
+      timestamp: Date.now(),
+      status: 'PENDING',
+      trades: [],
+      totalCost: 0,
+      expectedProfit: opp.expectedReturn || 0,
+      fees: 0,
+    };
+
+    console.log(`\n🧠 Executing Dependency Arbitrage...`);
+    console.log(`   Bundle: ${opp.marketQuestion.substring(0, 50)}...`);
+    console.log(`   Legs: ${opp.legs?.length || 0}`);
+    console.log(`   Expected Return: ${opp.expectedReturn?.toFixed(2)}%`);
+
+    if (this.config.requireConfirmation) {
+      const confirmed = await this.confirmExecution(opp);
+      if (!confirmed) {
+        execution.status = 'FAILED';
+        return execution;
+      }
+    }
+
+    const maxSize = this.config.maxPositionSize || 0;
+    const legs = opp.legs || [];
+    const maxLegShares = legs.reduce((max, leg) => Math.max(max, leg.shares), 0);
+    const scale = maxSize > 0 && maxLegShares > maxSize ? maxSize / maxLegShares : 1;
+
+    if (legs.length > 0) {
+      for (const leg of legs) {
+        const sizedShares = leg.shares * scale;
+        execution.trades.push({
+          market: leg.tokenId,
+          side: leg.side,
+          price: leg.price,
+          amount: sizedShares,
+          cost: leg.side === 'BUY' ? leg.price * sizedShares : 0,
+        });
+      }
+    }
+
+    execution.totalCost = execution.trades.reduce((sum, t) => sum + t.cost, 0);
+
+    if (this.config.enableAutoExecute && this.config.executeLegs && legs.length > 0) {
+      await this.config.executeLegs(
+        legs.map((leg) => ({
+          tokenId: leg.tokenId,
+          side: leg.side,
+          shares: leg.shares * scale,
+        }))
+      );
+      execution.status = 'EXECUTED';
+    } else {
+      execution.status = 'PENDING';
+      console.log('   ℹ️  Auto execute disabled, opportunity recorded as PENDING');
+    }
+
+    this.executions.set(execution.opportunityId, execution);
+    return execution;
+  }
+
+  async executeMultiOutcomeArbitrage(opp: ArbitrageOpportunity): Promise<ArbitrageExecution> {
+    const execution: ArbitrageExecution = {
+      opportunityId: `${opp.type}-${opp.marketId}-${Date.now()}`,
+      type: opp.type,
+      timestamp: Date.now(),
+      status: 'PENDING',
+      trades: [],
+      totalCost: 0,
+      expectedProfit: opp.expectedReturn || 0,
+      fees: 0,
+    };
+
+    console.log(`\n🧩 Executing Multi-Outcome Arbitrage...`);
+    console.log(`   Market: ${opp.marketQuestion.substring(0, 50)}...`);
+    console.log(`   Legs: ${opp.legs?.length || 0}`);
+    console.log(`   Expected Return: ${opp.expectedReturn?.toFixed(2)}%`);
+
+    if (this.config.requireConfirmation) {
+      const confirmed = await this.confirmExecution(opp);
+      if (!confirmed) {
+        execution.status = 'FAILED';
+        return execution;
+      }
+    }
+
+    const maxSize = this.config.maxPositionSize || 0;
+    const legs = opp.legs || [];
+    const maxLegShares = legs.reduce((max, leg) => Math.max(max, leg.shares), 0);
+    const scale = maxSize > 0 && maxLegShares > maxSize ? maxSize / maxLegShares : 1;
+
+    if (legs.length > 0) {
+      for (const leg of legs) {
+        const sizedShares = leg.shares * scale;
+        execution.trades.push({
+          market: leg.tokenId,
+          side: leg.side,
+          price: leg.price,
+          amount: sizedShares,
+          cost: leg.side === 'BUY' ? leg.price * sizedShares : 0,
+        });
+      }
+    }
+
+    execution.totalCost = execution.trades.reduce((sum, t) => sum + t.cost, 0);
+
+    if (this.config.enableAutoExecute && this.config.executeLegs && legs.length > 0) {
+      await this.config.executeLegs(
+        legs.map((leg) => ({
+          tokenId: leg.tokenId,
+          side: leg.side,
+          shares: leg.shares * scale,
+        }))
+      );
+      execution.status = 'EXECUTED';
+    } else {
+      execution.status = 'PENDING';
+      console.log('   ℹ️  Auto execute disabled, opportunity recorded as PENDING');
+    }
+
+    this.executions.set(execution.opportunityId, execution);
+    return execution;
+  }
+
   private async confirmExecution(opp: ArbitrageOpportunity): Promise<boolean> {
     if (this.config.autoConfirm) {
       return true;

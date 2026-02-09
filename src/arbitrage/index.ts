@@ -5,7 +5,9 @@
 
 export { ValueMismatchDetector } from './value-detector.js';
 export { InPlatformArbitrageDetector } from './intra-arb.js';
+export { MultiOutcomeArbitrageDetector } from './multi-outcome.js';
 export { CrossPlatformArbitrageDetector } from './cross-arb.js';
+export { DependencyArbitrageDetector } from './dependency-arb.js';
 export { ArbitrageMonitor } from './monitor.js';
 export { ArbitrageExecutor } from './executor.js';
 

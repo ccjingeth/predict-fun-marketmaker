@@ -56,6 +56,26 @@
             </div>
             <p class="hint">切换会修改 .env 中的 ENABLE_TRADING，请记得保存。</p>
           </div>
+
+          <div class="control-block">
+            <h3>策略开关</h3>
+            <div class="toggle-grid">
+              <label class="toggle"><input type="checkbox" data-env="ENABLE_TRADING" />实盘交易</label>
+              <label class="toggle"><input type="checkbox" data-env="AUTO_CONFIRM" />自动确认</label>
+              <label class="toggle"><input type="checkbox" data-env="ARB_AUTO_EXECUTE" />自动执行套利</label>
+              <label class="toggle"><input type="checkbox" data-env="ARB_AUTO_EXECUTE_VALUE" />价值错配自动执行</label>
+              <label class="toggle"><input type="checkbox" data-env="CROSS_PLATFORM_ENABLED" />跨平台检测</label>
+              <label class="toggle"><input type="checkbox" data-env="CROSS_PLATFORM_AUTO_EXECUTE" />跨平台自动执行</label>
+              <label class="toggle"><input type="checkbox" data-env="DEPENDENCY_ARB_ENABLED" />依赖套利</label>
+              <label class="toggle"><input type="checkbox" data-env="MULTI_OUTCOME_ENABLED" />多结果套利</label>
+              <label class="toggle"><input type="checkbox" data-env="POLYMARKET_WS_ENABLED" />Polymarket WS</label>
+              <label class="toggle"><input type="checkbox" data-env="PREDICT_WS_ENABLED" />Predict WS</label>
+              <label class="toggle"><input type="checkbox" data-env="OPINION_WS_ENABLED" />Opinion WS</label>
+            </div>
+            <div class="button-row">
+              <button class="btn subtle" id="applyToggles">应用到配置</button>
+            </div>
+          </div>
         </section>
 
         <section class="card log-card">
@@ -76,14 +96,40 @@
 
         <section class="card config-card">
           <div class="card-header">
-            <h2>配置 (.env)</h2>
+            <h2>配置中心</h2>
+            <div class="tab-bar">
+              <button class="tab-button active" data-tab="env">环境变量</button>
+              <button class="tab-button" data-tab="mapping">跨平台映射</button>
+              <button class="tab-button" data-tab="dependency">依赖约束</button>
+            </div>
+          </div>
+
+          <div class="tab-panel active" data-tab="env">
             <div class="button-row">
               <button class="btn ghost" id="reloadEnv">重新加载</button>
               <button class="btn primary" id="saveEnv">保存配置</button>
             </div>
+            <textarea id="envEditor" spellcheck="false"></textarea>
+            <p class="hint">修改后需要点击“保存配置”，再启动对应机器人。</p>
           </div>
-          <textarea id="envEditor" spellcheck="false"></textarea>
-          <p class="hint">修改后需要点击“保存配置”，再启动对应机器人。</p>
+
+          <div class="tab-panel" data-tab="mapping">
+            <div class="button-row">
+              <button class="btn ghost" id="reloadMapping">重新加载</button>
+              <button class="btn primary" id="saveMapping">保存映射</button>
+            </div>
+            <textarea id="mappingEditor" spellcheck="false"></textarea>
+            <p class="hint">跨平台套利映射文件，JSON 格式。</p>
+          </div>
+
+          <div class="tab-panel" data-tab="dependency">
+            <div class="button-row">
+              <button class="btn ghost" id="reloadDependency">重新加载</button>
+              <button class="btn primary" id="saveDependency">保存约束</button>
+            </div>
+            <textarea id="dependencyEditor" spellcheck="false"></textarea>
+            <p class="hint">依赖套利约束文件，JSON 格式。</p>
+          </div>
         </section>
       </main>
     </div>

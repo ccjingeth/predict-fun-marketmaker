@@ -1,11 +1,15 @@
 import axios from 'axios';
 import type { PlatformMarket, PlatformProvider } from './types.js';
+import type { PolymarketWebSocketFeed } from './polymarket-ws.js';
 
 interface PolymarketConfig {
   gammaUrl: string;
   clobUrl: string;
   maxMarkets: number;
   feeBps: number;
+  useWebSocket?: boolean;
+  cacheTtlMs?: number;
+  wsMaxAgeMs?: number;
 }
 
 interface GammaMarket {
@@ -69,16 +73,105 @@ async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Pr
 export class PolymarketDataProvider implements PlatformProvider {
   platform: PlatformProvider['platform'] = 'Polymarket';
   private config: PolymarketConfig;
+  private wsFeed?: PolymarketWebSocketFeed;
+  private cachedMarkets: GammaMarket[] = [];
+  private cacheTimestamp = 0;
 
-  constructor(config: PolymarketConfig) {
+  constructor(config: PolymarketConfig, wsFeed?: PolymarketWebSocketFeed) {
     this.config = config;
+    this.wsFeed = wsFeed;
   }
 
   async getMarkets(): Promise<PlatformMarket[]> {
-    const { gammaUrl, clobUrl, maxMarkets, feeBps } = this.config;
+    const { clobUrl, maxMarkets, feeBps } = this.config;
+    const usable = await this.loadGammaMarkets();
 
-    const response = await axios.get(`${gammaUrl}/markets`, {
-      params: { active: true, closed: false, limit: maxMarkets },
+    const results: PlatformMarket[] = [];
+
+    await mapWithLimit(usable.slice(0, maxMarkets), 6, async (market) => {
+      const question = market.question || market.title || '';
+      const outcomes = toArray<string>(market.outcomes);
+      const tokens = toArray<string>(market.clobTokenIds);
+
+      if (outcomes.length < 2 || tokens.length < 2) {
+        return;
+      }
+
+      const yesIndex = outcomes.findIndex((o) => String(o).toUpperCase() === 'YES');
+      const noIndex = outcomes.findIndex((o) => String(o).toUpperCase() === 'NO');
+
+      if (yesIndex < 0 || noIndex < 0) {
+        return;
+      }
+
+      const yesTokenId = tokens[yesIndex];
+      const noTokenId = tokens[noIndex];
+
+      if (this.wsFeed && this.config.useWebSocket) {
+        this.wsFeed.subscribeAssets([yesTokenId, noTokenId]);
+      }
+
+      let yesTop = this.wsFeed?.getTopOfBook(yesTokenId, this.config.wsMaxAgeMs);
+      let noTop = this.wsFeed?.getTopOfBook(noTokenId, this.config.wsMaxAgeMs);
+
+      if (!yesTop || !yesTop.bestBid || !yesTop.bestAsk || !noTop || !noTop.bestBid || !noTop.bestAsk) {
+        const [yesBook, noBook] = await Promise.all([
+          axios.get(`${clobUrl}/book`, { params: { token_id: yesTokenId }, timeout: 8000 }).then((r) => r.data),
+          axios.get(`${clobUrl}/book`, { params: { token_id: noTokenId }, timeout: 8000 }).then((r) => r.data),
+        ]);
+
+        const yesParsed = parseOrderbook(yesBook);
+        const noParsed = parseOrderbook(noBook);
+        yesTop = {
+          bestBid: yesParsed.bid,
+          bestAsk: yesParsed.ask,
+          bidSize: yesParsed.bidSize,
+          askSize: yesParsed.askSize,
+        };
+        noTop = {
+          bestBid: noParsed.bid,
+          bestAsk: noParsed.ask,
+          bidSize: noParsed.bidSize,
+          askSize: noParsed.askSize,
+        };
+      }
+
+      if (!yesTop?.bestBid || !yesTop?.bestAsk || !noTop?.bestBid || !noTop?.bestAsk) {
+        return;
+      }
+
+      results.push({
+        platform: 'Polymarket',
+        marketId: `${yesTokenId}-${noTokenId}`,
+        question,
+        yesTokenId,
+        noTokenId,
+        yesBid: yesTop.bestBid,
+        yesAsk: yesTop.bestAsk,
+        noBid: noTop.bestBid,
+        noAsk: noTop.bestAsk,
+        yesBidSize: yesTop.bidSize,
+        yesAskSize: yesTop.askSize,
+        noBidSize: noTop.bidSize,
+        noAskSize: noTop.askSize,
+        yesMid: (yesTop.bestBid + yesTop.bestAsk) / 2,
+        noMid: (noTop.bestBid + noTop.bestAsk) / 2,
+        feeBps,
+        timestamp: Date.now(),
+      });
+    });
+
+    return results;
+  }
+
+  private async loadGammaMarkets(): Promise<GammaMarket[]> {
+    const ttl = this.config.cacheTtlMs ?? 60000;
+    if (this.cachedMarkets.length > 0 && Date.now() - this.cacheTimestamp < ttl) {
+      return this.cachedMarkets.slice(0, this.config.maxMarkets);
+    }
+
+    const response = await axios.get(`${this.config.gammaUrl}/markets`, {
+      params: { active: true, closed: false, limit: this.config.maxMarkets },
       timeout: 10000,
     });
 
@@ -104,61 +197,8 @@ export class PolymarketDataProvider implements PlatformProvider {
     }
 
     const usable = flattened.filter((m) => (m.active ?? true) && !(m.closed ?? false));
-
-    const results: PlatformMarket[] = [];
-
-    await mapWithLimit(usable.slice(0, maxMarkets), 6, async (market) => {
-      const question = market.question || market.title || '';
-      const outcomes = toArray<string>(market.outcomes);
-      const tokens = toArray<string>(market.clobTokenIds);
-
-      if (outcomes.length < 2 || tokens.length < 2) {
-        return;
-      }
-
-      const yesIndex = outcomes.findIndex((o) => String(o).toUpperCase() === 'YES');
-      const noIndex = outcomes.findIndex((o) => String(o).toUpperCase() === 'NO');
-
-      if (yesIndex < 0 || noIndex < 0) {
-        return;
-      }
-
-      const yesTokenId = tokens[yesIndex];
-      const noTokenId = tokens[noIndex];
-
-      const [yesBook, noBook] = await Promise.all([
-        axios.get(`${clobUrl}/book`, { params: { token_id: yesTokenId }, timeout: 8000 }).then((r) => r.data),
-        axios.get(`${clobUrl}/book`, { params: { token_id: noTokenId }, timeout: 8000 }).then((r) => r.data),
-      ]);
-
-      const yesTop = parseOrderbook(yesBook);
-      const noTop = parseOrderbook(noBook);
-
-      if (!yesTop.bid || !yesTop.ask || !noTop.bid || !noTop.ask) {
-        return;
-      }
-
-      results.push({
-        platform: 'Polymarket',
-        marketId: `${yesTokenId}-${noTokenId}`,
-        question,
-        yesTokenId,
-        noTokenId,
-        yesBid: yesTop.bid,
-        yesAsk: yesTop.ask,
-        noBid: noTop.bid,
-        noAsk: noTop.ask,
-        yesBidSize: yesTop.bidSize,
-        yesAskSize: yesTop.askSize,
-        noBidSize: noTop.bidSize,
-        noAskSize: noTop.askSize,
-        yesMid: (yesTop.bid + yesTop.ask) / 2,
-        noMid: (noTop.bid + noTop.ask) / 2,
-        feeBps,
-        timestamp: Date.now(),
-      });
-    });
-
-    return results;
+    this.cachedMarkets = usable;
+    this.cacheTimestamp = Date.now();
+    return usable;
   }
 }

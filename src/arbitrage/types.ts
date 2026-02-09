@@ -10,6 +10,8 @@ export const ArbitrageType = {
   VALUE_MISMATCH: 'VALUE_MISMATCH',
   IN_PLATFORM: 'IN_PLATFORM',
   CROSS_PLATFORM: 'CROSS_PLATFORM',
+  DEPENDENCY: 'DEPENDENCY',
+  MULTI_OUTCOME: 'MULTI_OUTCOME',
 } as const;
 
 export type ArbitrageType = typeof ArbitrageType[keyof typeof ArbitrageType];
@@ -54,6 +56,8 @@ export interface ArbitrageOpportunity {
   positionSize?: number;
   expectedReturn?: number;
   riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+  guaranteedProfit?: number;
+  totalCost?: number;
   legs?: {
     platform?: string;
     tokenId: string;
@@ -127,6 +131,25 @@ export interface InPlatformArbitrage {
   action: 'SELL_BOTH' | 'BUY_BOTH' | 'NONE';
   recommendedSize: number;
   breakEvenFee: number; // 盈亏平衡的手续费率
+}
+
+/**
+ * 多结果套利机会
+ */
+export interface MultiOutcomeArbitrage {
+  marketId: string;
+  question: string;
+  outcomes: {
+    tokenId: string;
+    price: number;
+    askSize: number;
+    feeBps: number;
+  }[];
+  totalCost: number;
+  totalFees: number;
+  totalSlippage: number;
+  guaranteedProfit: number;
+  recommendedSize: number;
 }
 
 /**

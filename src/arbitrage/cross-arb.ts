@@ -283,7 +283,7 @@ export class CrossPlatformArbitrageDetector {
    */
   toOpportunity(arb: CrossPlatformArbitrage): ArbitrageOpportunity {
     return {
-      type: 'CROSS_PLATFORM' as any,
+      type: 'CROSS_PLATFORM',
       marketId: arb.platformA.market,
       marketQuestion: arb.event,
       timestamp: Date.now(),

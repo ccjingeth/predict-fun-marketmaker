@@ -1,11 +1,14 @@
 import axios from 'axios';
 import type { PlatformMarket, PlatformProvider } from './types.js';
+import type { OpinionWebSocketFeed } from './opinion-ws.js';
 
 interface OpinionConfig {
   openApiUrl: string;
   apiKey: string;
   maxMarkets: number;
   feeBps: number;
+  useWebSocket?: boolean;
+  wsMaxAgeMs?: number;
 }
 
 interface OpinionMarket {
@@ -53,9 +56,11 @@ async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Pr
 export class OpinionDataProvider implements PlatformProvider {
   platform: PlatformProvider['platform'] = 'Opinion';
   private config: OpinionConfig;
+  private wsFeed?: OpinionWebSocketFeed;
 
-  constructor(config: OpinionConfig) {
+  constructor(config: OpinionConfig, wsFeed?: OpinionWebSocketFeed) {
     this.config = config;
+    this.wsFeed = wsFeed;
   }
 
   async getMarkets(): Promise<PlatformMarket[]> {
@@ -102,15 +107,38 @@ export class OpinionDataProvider implements PlatformProvider {
         return;
       }
 
-      const [yesBook, noBook] = await Promise.all([
-        fetchOrderbook(yesTokenId),
-        fetchOrderbook(noTokenId),
-      ]);
+      if (this.wsFeed && this.config.useWebSocket) {
+        if (market.marketId) {
+          this.wsFeed.subscribeMarketIds([market.marketId]);
+        }
+      }
 
-      const yesTop = parseOrderbook(yesBook);
-      const noTop = parseOrderbook(noBook);
+      let yesTop = this.wsFeed?.getTopOfBook(yesTokenId, this.config.wsMaxAgeMs);
+      let noTop = this.wsFeed?.getTopOfBook(noTokenId, this.config.wsMaxAgeMs);
 
-      if (!yesTop.bid || !yesTop.ask || !noTop.bid || !noTop.ask) {
+      if (!yesTop || !yesTop.bestBid || !yesTop.bestAsk || !noTop || !noTop.bestBid || !noTop.bestAsk) {
+        const [yesBook, noBook] = await Promise.all([
+          fetchOrderbook(yesTokenId),
+          fetchOrderbook(noTokenId),
+        ]);
+
+        const yesParsed = parseOrderbook(yesBook);
+        const noParsed = parseOrderbook(noBook);
+        yesTop = {
+          bestBid: yesParsed.bid,
+          bestAsk: yesParsed.ask,
+          bidSize: yesParsed.bidSize,
+          askSize: yesParsed.askSize,
+        };
+        noTop = {
+          bestBid: noParsed.bid,
+          bestAsk: noParsed.ask,
+          bidSize: noParsed.bidSize,
+          askSize: noParsed.askSize,
+        };
+      }
+
+      if (!yesTop?.bestBid || !yesTop?.bestAsk || !noTop?.bestBid || !noTop?.bestAsk) {
         return;
       }
 
@@ -120,16 +148,16 @@ export class OpinionDataProvider implements PlatformProvider {
         question: market.marketTitle || '',
         yesTokenId,
         noTokenId,
-        yesBid: yesTop.bid,
-        yesAsk: yesTop.ask,
-        noBid: noTop.bid,
-        noAsk: noTop.ask,
+        yesBid: yesTop.bestBid,
+        yesAsk: yesTop.bestAsk,
+        noBid: noTop.bestBid,
+        noAsk: noTop.bestAsk,
         yesBidSize: yesTop.bidSize,
         yesAskSize: yesTop.askSize,
         noBidSize: noTop.bidSize,
         noAskSize: noTop.askSize,
-        yesMid: (yesTop.bid + yesTop.ask) / 2,
-        noMid: (noTop.bid + noTop.ask) / 2,
+        yesMid: (yesTop.bestBid + yesTop.bestAsk) / 2,
+        noMid: (noTop.bestBid + noTop.bestAsk) / 2,
         feeBps,
         timestamp: Date.now(),
       });

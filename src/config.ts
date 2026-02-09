@@ -62,11 +62,49 @@ export function loadConfig(): Config {
     crossPlatformUseMapping: process.env.CROSS_PLATFORM_USE_MAPPING !== 'false',
     alertWebhookUrl: process.env.ALERT_WEBHOOK_URL,
     alertMinIntervalMs: parseInt(process.env.ALERT_MIN_INTERVAL_MS || '60000'),
+    dependencyEnabled: process.env.DEPENDENCY_ARB_ENABLED === 'true',
+    dependencyConstraintsPath: process.env.DEPENDENCY_CONSTRAINTS_PATH || 'dependency-constraints.json',
+    dependencyPythonPath: process.env.DEPENDENCY_PYTHON_PATH || 'python3',
+    dependencyPythonScript: process.env.DEPENDENCY_PYTHON_SCRIPT || 'scripts/dependency-arb.py',
+    dependencyMinProfit: parseFloat(process.env.DEPENDENCY_MIN_PROFIT || '0.02'),
+    dependencyMaxLegs: parseInt(process.env.DEPENDENCY_MAX_LEGS || '6'),
+    dependencyMaxNotional: parseFloat(process.env.DEPENDENCY_MAX_NOTIONAL || '200'),
+    dependencyMinDepth: parseFloat(process.env.DEPENDENCY_MIN_DEPTH || '1'),
+    dependencyFeeBps: parseFloat(process.env.DEPENDENCY_FEE_BPS || '100'),
+    dependencySlippageBps: parseFloat(process.env.DEPENDENCY_SLIPPAGE_BPS || '20'),
+    dependencyMaxIter: parseInt(process.env.DEPENDENCY_MAX_ITER || '12'),
+    dependencyOracleTimeoutSec: parseFloat(process.env.DEPENDENCY_ORACLE_TIMEOUT_SEC || '2'),
+    dependencyTimeoutMs: parseInt(process.env.DEPENDENCY_TIMEOUT_MS || '10000'),
+    dependencyAllowSells: process.env.DEPENDENCY_ALLOW_SELLS !== 'false',
+    multiOutcomeEnabled: process.env.MULTI_OUTCOME_ENABLED !== 'false',
+    multiOutcomeMinOutcomes: parseInt(process.env.MULTI_OUTCOME_MIN_OUTCOMES || '3'),
+    multiOutcomeMaxShares: parseInt(process.env.MULTI_OUTCOME_MAX_SHARES || '500'),
+    arbAutoExecute: process.env.ARB_AUTO_EXECUTE === 'true',
+    arbAutoExecuteValue: process.env.ARB_AUTO_EXECUTE_VALUE === 'true',
+    arbExecuteTopN: parseInt(process.env.ARB_EXECUTE_TOP_N || '1'),
+    arbExecutionCooldownMs: parseInt(process.env.ARB_EXECUTION_COOLDOWN_MS || '60000'),
+    arbScanIntervalMs: parseInt(process.env.ARB_SCAN_INTERVAL_MS || '10000'),
+    arbMaxMarkets: parseInt(process.env.ARB_MAX_MARKETS || '80'),
+    arbOrderbookConcurrency: parseInt(process.env.ARB_ORDERBOOK_CONCURRENCY || '8'),
+    arbMarketsCacheMs: parseInt(process.env.ARB_MARKETS_CACHE_MS || '10000'),
+    arbWsMaxAgeMs: parseInt(process.env.ARB_WS_MAX_AGE_MS || '10000'),
+    arbMaxErrors: parseInt(process.env.ARB_MAX_ERRORS || '5'),
+    arbErrorWindowMs: parseInt(process.env.ARB_ERROR_WINDOW_MS || '60000'),
+    arbPauseOnErrorMs: parseInt(process.env.ARB_PAUSE_ON_ERROR_MS || '60000'),
+    arbWsHealthLogMs: parseInt(process.env.ARB_WS_HEALTH_LOG_MS || '0'),
     predictFeeBps: parseFloat(process.env.PREDICT_FEE_BPS || '100'),
     polymarketGammaUrl: process.env.POLYMARKET_GAMMA_URL || 'https://gamma-api.polymarket.com',
     polymarketClobUrl: process.env.POLYMARKET_CLOB_URL || 'https://clob.polymarket.com',
     polymarketMaxMarkets: parseInt(process.env.POLYMARKET_MAX_MARKETS || '30'),
     polymarketFeeBps: parseFloat(process.env.POLYMARKET_FEE_BPS || '100'),
+    polymarketWsEnabled: process.env.POLYMARKET_WS_ENABLED === 'true',
+    polymarketWsUrl: process.env.POLYMARKET_WS_URL || 'wss://ws-subscriptions-clob.polymarket.com/ws/market',
+    polymarketWsCustomFeature: process.env.POLYMARKET_WS_CUSTOM_FEATURE === 'true',
+    polymarketCacheTtlMs: parseInt(process.env.POLYMARKET_CACHE_TTL_MS || '60000'),
+    predictWsEnabled: process.env.PREDICT_WS_ENABLED === 'true',
+    predictWsUrl: process.env.PREDICT_WS_URL || 'wss://ws.predict.fun/ws',
+    predictWsApiKey: process.env.PREDICT_WS_API_KEY || process.env.API_KEY,
+    predictWsTopicKey: (process.env.PREDICT_WS_TOPIC_KEY || 'token_id') as Config['predictWsTopicKey'],
     polymarketPrivateKey: process.env.POLYMARKET_PRIVATE_KEY,
     polymarketApiKey: process.env.POLYMARKET_API_KEY,
     polymarketApiSecret: process.env.POLYMARKET_API_SECRET,
@@ -82,6 +120,9 @@ export function loadConfig(): Config {
     opinionPrivateKey: process.env.OPINION_PRIVATE_KEY,
     opinionChainId: parseInt(process.env.OPINION_CHAIN_ID || '56'),
     opinionHost: process.env.OPINION_HOST || 'https://proxy.opinion.trade:8443',
+    opinionWsEnabled: process.env.OPINION_WS_ENABLED === 'true',
+    opinionWsUrl: process.env.OPINION_WS_URL || 'wss://ws.opinion.trade',
+    opinionWsHeartbeatMs: parseInt(process.env.OPINION_WS_HEARTBEAT_MS || '30000'),
     marketTokenIds: process.env.MARKET_TOKEN_IDS
       ? process.env.MARKET_TOKEN_IDS.split(',').map((s) => s.trim())
       : undefined,
@@ -153,6 +194,16 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Mapping: ${config.crossPlatformUseMapping ? '✅' : '❌'}`);
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
+  console.log(`Dependency Arb: ${config.dependencyEnabled ? '✅' : '❌'}`);
+  console.log(`Multi-Outcome: ${config.multiOutcomeEnabled ? '✅' : '❌'}`);
+  console.log(`Arb Auto Execute: ${config.arbAutoExecute ? '✅' : '❌'}`);
+  console.log(`Polymarket WS: ${config.polymarketWsEnabled ? '✅' : '❌'}`);
+  console.log(`Predict WS: ${config.predictWsEnabled ? '✅' : '❌'}`);
+  console.log(`Opinion WS: ${config.opinionWsEnabled ? '✅' : '❌'}`);
+  console.log(`Arb Scan Interval: ${config.arbScanIntervalMs}ms`);
+  console.log(`Arb Max Markets: ${config.arbMaxMarkets}`);
+  console.log(`Arb WS Max Age: ${config.arbWsMaxAgeMs}ms`);
+  console.log(`Arb WS Health Log: ${config.arbWsHealthLogMs}ms`);
   console.log(`Refresh Interval: ${config.refreshInterval}ms`);
   console.log(`Trading Enabled: ${config.enableTrading ? '✅' : '❌ (Dry Run)'}`);
   if (config.marketTokenIds && config.marketTokenIds.length > 0) {

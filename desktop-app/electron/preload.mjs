@@ -3,6 +3,10 @@ import { contextBridge, ipcRenderer } from 'electron';
 contextBridge.exposeInMainWorld('predictBot', {
   readEnv: () => ipcRenderer.invoke('read-env'),
   writeEnv: (text) => ipcRenderer.invoke('write-env', text),
+  readMapping: () => ipcRenderer.invoke('read-mapping'),
+  writeMapping: (text) => ipcRenderer.invoke('write-mapping', text),
+  readDependency: () => ipcRenderer.invoke('read-dependency'),
+  writeDependency: (text) => ipcRenderer.invoke('write-dependency', text),
   startBot: (type) => ipcRenderer.invoke('start-bot', type),
   stopBot: (type) => ipcRenderer.invoke('stop-bot', type),
   getStatus: () => ipcRenderer.invoke('status'),

@@ -35,6 +35,18 @@
       {
         "from": "../cross-platform-mapping.json",
         "to": "bot/cross-platform-mapping.json"
+      },
+      {
+        "from": "../dependency-constraints.json",
+        "to": "bot/dependency-constraints.json"
+      },
+      {
+        "from": "../scripts",
+        "to": "bot/scripts"
+      },
+      {
+        "from": "../docs",
+        "to": "bot/docs"
       }
     ],
     "directories": {

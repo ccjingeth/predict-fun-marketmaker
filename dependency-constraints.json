@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "notes": "Define binary conditions and logical constraints for dependency arbitrage. Replace token IDs below with real markets.",
+  "conditions": [
+    {
+      "id": "COND_A",
+      "label": "Example: Trump wins Pennsylvania",
+      "yesTokenId": "YES_TOKEN_ID",
+      "noTokenId": "NO_TOKEN_ID"
+    },
+    {
+      "id": "COND_B",
+      "label": "Example: GOP wins Pennsylvania by 5+",
+      "yesTokenId": "YES_TOKEN_ID",
+      "noTokenId": "NO_TOKEN_ID"
+    }
+  ],
+  "groups": [],
+  "relations": [
+    {
+      "type": "implies",
+      "if": "COND_B",
+      "then": "COND_A"
+    }
+  ]
+}

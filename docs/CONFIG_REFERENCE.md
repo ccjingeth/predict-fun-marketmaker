@@ -1,0 +1,147 @@
+# 配置字段说明（.env）
+
+本文件按模块解释每个字段的作用、建议值与注意事项。
+
+## 1. 必填配置
+
+- `API_BASE_URL`：API 入口。默认 `https://api.predict.fun`。
+- `API_KEY`：必填。所有接口都需要。
+- `PRIVATE_KEY`：必填。用于签名交易。
+- `JWT_TOKEN`：实盘必填。用于私有接口。
+- `RPC_URL`：可选。链上签名/审批更稳定。
+
+## 2. 做市商参数
+
+- `SPREAD`：基础价差（如 0.02 = 2%）。
+- `MIN_SPREAD` / `MAX_SPREAD`：价差上下限。
+- `USE_VALUE_SIGNAL`：是否用价值信号调整挂单。
+- `VALUE_SIGNAL_WEIGHT`：价值信号权重（0-1）。
+- `VALUE_CONFIDENCE_MIN`：价值信号最低置信度。
+- `ORDER_SIZE`：每笔挂单金额（USDT）。
+- `MAX_SINGLE_ORDER_VALUE`：单笔最大金额。
+- `MAX_POSITION`：单市场最大持仓金额。
+- `INVENTORY_SKEW_FACTOR`：库存偏置强度。
+- `CANCEL_THRESHOLD`：价格偏离阈值自动撤单。
+- `REPRICE_THRESHOLD`：重新报价阈值。
+- `MIN_ORDER_INTERVAL_MS`：同市场下单最小间隔。
+- `MAX_ORDERS_PER_MARKET`：单市场最大挂单数。
+- `MAX_DAILY_LOSS`：日内亏损熔断。
+
+## 3. 做市商防吃单/对冲
+
+- `ANTI_FILL_BPS`：靠近吃单时撤单阈值。
+- `NEAR_TOUCH_BPS`：提前撤单阈值。
+- `COOLDOWN_AFTER_CANCEL_MS`：撤单后冷却。
+- `VOLATILITY_PAUSE_BPS`：波动过大暂停。
+- `VOLATILITY_LOOKBACK_MS`：波动检测窗口。
+- `PAUSE_AFTER_VOLATILITY_MS`：暂停时长。
+- `HEDGE_ON_FILL`：成交后自动对冲。
+- `HEDGE_TRIGGER_SHARES`：触发对冲最小成交。
+- `HEDGE_MODE`：`FLATTEN` 或 `CROSS`。
+- `HEDGE_MAX_SLIPPAGE_BPS`：对冲最大滑点。
+
+## 4. 套利总控
+
+- `ENABLE_TRADING`：是否实盘下单。
+- `AUTO_CONFIRM`：无人值守自动确认。
+- `ARB_AUTO_EXECUTE`：开启自动执行套利。
+- `ARB_AUTO_EXECUTE_VALUE`：价值错配自动执行（慎重）。
+- `ARB_EXECUTE_TOP_N`：每轮执行 Top N 机会。
+- `ARB_EXECUTION_COOLDOWN_MS`：同一机会冷却时间。
+- `ARB_SCAN_INTERVAL_MS`：扫描频率。
+- `ARB_MAX_MARKETS`：扫描市场数上限。
+- `ARB_ORDERBOOK_CONCURRENCY`：并发拉取 orderbook。
+- `ARB_MARKETS_CACHE_MS`：市场列表缓存。
+- `ARB_WS_MAX_AGE_MS`：WS 数据最大允许延迟。
+
+## 5. 自动执行熔断
+
+- `ARB_MAX_ERRORS`：错误次数阈值。
+- `ARB_ERROR_WINDOW_MS`：统计窗口。
+- `ARB_PAUSE_ON_ERROR_MS`：暂停时长。
+- `ARB_WS_HEALTH_LOG_MS`：WS 健康日志间隔，0=关闭。
+
+## 6. 站内套利
+
+- `CROSS_PLATFORM_MIN_PROFIT`：最低利润阈值（默认 0.01）。
+
+## 7. 多结果套利
+
+- `MULTI_OUTCOME_ENABLED`：启用。
+- `MULTI_OUTCOME_MIN_OUTCOMES`：最少结果数。
+- `MULTI_OUTCOME_MAX_SHARES`：最大下单份额。
+
+## 8. 依赖套利
+
+- `DEPENDENCY_ARB_ENABLED`：启用。
+- `DEPENDENCY_CONSTRAINTS_PATH`：约束文件路径。
+- `DEPENDENCY_PYTHON_PATH`：Python 路径。
+- `DEPENDENCY_PYTHON_SCRIPT`：OR-Tools 脚本。
+- `DEPENDENCY_MIN_PROFIT`：最低利润阈值。
+- `DEPENDENCY_MAX_LEGS`：最大腿数。
+- `DEPENDENCY_MAX_NOTIONAL`：最大资金。
+- `DEPENDENCY_MIN_DEPTH`：最小深度。
+- `DEPENDENCY_FEE_BPS`：默认手续费。
+- `DEPENDENCY_SLIPPAGE_BPS`：滑点。
+- `DEPENDENCY_MAX_ITER`：迭代次数。
+- `DEPENDENCY_ORACLE_TIMEOUT_SEC`：IP 超时。
+- `DEPENDENCY_TIMEOUT_MS`：总超时。
+- `DEPENDENCY_ALLOW_SELLS`：允许卖空。
+
+## 9. 跨平台套利
+
+- `CROSS_PLATFORM_ENABLED`：启用跨平台检测。
+- `CROSS_PLATFORM_AUTO_EXECUTE`：自动执行。
+- `CROSS_PLATFORM_REQUIRE_CONFIRM`：是否需要确认。
+- `CROSS_PLATFORM_MAX_MATCHES`：最大匹配数。
+- `CROSS_PLATFORM_TRANSFER_COST`：跨平台转账成本。
+- `CROSS_PLATFORM_SLIPPAGE_BPS`：最大滑点。
+- `CROSS_PLATFORM_MAPPING_PATH`：映射表路径。
+- `CROSS_PLATFORM_USE_MAPPING`：是否强制映射。
+
+## 10. Alerts
+
+- `ALERT_WEBHOOK_URL`：告警 Webhook。
+- `ALERT_MIN_INTERVAL_MS`：最小间隔。
+
+## 11. Polymarket
+
+- `POLYMARKET_GAMMA_URL`：市场列表 API。
+- `POLYMARKET_CLOB_URL`：订单簿 API。
+- `POLYMARKET_MAX_MARKETS`：扫描上限。
+- `POLYMARKET_FEE_BPS`：手续费估算。
+- `POLYMARKET_WS_ENABLED`：WS 开关。
+- `POLYMARKET_WS_URL`：WS 地址。
+- `POLYMARKET_WS_CUSTOM_FEATURE`：特殊订阅模式。
+- `POLYMARKET_CACHE_TTL_MS`：市场列表缓存。
+- `POLYMARKET_PRIVATE_KEY`：签名私钥。
+- `POLYMARKET_API_KEY/SECRET/PASSPHRASE`：API 凭证。
+- `POLYMARKET_CHAIN_ID`：链 ID。
+- `POLYMARKET_AUTO_DERIVE_API_KEY`：自动派生。
+
+## 12. Predict WS
+
+- `PREDICT_WS_ENABLED`：WS 开关。
+- `PREDICT_WS_URL`：WS 地址。
+- `PREDICT_WS_API_KEY`：WS Key。
+- `PREDICT_WS_TOPIC_KEY`：订阅维度。
+
+## 13. Opinion
+
+- `OPINION_OPENAPI_URL`：OpenAPI。
+- `OPINION_API_KEY`：API Key。
+- `OPINION_MAX_MARKETS`：最大市场。
+- `OPINION_FEE_BPS`：手续费。
+- `OPINION_PYTHON_PATH`：Python 路径。
+- `OPINION_PYTHON_SCRIPT`：下单脚本。
+- `OPINION_PRIVATE_KEY`：私钥。
+- `OPINION_CHAIN_ID`：链 ID。
+- `OPINION_HOST`：Host。
+- `OPINION_WS_ENABLED`：WS 开关。
+- `OPINION_WS_URL`：WS 地址。
+- `OPINION_WS_HEARTBEAT_MS`：心跳间隔。
+
+## 14. 其他
+
+- `MARKET_TOKEN_IDS`：只交易指定 token（逗号分隔）。
+- `REFRESH_INTERVAL`：做市商刷新频率。

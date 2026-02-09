@@ -135,6 +135,29 @@ body::after {
   border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(11, 14, 29, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.toggle input {
+  accent-color: var(--accent);
+}
+
 .button-row {
   display: flex;
   gap: 12px;
@@ -251,6 +274,38 @@ select {
   padding: 14px;
   font-family: "Menlo", "Consolas", "Courier New", monospace;
   font-size: 12px;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tab-button {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.tab-button.active {
+  background: rgba(106, 163, 255, 0.22);
+  border-color: rgba(106, 163, 255, 0.5);
+  color: var(--accent);
+}
+
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tab-panel.active {
+  display: flex;
 }
 
 .hint {

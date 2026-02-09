@@ -25,7 +25,9 @@
 - **三种策略**：
   1. **价值错配套利** - 市场价格偏离真实价值时买卖
   2. **站内套利** - Yes + No != 1 时套利
-  3. **跨平台套利** - 不同平台价差套利
+  3. **多结果套利** - 多 Outcome 总成本 < 1
+  4. **跨平台套利** - 不同平台价差套利
+  5. **依赖套利** - 逻辑约束 + OR-Tools 组合套利
 
 ## 📁 项目结构
 
@@ -39,6 +41,7 @@ predict-fun-market-maker/
 │   │   ├── value-detector.ts   # 价值错配检测
 │   │   ├── intra-arb.ts        # 站内套利
 │   │   ├── cross-arb.ts        # 跨平台套利
+│   │   ├── dependency-arb.ts   # 依赖套利
 │   │   ├── executor.ts         # 套利执行器
 │   │   ├── monitor.ts          # 套利监控器
 │   │   └── index.ts            # 导出
@@ -125,6 +128,45 @@ CROSS_PLATFORM_SLIPPAGE_BPS=250
 CROSS_PLATFORM_MAPPING_PATH=cross-platform-mapping.json
 CROSS_PLATFORM_USE_MAPPING=true
 
+# 依赖套利（OR-Tools）
+DEPENDENCY_ARB_ENABLED=false
+DEPENDENCY_CONSTRAINTS_PATH=dependency-constraints.json
+DEPENDENCY_PYTHON_PATH=python3
+DEPENDENCY_PYTHON_SCRIPT=scripts/dependency-arb.py
+DEPENDENCY_MIN_PROFIT=0.02
+DEPENDENCY_MAX_LEGS=6
+DEPENDENCY_MAX_NOTIONAL=200
+DEPENDENCY_MIN_DEPTH=1
+DEPENDENCY_FEE_BPS=100
+DEPENDENCY_SLIPPAGE_BPS=20
+DEPENDENCY_MAX_ITER=12
+DEPENDENCY_ORACLE_TIMEOUT_SEC=2
+DEPENDENCY_TIMEOUT_MS=10000
+DEPENDENCY_ALLOW_SELLS=true
+
+# 多结果套利
+MULTI_OUTCOME_ENABLED=true
+MULTI_OUTCOME_MIN_OUTCOMES=3
+MULTI_OUTCOME_MAX_SHARES=500
+
+# 自动执行
+ARB_AUTO_EXECUTE=false
+ARB_AUTO_EXECUTE_VALUE=false
+ARB_EXECUTE_TOP_N=1
+ARB_EXECUTION_COOLDOWN_MS=60000
+ARB_SCAN_INTERVAL_MS=10000
+ARB_MAX_MARKETS=80
+ARB_ORDERBOOK_CONCURRENCY=8
+ARB_MARKETS_CACHE_MS=10000
+ARB_WS_MAX_AGE_MS=10000
+ARB_MAX_ERRORS=5
+ARB_ERROR_WINDOW_MS=60000
+ARB_PAUSE_ON_ERROR_MS=60000
+ARB_WS_HEALTH_LOG_MS=0
+
+开启 `ARB_AUTO_EXECUTE=true` 后，`npm run start:arb` 会持续监控并自动执行。
+价值错配自动执行需单独开启：`ARB_AUTO_EXECUTE_VALUE=true`。
+
 # 告警
 ALERT_WEBHOOK_URL=
 ALERT_MIN_INTERVAL_MS=60000
@@ -132,6 +174,14 @@ ALERT_MIN_INTERVAL_MS=60000
 # Polymarket
 POLYMARKET_GAMMA_URL=https://gamma-api.polymarket.com
 POLYMARKET_CLOB_URL=https://clob.polymarket.com
+POLYMARKET_WS_ENABLED=false
+POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
+POLYMARKET_WS_CUSTOM_FEATURE=false
+POLYMARKET_CACHE_TTL_MS=60000
+PREDICT_WS_ENABLED=false
+PREDICT_WS_URL=wss://ws.predict.fun/ws
+PREDICT_WS_API_KEY=
+PREDICT_WS_TOPIC_KEY=token_id
 POLYMARKET_PRIVATE_KEY=
 POLYMARKET_API_KEY=
 POLYMARKET_API_SECRET=
@@ -143,6 +193,9 @@ OPINION_API_KEY=
 OPINION_PRIVATE_KEY=
 OPINION_CHAIN_ID=56
 OPINION_HOST=https://proxy.opinion.trade:8443
+OPINION_WS_ENABLED=false
+OPINION_WS_URL=wss://ws.opinion.trade
+OPINION_WS_HEARTBEAT_MS=30000
 ```
 
 生成 JWT（私有接口必需）：
@@ -168,6 +221,21 @@ npm run setup:approvals
 - 防吃单逻辑（`ANTI_FILL_BPS`/`NEAR_TOUCH_BPS`）
 - 成交后对冲（`HEDGE_ON_FILL`/`HEDGE_MODE`）。`FLATTEN` 在 Predict 直接回补，`CROSS` 优先跨平台对冲，失败回退为 FLATTEN。
 
+### 依赖套利（OR-Tools）
+
+1. 安装 OR-Tools：
+
+```bash
+pip install ortools
+```
+
+2. 编辑 `dependency-constraints.json` 填写真实 token ID
+3. 启用：
+
+```env
+DEPENDENCY_ARB_ENABLED=true
+```
+
 ### 获取 API Key
 
 加入 [Predict Discord](https://discord.gg/predictdotfun) → 打开 Support Ticket → 申请 API key
@@ -175,6 +243,9 @@ npm run setup:approvals
 ## 📖 使用指南
 
 桌面端完整使用说明：`USAGE.md`
+新手指南：`docs/BEGINNER_GUIDE.md`
+字段说明：`docs/CONFIG_REFERENCE.md`
+JSON 模板：`docs/JSON_TEMPLATES.md`
 
 ### 做市商模式
 

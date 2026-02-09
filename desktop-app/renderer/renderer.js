@@ -1,10 +1,15 @@
 const envEditor = document.getElementById('envEditor');
+const mappingEditor = document.getElementById('mappingEditor');
+const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
 const globalStatus = document.getElementById('globalStatus');
 const tradingMode = document.getElementById('tradingMode');
 const statusMM = document.getElementById('statusMM');
 const statusArb = document.getElementById('statusArb');
+const toggleInputs = Array.from(document.querySelectorAll('.toggle input[data-env]'));
+const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
+const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 
 const logs = [];
 const MAX_LOGS = 800;
@@ -34,6 +39,32 @@ function detectTradingMode(text) {
   tradingMode.textContent = isLive ? 'Live' : 'Dry Run';
   tradingMode.style.background = isLive ? 'rgba(255, 107, 107, 0.18)' : 'rgba(247, 196, 108, 0.15)';
   tradingMode.style.color = isLive ? '#ff6b6b' : '#f7c46c';
+}
+
+function parseEnv(text) {
+  const map = new Map();
+  text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .forEach((line) => {
+      if (!line || line.startsWith('#')) return;
+      const idx = line.indexOf('=');
+      if (idx < 0) return;
+      const key = line.slice(0, idx).trim();
+      const value = line.slice(idx + 1).trim();
+      if (key) map.set(key, value);
+    });
+  return map;
+}
+
+function syncTogglesFromEnv(text) {
+  const env = parseEnv(text);
+  for (const input of toggleInputs) {
+    const key = input.dataset.env;
+    if (!key) continue;
+    const value = env.get(key) || 'false';
+    input.checked = value.toLowerCase() === 'true';
+  }
 }
 
 function renderLogs() {
@@ -77,12 +108,72 @@ async function loadEnv() {
   const text = await window.predictBot.readEnv();
   envEditor.value = text;
   detectTradingMode(text);
+  syncTogglesFromEnv(text);
 }
 
 async function saveEnv() {
   await window.predictBot.writeEnv(envEditor.value);
   detectTradingMode(envEditor.value);
+  syncTogglesFromEnv(envEditor.value);
   pushLog({ type: 'system', level: 'system', message: '配置已保存' });
+}
+
+async function loadMapping() {
+  const text = await window.predictBot.readMapping();
+  mappingEditor.value = text;
+}
+
+async function saveMapping() {
+  try {
+    JSON.parse(mappingEditor.value || '{}');
+  } catch (error) {
+    pushLog({ type: 'system', level: 'stderr', message: '映射 JSON 格式错误，未保存' });
+    return;
+  }
+  await window.predictBot.writeMapping(mappingEditor.value);
+  pushLog({ type: 'system', level: 'system', message: '跨平台映射已保存' });
+}
+
+async function loadDependency() {
+  const text = await window.predictBot.readDependency();
+  dependencyEditor.value = text;
+}
+
+async function saveDependency() {
+  try {
+    JSON.parse(dependencyEditor.value || '{}');
+  } catch (error) {
+    pushLog({ type: 'system', level: 'stderr', message: '依赖约束 JSON 格式错误，未保存' });
+    return;
+  }
+  await window.predictBot.writeDependency(dependencyEditor.value);
+  pushLog({ type: 'system', level: 'system', message: '依赖约束已保存' });
+}
+
+function applyToggles() {
+  let text = envEditor.value || '';
+  for (const input of toggleInputs) {
+    const key = input.dataset.env;
+    if (!key) continue;
+    text = setEnvValue(text, key, input.checked ? 'true' : 'false');
+  }
+  envEditor.value = text;
+  detectTradingMode(text);
+}
+
+function activateTab(name) {
+  tabButtons.forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tab === name);
+  });
+  tabPanels.forEach((panel) => {
+    panel.classList.toggle('active', panel.dataset.tab === name);
+  });
+  if (name === 'mapping' && !mappingEditor.value) {
+    loadMapping().catch(() => {});
+  }
+  if (name === 'dependency' && !dependencyEditor.value) {
+    loadDependency().catch(() => {});
+  }
 }
 
 async function startBot(type) {
@@ -101,6 +192,7 @@ async function stopBot(type) {
 
 async function init() {
   await loadEnv();
+  await Promise.all([loadMapping().catch(() => {}), loadDependency().catch(() => {})]);
   const status = await window.predictBot.getStatus();
   updateStatusDisplay(status);
   setGlobalStatus('已连接', false);
@@ -126,6 +218,10 @@ document.getElementById('clearLog').addEventListener('click', () => {
 
 document.getElementById('reloadEnv').addEventListener('click', loadEnv);
 document.getElementById('saveEnv').addEventListener('click', saveEnv);
+document.getElementById('reloadMapping').addEventListener('click', loadMapping);
+document.getElementById('saveMapping').addEventListener('click', saveMapping);
+document.getElementById('reloadDependency').addEventListener('click', loadDependency);
+document.getElementById('saveDependency').addEventListener('click', saveDependency);
 
 document.getElementById('startMM').addEventListener('click', () => startBot('mm'));
 document.getElementById('stopMM').addEventListener('click', () => stopBot('mm'));
@@ -135,11 +231,26 @@ document.getElementById('stopArb').addEventListener('click', () => stopBot('arb'
 document.getElementById('setDry').addEventListener('click', () => {
   envEditor.value = setEnvValue(envEditor.value, 'ENABLE_TRADING', 'false');
   detectTradingMode(envEditor.value);
+  syncTogglesFromEnv(envEditor.value);
 });
 
 document.getElementById('setLive').addEventListener('click', () => {
   envEditor.value = setEnvValue(envEditor.value, 'ENABLE_TRADING', 'true');
   detectTradingMode(envEditor.value);
+  syncTogglesFromEnv(envEditor.value);
+});
+
+document.getElementById('applyToggles').addEventListener('click', applyToggles);
+toggleInputs.forEach((input) => {
+  input.addEventListener('change', applyToggles);
+});
+
+envEditor.addEventListener('input', () => {
+  syncTogglesFromEnv(envEditor.value);
+});
+
+tabButtons.forEach((btn) => {
+  btn.addEventListener('click', () => activateTab(btn.dataset.tab || 'env'));
 });
 
 init().catch((err) => {
