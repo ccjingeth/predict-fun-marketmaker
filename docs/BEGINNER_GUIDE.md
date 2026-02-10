@@ -56,6 +56,7 @@
 - 编辑 `cross-platform-mapping.json`
 - 如需更稳健执行：`CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true`
 - 推荐：`CROSS_PLATFORM_USE_FOK=true`，`CROSS_PLATFORM_PARALLEL_SUBMIT=true`
+- 可选：`CROSS_PLATFORM_HEDGE_ON_FAILURE=true`（失败时自动对冲，风险更高）
 
 ## 7. 依赖套利（进阶）
 

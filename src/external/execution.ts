@@ -11,12 +11,14 @@ import type { OrderbookEntry } from '../types.js';
 interface ExecutionResult {
   platform: ExternalPlatform;
   orderIds?: string[];
+  legs?: PlatformLeg[];
 }
 
 interface PlatformExecutor {
   platform: ExternalPlatform;
   execute(legs: PlatformLeg[], options?: { useFok?: boolean; useLimit?: boolean }): Promise<ExecutionResult>;
   cancelOrders?(orderIds: string[]): Promise<void>;
+  hedgeLegs?(legs: PlatformLeg[], slippageBps: number): Promise<void>;
 }
 
 class PredictExecutor implements PlatformExecutor {
@@ -76,7 +78,7 @@ class PredictExecutor implements PlatformExecutor {
       }
     }
 
-    return { platform: this.platform, orderIds };
+    return { platform: this.platform, orderIds, legs };
   }
 
   async cancelOrders(orderIds: string[]): Promise<void> {
@@ -87,6 +89,21 @@ class PredictExecutor implements PlatformExecutor {
       await this.api.removeOrders(orderIds);
     } catch (error) {
       console.warn('Predict cancel failed:', error);
+    }
+  }
+
+  async hedgeLegs(legs: PlatformLeg[], slippageBps: number): Promise<void> {
+    for (const leg of legs) {
+      const market = await this.api.getMarket(leg.tokenId);
+      const orderbook = await this.api.getOrderbook(leg.tokenId);
+      const payload = await this.orderManager.buildMarketOrderPayload({
+        market,
+        side: leg.side === 'BUY' ? 'SELL' : 'BUY',
+        shares: leg.shares,
+        orderbook,
+        slippageBps: String(slippageBps),
+      });
+      await this.api.createOrder(payload);
     }
   }
 
@@ -195,7 +212,7 @@ class PolymarketExecutor implements PlatformExecutor {
       }
     }
 
-    return { platform: this.platform, orderIds };
+    return { platform: this.platform, orderIds, legs };
   }
 
   async cancelOrders(orderIds: string[]): Promise<void> {
@@ -277,7 +294,7 @@ class OpinionExecutor implements PlatformExecutor {
       });
     }
 
-    return { platform: this.platform };
+    return { platform: this.platform, legs };
   }
 }
 
@@ -341,6 +358,7 @@ export class CrossPlatformExecutionRouter {
       const failed = results.find((result) => result.status === 'rejected');
       if (failed) {
         await this.cancelSubmitted(results);
+        await this.hedgeOnFailure(results);
         throw failed.reason;
       }
       return;
@@ -352,6 +370,7 @@ export class CrossPlatformExecutionRouter {
         results.push(await task);
       } catch (error) {
         await this.cancelSubmitted(results.map((r) => ({ status: 'fulfilled', value: r } as const)));
+        await this.hedgeOnFailure(results.map((r) => ({ status: 'fulfilled', value: r } as const)));
         throw error;
       }
     }
@@ -371,6 +390,33 @@ export class CrossPlatformExecutionRouter {
     }
     if (cancelPromises.length > 0) {
       await Promise.allSettled(cancelPromises);
+    }
+  }
+
+  private async hedgeOnFailure(
+    results: Array<{ status: 'fulfilled'; value: ExecutionResult } | { status: 'rejected'; reason: any }>
+  ): Promise<void> {
+    if (!this.config.crossPlatformHedgeOnFailure) {
+      return;
+    }
+
+    const slippage = this.config.crossPlatformHedgeSlippageBps || this.config.crossPlatformSlippageBps || 400;
+
+    const hedgePromises: Promise<void>[] = [];
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const { platform, legs } = result.value;
+      if (!legs || legs.length === 0) continue;
+      if (this.config.crossPlatformHedgePredictOnly && platform !== 'Predict') {
+        continue;
+      }
+      const executor = this.executors.get(platform);
+      if (!executor || !executor.hedgeLegs) continue;
+      hedgePromises.push(executor.hedgeLegs(legs, slippage));
+    }
+
+    if (hedgePromises.length > 0) {
+      await Promise.allSettled(hedgePromises);
     }
   }
 

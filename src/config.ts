@@ -64,6 +64,9 @@ export function loadConfig(): Config {
     crossPlatformParallelSubmit: process.env.CROSS_PLATFORM_PARALLEL_SUBMIT !== 'false',
     crossPlatformLimitOrders: process.env.CROSS_PLATFORM_LIMIT_ORDERS !== 'false',
     crossPlatformCancelOpenMs: parseInt(process.env.CROSS_PLATFORM_CANCEL_OPEN_MS || '1500'),
+    crossPlatformHedgeOnFailure: process.env.CROSS_PLATFORM_HEDGE_ON_FAILURE === 'true',
+    crossPlatformHedgePredictOnly: process.env.CROSS_PLATFORM_HEDGE_PREDICT_ONLY !== 'false',
+    crossPlatformHedgeSlippageBps: parseInt(process.env.CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS || '400'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
     crossPlatformUseMapping: process.env.CROSS_PLATFORM_USE_MAPPING !== 'false',
@@ -213,6 +216,9 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Use FOK: ${config.crossPlatformUseFok ? '✅' : '❌'}`);
   console.log(`Cross-Platform Parallel Submit: ${config.crossPlatformParallelSubmit ? '✅' : '❌'}`);
   console.log(`Cross-Platform Cancel Open Ms: ${config.crossPlatformCancelOpenMs}`);
+  console.log(`Cross-Platform Hedge On Failure: ${config.crossPlatformHedgeOnFailure ? '✅' : '❌'}`);
+  console.log(`Cross-Platform Hedge Predict Only: ${config.crossPlatformHedgePredictOnly ? '✅' : '❌'}`);
+  console.log(`Cross-Platform Hedge Slippage Bps: ${config.crossPlatformHedgeSlippageBps}`);
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
   console.log(`Dependency Arb: ${config.dependencyEnabled ? '✅' : '❌'}`);

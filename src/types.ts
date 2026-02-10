@@ -49,6 +49,9 @@ export interface Config {
   crossPlatformParallelSubmit?: boolean;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
+  crossPlatformHedgeOnFailure?: boolean;
+  crossPlatformHedgePredictOnly?: boolean;
+  crossPlatformHedgeSlippageBps?: number;
   autoConfirmAll?: boolean;
   crossPlatformMappingPath?: string;
   crossPlatformUseMapping?: boolean;
