@@ -14,6 +14,14 @@ interface ExecutionResult {
   legs?: PlatformLeg[];
 }
 
+class ExecutionAttemptError extends Error {
+  hadSuccess: boolean;
+  constructor(message: string, hadSuccess: boolean) {
+    super(message);
+    this.hadSuccess = hadSuccess;
+  }
+}
+
 interface PlatformExecutor {
   platform: ExternalPlatform;
   execute(legs: PlatformLeg[], options?: { useFok?: boolean; useLimit?: boolean }): Promise<ExecutionResult>;
@@ -328,6 +336,28 @@ export class CrossPlatformExecutionRouter {
       await this.preflightVwap(legs);
     }
 
+    const maxRetries = Math.max(0, this.config.crossPlatformMaxRetries || 0);
+    const retryDelayMs = Math.max(0, this.config.crossPlatformRetryDelayMs || 0);
+
+    let attempt = 0;
+    while (true) {
+      try {
+        await this.executeOnce(legs);
+        return;
+      } catch (error: any) {
+        const hadSuccess = Boolean(error?.hadSuccess);
+        if (hadSuccess || attempt >= maxRetries) {
+          throw error;
+        }
+        attempt += 1;
+        if (retryDelayMs > 0) {
+          await this.sleep(retryDelayMs * attempt);
+        }
+      }
+    }
+  }
+
+  private async executeOnce(legs: PlatformLeg[]): Promise<void> {
     const grouped = new Map<ExternalPlatform, PlatformLeg[]>();
 
     for (const leg of legs) {
@@ -359,7 +389,8 @@ export class CrossPlatformExecutionRouter {
       if (failed) {
         await this.cancelSubmitted(results);
         await this.hedgeOnFailure(results);
-        throw failed.reason;
+        const hadSuccess = results.some((r) => r.status === 'fulfilled');
+        throw new ExecutionAttemptError(failed.reason?.message || 'Cross-platform execution failed', hadSuccess);
       }
       return;
     }
@@ -368,10 +399,10 @@ export class CrossPlatformExecutionRouter {
     for (const task of tasks) {
       try {
         results.push(await task);
-      } catch (error) {
+      } catch (error: any) {
         await this.cancelSubmitted(results.map((r) => ({ status: 'fulfilled', value: r } as const)));
         await this.hedgeOnFailure(results.map((r) => ({ status: 'fulfilled', value: r } as const)));
-        throw error;
+        throw new ExecutionAttemptError(error?.message || 'Cross-platform execution failed', results.length > 0);
       }
     }
   }
@@ -418,6 +449,13 @@ export class CrossPlatformExecutionRouter {
     if (hedgePromises.length > 0) {
       await Promise.allSettled(hedgePromises);
     }
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    if (!ms || ms <= 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async preflightVwap(legs: PlatformLeg[]): Promise<void> {

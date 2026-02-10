@@ -52,6 +52,8 @@ export interface Config {
   crossPlatformHedgeOnFailure?: boolean;
   crossPlatformHedgePredictOnly?: boolean;
   crossPlatformHedgeSlippageBps?: number;
+  crossPlatformMaxRetries?: number;
+  crossPlatformRetryDelayMs?: number;
   autoConfirmAll?: boolean;
   crossPlatformMappingPath?: string;
   crossPlatformUseMapping?: boolean;
