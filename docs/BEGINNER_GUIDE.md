@@ -79,7 +79,14 @@
 - `ARB_ERROR_WINDOW_MS=60000`
 - `ARB_PAUSE_ON_ERROR_MS=60000`
 
-## 10. 常见问题
+## 10. 手续费提示（重要）
+
+- Polymarket 的部分市场存在**曲线型手续费**，不是简单的线性比例。
+- 脚本默认使用 `POLYMARKET_FEE_RATE_URL` 获取费率，并用 `POLYMARKET_FEE_CURVE_*` 估算费用。
+- 如果你在非收费市场或费用变化频繁，建议：
+  - 将 `POLYMARKET_FEE_BPS=0` 或关闭曲线（`POLYMARKET_FEE_CURVE_RATE=0`）。
+
+## 11. 常见问题
 
 1. 没有数据？检查 API Key / WS 开关 / 网络。
 2. 自动执行失败？看日志，检查 JWT / 余额 / Approvals。

@@ -23,6 +23,7 @@ export class CrossPlatformAggregator {
         this.polymarketWs = new PolymarketWebSocketFeed({
           url: config.polymarketWsUrl || 'wss://ws-subscriptions-clob.polymarket.com/ws/market',
           customFeatureEnabled: config.polymarketWsCustomFeature,
+          initialDump: config.polymarketWsInitialDump,
           reconnectMinMs: 1000,
           reconnectMaxMs: 15000,
         });
@@ -34,6 +35,10 @@ export class CrossPlatformAggregator {
         clobUrl: config.polymarketClobUrl,
         maxMarkets: config.polymarketMaxMarkets || 30,
         feeBps: config.polymarketFeeBps || 0,
+        feeRateUrl: config.polymarketFeeRateUrl,
+        feeRateCacheMs: config.polymarketFeeRateCacheMs,
+        feeCurveRate: config.polymarketFeeCurveRate,
+        feeCurveExponent: config.polymarketFeeCurveExponent,
         useWebSocket: config.polymarketWsEnabled,
         cacheTtlMs: config.polymarketCacheTtlMs || 60000,
         wsMaxAgeMs: config.arbWsMaxAgeMs || 10000,

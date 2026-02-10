@@ -6,6 +6,7 @@
 import type { Market, Orderbook } from '../types.js';
 import type { ArbitrageOpportunity, InPlatformArbitrage } from './types.js';
 import { buildYesNoPairs } from './pairs.js';
+import { calcFeeCost } from './fee-utils.js';
 
 export class InPlatformArbitrageDetector {
   private minProfitThreshold: number;
@@ -70,11 +71,15 @@ export class InPlatformArbitrageDetector {
     const buyCost = yesTop.ask + noTop.ask;
     const sellProceeds = yesTop.bid + noTop.bid;
 
-    const feeCost = this.estimatedFee * 2;
+    const fallbackBps = this.estimatedFee * 10000;
+    const yesFeeBps = yesMarket.fee_rate_bps || fallbackBps;
+    const noFeeBps = noMarket.fee_rate_bps || fallbackBps;
+    const feeCostBuy = calcFeeCost(yesTop.ask, yesFeeBps) + calcFeeCost(noTop.ask, noFeeBps);
+    const feeCostSell = calcFeeCost(yesTop.bid, yesFeeBps) + calcFeeCost(noTop.bid, noFeeBps);
     const slippageCost = this.estimatedSlippage * 2;
 
-    const buyNetEdge = 1 - buyCost - feeCost - slippageCost;
-    const sellNetEdge = sellProceeds - 1 - feeCost - slippageCost;
+    const buyNetEdge = 1 - buyCost - feeCostBuy - slippageCost;
+    const sellNetEdge = sellProceeds - 1 - feeCostSell - slippageCost;
 
     const canBuy = buyNetEdge >= this.minProfitThreshold;
     const canSell = this.allowShorting && sellNetEdge >= this.minProfitThreshold;

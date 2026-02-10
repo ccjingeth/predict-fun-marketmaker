@@ -56,6 +56,8 @@ export interface Config {
   dependencyMaxNotional?: number;
   dependencyMinDepth?: number;
   dependencyFeeBps?: number;
+  dependencyFeeCurveRate?: number;
+  dependencyFeeCurveExponent?: number;
   dependencySlippageBps?: number;
   dependencyMaxIter?: number;
   dependencyOracleTimeoutSec?: number;
@@ -82,9 +84,14 @@ export interface Config {
   polymarketClobUrl?: string;
   polymarketMaxMarkets?: number;
   polymarketFeeBps?: number;
+  polymarketFeeRateUrl?: string;
+  polymarketFeeRateCacheMs?: number;
+  polymarketFeeCurveRate?: number;
+  polymarketFeeCurveExponent?: number;
   polymarketWsEnabled?: boolean;
   polymarketWsUrl?: string;
   polymarketWsCustomFeature?: boolean;
+  polymarketWsInitialDump?: boolean;
   polymarketCacheTtlMs?: number;
   predictWsEnabled?: boolean;
   predictWsUrl?: string;

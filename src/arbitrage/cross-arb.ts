@@ -6,6 +6,7 @@
 import type { ArbitrageOpportunity, CrossPlatformArbitrage } from './types.js';
 import type { PlatformMarket } from '../external/types.js';
 import type { CrossPlatformMappingStore } from '../external/mapping.js';
+import { calcFeeCost } from './fee-utils.js';
 
 export class CrossPlatformArbitrageDetector {
   private platforms: string[];
@@ -51,13 +52,23 @@ export class CrossPlatformArbitrageDetector {
       return null;
     }
 
-    const feeA = (marketA.feeBps || 0) / 10000;
-    const feeB = (marketB.feeBps || 0) / 10000;
+    const feeA = marketA.feeBps || 0;
+    const feeB = marketB.feeBps || 0;
+    const feeCurveA = marketA.feeCurveRate;
+    const feeCurveB = marketB.feeCurveRate;
+    const feeExpA = marketA.feeCurveExponent;
+    const feeExpB = marketB.feeCurveExponent;
 
     const buyCostAB = yesAskA + noAskB;
     const buyCostBA = yesAskB + noAskA;
-    const buyNetAB = 1 - buyCostAB - yesAskA * feeA - noAskB * feeB - this.estimatedTransferCost;
-    const buyNetBA = 1 - buyCostBA - yesAskB * feeB - noAskA * feeA - this.estimatedTransferCost;
+    const buyFeeAB =
+      calcFeeCost(yesAskA, feeA, feeCurveA, feeExpA) +
+      calcFeeCost(noAskB, feeB, feeCurveB, feeExpB);
+    const buyFeeBA =
+      calcFeeCost(yesAskB, feeB, feeCurveB, feeExpB) +
+      calcFeeCost(noAskA, feeA, feeCurveA, feeExpA);
+    const buyNetAB = 1 - buyCostAB - buyFeeAB - this.estimatedTransferCost;
+    const buyNetBA = 1 - buyCostBA - buyFeeBA - this.estimatedTransferCost;
 
     let action: 'BUY_BOTH' | 'SELL_BOTH' = 'BUY_BOTH';
     let minCost = 0;
@@ -113,9 +124,15 @@ export class CrossPlatformArbitrageDetector {
       ];
     } else if (this.allowSellBoth) {
       const sellProceedsAB = yesBidA + noBidB;
-      const sellNetAB = sellProceedsAB - 1 - yesBidA * feeA - noBidB * feeB - this.estimatedTransferCost;
+      const sellFeeAB =
+        calcFeeCost(yesBidA, feeA, feeCurveA, feeExpA) +
+        calcFeeCost(noBidB, feeB, feeCurveB, feeExpB);
+      const sellNetAB = sellProceedsAB - 1 - sellFeeAB - this.estimatedTransferCost;
       const sellProceedsBA = yesBidB + noBidA;
-      const sellNetBA = sellProceedsBA - 1 - yesBidB * feeB - noBidA * feeA - this.estimatedTransferCost;
+      const sellFeeBA =
+        calcFeeCost(yesBidB, feeB, feeCurveB, feeExpB) +
+        calcFeeCost(noBidA, feeA, feeCurveA, feeExpA);
+      const sellNetBA = sellProceedsBA - 1 - sellFeeBA - this.estimatedTransferCost;
 
       if (sellNetAB >= sellNetBA && sellNetAB >= this.minProfitThreshold) {
         minCost = 1;

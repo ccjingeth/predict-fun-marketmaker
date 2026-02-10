@@ -92,11 +92,15 @@ export class ArbitrageMonitor {
     };
 
     this.valueDetector = new ValueMismatchDetector();
-    this.intraArbDetector = new InPlatformArbitrageDetector(this.config.minProfitThreshold);
+    this.intraArbDetector = new InPlatformArbitrageDetector(
+      this.config.minProfitThreshold,
+      (this.config.predictFeeBps || 0) / 10000
+    );
     this.multiOutcomeDetector = new MultiOutcomeArbitrageDetector({
       minProfitThreshold: this.config.minProfitThreshold,
       minOutcomes: this.config.multiOutcomeMinOutcomes,
       maxRecommendedShares: this.config.multiOutcomeMaxShares,
+      feeBps: this.config.predictFeeBps,
     });
     this.crossArbDetector = new CrossPlatformArbitrageDetector(
       ['Predict', 'Polymarket', 'Opinion'],
@@ -116,6 +120,8 @@ export class ArbitrageMonitor {
         maxNotional: this.config.dependencyMaxNotional,
         minDepth: this.config.dependencyMinDepth,
         feeBps: this.config.dependencyFeeBps,
+        feeCurveRate: this.config.dependencyFeeCurveRate || 0,
+        feeCurveExponent: this.config.dependencyFeeCurveExponent || 0,
         slippageBps: this.config.dependencySlippageBps,
         maxIter: this.config.dependencyMaxIter,
         oracleTimeoutSec: this.config.dependencyOracleTimeoutSec,

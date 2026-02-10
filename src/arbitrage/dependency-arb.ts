@@ -48,6 +48,8 @@ export interface DependencyArbConfig {
   maxNotional: number;
   minDepth: number;
   feeBps: number;
+  feeCurveRate: number;
+  feeCurveExponent: number;
   slippageBps: number;
   maxIter: number;
   oracleTimeoutSec: number;
@@ -87,6 +89,8 @@ export class DependencyArbitrageDetector {
       maxNotional: 200,
       minDepth: 1,
       feeBps: 100,
+      feeCurveRate: 0,
+      feeCurveExponent: 0,
       slippageBps: 20,
       maxIter: 12,
       oracleTimeoutSec: 2,
@@ -163,6 +167,8 @@ export class DependencyArbitrageDetector {
         maxNotional: this.config.maxNotional,
         minDepth: this.config.minDepth,
         feeBps: this.config.feeBps,
+        feeCurveRate: this.config.feeCurveRate,
+        feeCurveExponent: this.config.feeCurveExponent,
         slippageBps: this.config.slippageBps,
         maxIter: this.config.maxIter,
         oracleTimeout: this.config.oracleTimeoutSec,

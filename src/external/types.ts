@@ -24,6 +24,8 @@ export interface PlatformMarket {
   yesMid?: number;
   noMid?: number;
   feeBps?: number;
+  feeCurveRate?: number;
+  feeCurveExponent?: number;
   timestamp: number;
   metadata?: Record<string, string>;
 }

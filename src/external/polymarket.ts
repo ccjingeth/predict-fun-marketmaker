@@ -7,6 +7,10 @@ interface PolymarketConfig {
   clobUrl: string;
   maxMarkets: number;
   feeBps: number;
+  feeRateUrl?: string;
+  feeRateCacheMs?: number;
+  feeCurveRate?: number;
+  feeCurveExponent?: number;
   useWebSocket?: boolean;
   cacheTtlMs?: number;
   wsMaxAgeMs?: number;
@@ -76,6 +80,7 @@ export class PolymarketDataProvider implements PlatformProvider {
   private wsFeed?: PolymarketWebSocketFeed;
   private cachedMarkets: GammaMarket[] = [];
   private cacheTimestamp = 0;
+  private feeCache = new Map<string, { feeBps: number; ts: number }>();
 
   constructor(config: PolymarketConfig, wsFeed?: PolymarketWebSocketFeed) {
     this.config = config;
@@ -110,6 +115,8 @@ export class PolymarketDataProvider implements PlatformProvider {
       if (this.wsFeed && this.config.useWebSocket) {
         this.wsFeed.subscribeAssets([yesTokenId, noTokenId]);
       }
+
+      const feeRateBps = await this.getFeeRateBps(yesTokenId);
 
       let yesTop = this.wsFeed?.getTopOfBook(yesTokenId, this.config.wsMaxAgeMs);
       let noTop = this.wsFeed?.getTopOfBook(noTokenId, this.config.wsMaxAgeMs);
@@ -156,12 +163,42 @@ export class PolymarketDataProvider implements PlatformProvider {
         noAskSize: noTop.askSize,
         yesMid: (yesTop.bestBid + yesTop.bestAsk) / 2,
         noMid: (noTop.bestBid + noTop.bestAsk) / 2,
-        feeBps,
+        feeBps: Number.isFinite(feeRateBps) ? feeRateBps : feeBps,
+        feeCurveRate: this.config.feeCurveRate,
+        feeCurveExponent: this.config.feeCurveExponent,
         timestamp: Date.now(),
       });
     });
 
     return results;
+  }
+
+  private async getFeeRateBps(tokenId: string): Promise<number> {
+    const fallback = this.config.feeBps ?? 0;
+    const url = this.config.feeRateUrl;
+    if (!url || !tokenId) {
+      return fallback;
+    }
+
+    const ttl = this.config.feeRateCacheMs ?? 300000;
+    const cached = this.feeCache.get(tokenId);
+    if (cached && Date.now() - cached.ts < ttl) {
+      return cached.feeBps;
+    }
+
+    try {
+      const response = await axios.get(url, {
+        params: { token_id: tokenId },
+        timeout: 8000,
+      });
+      const feeBps = Number(response.data?.fee_rate_bps ?? response.data?.feeRateBps ?? fallback);
+      const resolved = Number.isFinite(feeBps) ? feeBps : fallback;
+      this.feeCache.set(tokenId, { feeBps: resolved, ts: Date.now() });
+      return resolved;
+    } catch (error) {
+      this.feeCache.set(tokenId, { feeBps: fallback, ts: Date.now() });
+      return fallback;
+    }
   }
 
   private async loadGammaMarkets(): Promise<GammaMarket[]> {

@@ -5,6 +5,7 @@
 
 import type { Market, Orderbook } from '../types.js';
 import type { ArbitrageOpportunity } from './types.js';
+import { calcFeeCost } from './fee-utils.js';
 
 export interface MultiOutcomeArbitrage {
   marketId: string;
@@ -69,9 +70,9 @@ export class MultiOutcomeArbitrageDetector {
           break;
         }
 
-        const feeRate = (market.fee_rate_bps || this.config.feeBps) / 10000;
+        const feeBps = market.fee_rate_bps || this.config.feeBps;
         totalCost += ask;
-        totalFees += ask * feeRate;
+        totalFees += calcFeeCost(ask, feeBps);
         totalSlippage += ask * (this.config.slippageBps / 10000);
         minDepth = Math.min(minDepth, askSize > 0 ? askSize : minDepth);
 

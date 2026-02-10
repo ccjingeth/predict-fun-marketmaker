@@ -4,21 +4,25 @@ import type { PlatformOrderbook } from './types.js';
 export interface PolymarketWsConfig {
   url: string;
   customFeatureEnabled?: boolean;
+  initialDump?: boolean;
   reconnectMinMs?: number;
   reconnectMaxMs?: number;
 }
 
 interface BookUpdate {
   asset_id: string;
-  bids: { price: string; size: string }[];
-  asks: { price: string; size: string }[];
+  bids?: { price: string; size: string }[];
+  asks?: { price: string; size: string }[];
+  buys?: { price: string; size: string }[];
+  sells?: { price: string; size: string }[];
 }
 
 interface PriceChangeUpdate {
   asset_id: string;
-  price: string;
-  size: string;
-  side: 'BUY' | 'SELL';
+  price?: string;
+  size?: string;
+  side?: 'BUY' | 'SELL';
+  changes?: { price: string; size: string; side: 'BUY' | 'SELL' }[];
   best_bid?: string;
   best_ask?: string;
 }
@@ -77,7 +81,9 @@ export class PolymarketWebSocketFeed {
     }
 
     unique.forEach((id) => this.subscribed.add(id));
-    this.sendSubscribe(unique);
+    if (this.connected) {
+      this.sendSubscribe(unique, 'subscribe');
+    }
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.start();
     }
@@ -139,14 +145,20 @@ export class PolymarketWebSocketFeed {
     }, this.reconnectDelay);
   }
 
-  private sendSubscribe(assetIds: string[]): void {
+  private sendSubscribe(assetIds: string[], operation?: 'subscribe' | 'unsubscribe'): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }
     const payload: Record<string, unknown> = {
-      type: 'market',
+      type: 'MARKET',
       assets_ids: assetIds,
     };
+    if (operation) {
+      payload.operation = operation;
+    }
+    if (this.config.initialDump !== undefined) {
+      payload.initial_dump = this.config.initialDump;
+    }
     if (this.config.customFeatureEnabled) {
       payload.custom_feature_enabled = true;
     }
@@ -170,32 +182,47 @@ export class PolymarketWebSocketFeed {
     }
 
     if (eventType === 'book') {
-      const data = Array.isArray(message.data) ? message.data : [];
-      for (const entry of data as BookUpdate[]) {
-        this.applyBook(entry);
+      if (Array.isArray(message.data)) {
+        for (const entry of message.data as BookUpdate[]) {
+          this.applyBook(entry);
+        }
+      } else if (message.data?.asset_id) {
+        this.applyBook(message.data as BookUpdate);
+      } else if (message.asset_id) {
+        this.applyBook(message as BookUpdate);
       }
       return;
     }
 
     if (eventType === 'price_change') {
-      const data = Array.isArray(message.data) ? message.data : [];
-      for (const entry of data as PriceChangeUpdate[]) {
-        this.applyPriceChange(entry);
+      if (Array.isArray(message.data)) {
+        for (const entry of message.data as PriceChangeUpdate[]) {
+          this.applyPriceChange(entry);
+        }
+      } else if (message.asset_id) {
+        this.applyPriceChange(message as PriceChangeUpdate);
       }
       return;
     }
 
     if (eventType === 'best_bid_ask') {
-      const data = Array.isArray(message.data) ? message.data : [];
-      for (const entry of data as BestBidAskUpdate[]) {
-        this.applyBestBidAsk(entry);
+      if (Array.isArray(message.data)) {
+        for (const entry of message.data as BestBidAskUpdate[]) {
+          this.applyBestBidAsk(entry);
+        }
+      } else if (message.data?.asset_id) {
+        this.applyBestBidAsk(message.data as BestBidAskUpdate);
+      } else if (message.asset_id) {
+        this.applyBestBidAsk(message as BestBidAskUpdate);
       }
     }
   }
 
   private applyBook(entry: BookUpdate): void {
-    const bestBid = entry.bids?.[0];
-    const bestAsk = entry.asks?.[0];
+    const bids = entry.bids ?? entry.buys ?? [];
+    const asks = entry.asks ?? entry.sells ?? [];
+    const bestBid = bids?.[0];
+    const bestAsk = asks?.[0];
     const bid = bestBid ? Number(bestBid.price) : undefined;
     const ask = bestAsk ? Number(bestAsk.price) : undefined;
     const bidSize = bestBid ? Number(bestBid.size) : undefined;
@@ -215,18 +242,26 @@ export class PolymarketWebSocketFeed {
   }
 
   private applyPriceChange(entry: PriceChangeUpdate): void {
-    const current = this.topOfBook.get(entry.asset_id) || { timestamp: 0 };
+    const assetId = entry.asset_id;
+    if (!assetId) {
+      return;
+    }
+
+    const current = this.topOfBook.get(assetId) || { timestamp: 0 };
     const bestBid = entry.best_bid ? Number(entry.best_bid) : current.bestBid;
     const bestAsk = entry.best_ask ? Number(entry.best_ask) : current.bestAsk;
     let bidSize = current.bidSize;
     let askSize = current.askSize;
 
-    const price = Number(entry.price);
-    const size = Number(entry.size);
-    if (entry.side === 'BUY' && Number.isFinite(bestBid) && price === bestBid && Number.isFinite(size)) {
+    const primaryChange = entry.changes && entry.changes.length > 0 ? entry.changes[0] : entry;
+    const price = Number(primaryChange?.price);
+    const size = Number(primaryChange?.size);
+    const side = primaryChange?.side;
+
+    if (side === 'BUY' && Number.isFinite(bestBid) && price === bestBid && Number.isFinite(size)) {
       bidSize = size;
     }
-    if (entry.side === 'SELL' && Number.isFinite(bestAsk) && price === bestAsk && Number.isFinite(size)) {
+    if (side === 'SELL' && Number.isFinite(bestAsk) && price === bestAsk && Number.isFinite(size)) {
       askSize = size;
     }
 
@@ -234,7 +269,7 @@ export class PolymarketWebSocketFeed {
       return;
     }
 
-    this.topOfBook.set(entry.asset_id, {
+    this.topOfBook.set(assetId, {
       bestBid: Number.isFinite(bestBid) ? bestBid : undefined,
       bestAsk: Number.isFinite(bestAsk) ? bestAsk : undefined,
       bidSize,

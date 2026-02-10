@@ -176,17 +176,29 @@ def _solve_portfolio(
     if max_legs > 0:
         solver.Add(sum(vars_use) <= max_legs)
 
-    fee_bps_default = _safe_float(settings.get("feeBps", 0.0)) / 10000.0
+    fee_bps_default = _safe_float(settings.get("feeBps", 0.0))
     slip_bps = _safe_float(settings.get("slippageBps", 0.0)) / 10000.0
+    curve_rate = _safe_float(settings.get("feeCurveRate", 0.0))
+    curve_exp = _safe_float(settings.get("feeCurveExponent", 0.0))
+
+    def _calc_fee(price: float, fee_bps: float) -> float:
+        if price <= 0 or fee_bps <= 0:
+            return 0.0
+        if curve_rate > 0 and curve_exp > 0:
+            base_multiplier = fee_bps / 1000.0
+            p = max(0.0, min(1.0, price))
+            curve = curve_rate * ((p * (1 - p)) ** curve_exp)
+            return p * base_multiplier * curve
+        return price * (fee_bps / 10000.0)
 
     cost_terms = []
     notional_terms = []
     for tok, buy_var, sell_var in zip(tokens, vars_buy, vars_sell):
-        fee = max(_safe_float(tok.get("feeBps", 0.0)) / 10000.0, fee_bps_default)
+        fee_bps = max(_safe_float(tok.get("feeBps", 0.0)), fee_bps_default)
         ask = _safe_float(tok.get("ask", 0.0))
         bid = _safe_float(tok.get("bid", 0.0))
-        buy_cost = ask * (1.0 + fee + slip_bps)
-        sell_rev = bid * max(0.0, 1.0 - fee - slip_bps)
+        buy_cost = ask + _calc_fee(ask, fee_bps) + ask * slip_bps
+        sell_rev = bid - _calc_fee(bid, fee_bps) - bid * slip_bps
         cost_terms.append(buy_var * buy_cost)
         cost_terms.append(sell_var * (-sell_rev))
         if ask > 0:
