@@ -8,9 +8,15 @@ import { ClobClient } from '@polymarket/clob-client';
 import { estimateBuy, estimateSell } from '../arbitrage/orderbook-vwap.js';
 import type { OrderbookEntry } from '../types.js';
 
+interface ExecutionResult {
+  platform: ExternalPlatform;
+  orderIds?: string[];
+}
+
 interface PlatformExecutor {
   platform: ExternalPlatform;
-  execute(legs: PlatformLeg[]): Promise<void>;
+  execute(legs: PlatformLeg[], options?: { useFok?: boolean; useLimit?: boolean }): Promise<ExecutionResult>;
+  cancelOrders?(orderIds: string[]): Promise<void>;
 }
 
 class PredictExecutor implements PlatformExecutor {
@@ -18,26 +24,106 @@ class PredictExecutor implements PlatformExecutor {
   private api: PredictAPI;
   private orderManager: OrderManager;
   private slippageBps: string;
+  private useLimitOrders: boolean;
+  private cancelOpenMs: number;
+  private maker: string;
 
-  constructor(api: PredictAPI, orderManager: OrderManager, slippageBps: number) {
+  constructor(
+    api: PredictAPI,
+    orderManager: OrderManager,
+    slippageBps: number,
+    options?: { useLimitOrders?: boolean; cancelOpenMs?: number }
+  ) {
     this.api = api;
     this.orderManager = orderManager;
     this.slippageBps = String(slippageBps);
+    this.useLimitOrders = options?.useLimitOrders !== false;
+    this.cancelOpenMs = options?.cancelOpenMs ?? 1500;
+    this.maker = orderManager.getMakerAddress();
   }
 
-  async execute(legs: PlatformLeg[]): Promise<void> {
+  async execute(legs: PlatformLeg[], options?: { useLimit?: boolean }): Promise<ExecutionResult> {
+    const orderIds: string[] = [];
+    const useLimit = options?.useLimit ?? this.useLimitOrders;
+
     for (const leg of legs) {
       const market = await this.api.getMarket(leg.tokenId);
-      const orderbook = await this.api.getOrderbook(leg.tokenId);
-      const payload = await this.orderManager.buildMarketOrderPayload({
-        market,
-        side: leg.side,
-        shares: leg.shares,
-        orderbook,
-        slippageBps: this.slippageBps,
-      });
-      await this.api.createOrder(payload);
+      let payload: any;
+
+      if (useLimit) {
+        payload = await this.orderManager.buildLimitOrderPayload({
+          market,
+          side: leg.side,
+          price: leg.price,
+          shares: leg.shares,
+        });
+      } else {
+        const orderbook = await this.api.getOrderbook(leg.tokenId);
+        payload = await this.orderManager.buildMarketOrderPayload({
+          market,
+          side: leg.side,
+          shares: leg.shares,
+          orderbook,
+          slippageBps: this.slippageBps,
+        });
+      }
+
+      const response = await this.api.createOrder(payload);
+      const orderId = this.extractOrderId(response);
+      if (orderId) {
+        orderIds.push(orderId);
+        this.scheduleCancelIfOpen(orderId);
+      }
     }
+
+    return { platform: this.platform, orderIds };
+  }
+
+  async cancelOrders(orderIds: string[]): Promise<void> {
+    if (!orderIds || orderIds.length === 0) {
+      return;
+    }
+    try {
+      await this.api.removeOrders(orderIds);
+    } catch (error) {
+      console.warn('Predict cancel failed:', error);
+    }
+  }
+
+  private scheduleCancelIfOpen(orderId: string): void {
+    if (!this.cancelOpenMs || this.cancelOpenMs <= 0) {
+      return;
+    }
+    setTimeout(async () => {
+      try {
+        const openOrders = await this.api.getOrders(this.maker);
+        const stillOpen = openOrders.find((o) => o.order_hash === orderId || o.id === orderId);
+        if (stillOpen) {
+          await this.api.removeOrders([orderId]);
+        }
+      } catch {
+        // ignore
+      }
+    }, this.cancelOpenMs);
+  }
+
+  private extractOrderId(response: any): string | null {
+    const candidates = [
+      response?.order_hash,
+      response?.order?.hash,
+      response?.order?.order_hash,
+      response?.data?.order?.hash,
+      response?.data?.order?.order_hash,
+      response?.hash,
+      response?.id,
+      response?.order?.id,
+    ];
+    for (const cand of candidates) {
+      if (cand) {
+        return String(cand);
+      }
+    }
+    return null;
   }
 }
 
@@ -46,6 +132,7 @@ class PolymarketExecutor implements PlatformExecutor {
   private client: ClobClient;
   private apiCreds?: { apiKey: string; apiSecret: string; apiPassphrase: string };
   private autoDerive: boolean;
+  private useFok: boolean;
 
   constructor(config: Config) {
     const signer = new Wallet(config.polymarketPrivateKey || '');
@@ -56,6 +143,7 @@ class PolymarketExecutor implements PlatformExecutor {
     );
 
     this.autoDerive = config.polymarketAutoDeriveApiKey !== false;
+    this.useFok = config.crossPlatformUseFok !== false;
 
     if (config.polymarketApiKey && config.polymarketApiSecret && config.polymarketApiPassphrase) {
       this.apiCreds = {
@@ -77,11 +165,21 @@ class PolymarketExecutor implements PlatformExecutor {
     }
   }
 
-  async execute(legs: PlatformLeg[]): Promise<void> {
+  async execute(legs: PlatformLeg[], options?: { useFok?: boolean }): Promise<ExecutionResult> {
     await this.ensureApiCreds();
     if (!this.apiCreds) {
       throw new Error('Polymarket API credentials missing');
     }
+
+    const orderIds: string[] = [];
+    const orderType: 'GTC' | 'FOK' | 'GTD' =
+      options?.useFok === undefined
+        ? this.useFok
+          ? 'FOK'
+          : 'GTC'
+        : options.useFok
+          ? 'FOK'
+          : 'GTC';
 
     for (const leg of legs) {
       const order = await this.client.createOrder({
@@ -90,7 +188,31 @@ class PolymarketExecutor implements PlatformExecutor {
         side: leg.side,
         size: leg.shares,
       });
-      await this.client.postOrder(order, this.apiCreds);
+      const result: any = await (this.client as any).postOrder(order, orderType);
+      const orderId = result?.orderID || result?.orderId || order?.order?.hash || order?.order?.orderHash;
+      if (orderId) {
+        orderIds.push(String(orderId));
+      }
+    }
+
+    return { platform: this.platform, orderIds };
+  }
+
+  async cancelOrders(orderIds: string[]): Promise<void> {
+    if (!orderIds || orderIds.length === 0) {
+      return;
+    }
+    await this.ensureApiCreds();
+    if (!this.apiCreds) {
+      return;
+    }
+    try {
+      const clientAny = this.client as any;
+      if (typeof clientAny.cancelOrders === 'function') {
+        await clientAny.cancelOrders(orderIds);
+      }
+    } catch (error) {
+      console.warn('Polymarket cancel failed:', error);
     }
   }
 }
@@ -113,7 +235,7 @@ class OpinionExecutor implements PlatformExecutor {
     this.chainId = config.opinionChainId;
   }
 
-  async execute(legs: PlatformLeg[]): Promise<void> {
+  async execute(legs: PlatformLeg[]): Promise<ExecutionResult> {
     if (!this.apiKey || !this.privateKey) {
       throw new Error('Opinion API key or private key missing');
     }
@@ -154,6 +276,8 @@ class OpinionExecutor implements PlatformExecutor {
         });
       });
     }
+
+    return { platform: this.platform };
   }
 }
 
@@ -165,7 +289,13 @@ export class CrossPlatformExecutionRouter {
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
     this.api = api;
-    this.executors.set('Predict', new PredictExecutor(api, orderManager, config.crossPlatformSlippageBps || 250));
+    this.executors.set(
+      'Predict',
+      new PredictExecutor(api, orderManager, config.crossPlatformSlippageBps || 250, {
+        useLimitOrders: config.crossPlatformLimitOrders !== false,
+        cancelOpenMs: config.crossPlatformCancelOpenMs,
+      })
+    );
 
     if (config.polymarketPrivateKey) {
       this.executors.set('Polymarket', new PolymarketExecutor(config));
@@ -190,12 +320,57 @@ export class CrossPlatformExecutionRouter {
       grouped.get(leg.platform)!.push(leg);
     }
 
-    for (const [platform, legsForPlatform] of grouped.entries()) {
+    const runExecution = async (platform: ExternalPlatform, legsForPlatform: PlatformLeg[]) => {
       const executor = this.executors.get(platform);
       if (!executor) {
         throw new Error(`No executor configured for ${platform}`);
       }
-      await executor.execute(legsForPlatform);
+      return executor.execute(legsForPlatform, {
+        useFok: this.config.crossPlatformUseFok,
+        useLimit: this.config.crossPlatformLimitOrders,
+      });
+    };
+
+    const tasks: Promise<ExecutionResult>[] = [];
+    for (const [platform, legsForPlatform] of grouped.entries()) {
+      tasks.push(runExecution(platform, legsForPlatform));
+    }
+
+    if (this.config.crossPlatformParallelSubmit !== false) {
+      const results = await Promise.allSettled(tasks);
+      const failed = results.find((result) => result.status === 'rejected');
+      if (failed) {
+        await this.cancelSubmitted(results);
+        throw failed.reason;
+      }
+      return;
+    }
+
+    const results: ExecutionResult[] = [];
+    for (const task of tasks) {
+      try {
+        results.push(await task);
+      } catch (error) {
+        await this.cancelSubmitted(results.map((r) => ({ status: 'fulfilled', value: r } as const)));
+        throw error;
+      }
+    }
+  }
+
+  private async cancelSubmitted(
+    results: Array<{ status: 'fulfilled'; value: ExecutionResult } | { status: 'rejected'; reason: any }>
+  ): Promise<void> {
+    const cancelPromises: Promise<void>[] = [];
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const { platform, orderIds } = result.value;
+      if (!orderIds || orderIds.length === 0) continue;
+      const executor = this.executors.get(platform);
+      if (!executor || !executor.cancelOrders) continue;
+      cancelPromises.push(executor.cancelOrders(orderIds));
+    }
+    if (cancelPromises.length > 0) {
+      await Promise.allSettled(cancelPromises);
     }
   }
 

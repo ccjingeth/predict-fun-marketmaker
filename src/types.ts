@@ -45,6 +45,10 @@ export interface Config {
   crossPlatformMaxShares?: number;
   crossPlatformDepthLevels?: number;
   crossPlatformExecutionVwapCheck?: boolean;
+  crossPlatformUseFok?: boolean;
+  crossPlatformParallelSubmit?: boolean;
+  crossPlatformLimitOrders?: boolean;
+  crossPlatformCancelOpenMs?: number;
   autoConfirmAll?: boolean;
   crossPlatformMappingPath?: string;
   crossPlatformUseMapping?: boolean;

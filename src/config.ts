@@ -60,6 +60,10 @@ export function loadConfig(): Config {
     crossPlatformMaxShares: parseInt(process.env.CROSS_PLATFORM_MAX_SHARES || '200'),
     crossPlatformDepthLevels: parseInt(process.env.CROSS_PLATFORM_DEPTH_LEVELS || '10'),
     crossPlatformExecutionVwapCheck: process.env.CROSS_PLATFORM_EXECUTION_VWAP_CHECK !== 'false',
+    crossPlatformUseFok: process.env.CROSS_PLATFORM_USE_FOK !== 'false',
+    crossPlatformParallelSubmit: process.env.CROSS_PLATFORM_PARALLEL_SUBMIT !== 'false',
+    crossPlatformLimitOrders: process.env.CROSS_PLATFORM_LIMIT_ORDERS !== 'false',
+    crossPlatformCancelOpenMs: parseInt(process.env.CROSS_PLATFORM_CANCEL_OPEN_MS || '1500'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
     crossPlatformUseMapping: process.env.CROSS_PLATFORM_USE_MAPPING !== 'false',
@@ -205,6 +209,10 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Max Shares: ${config.crossPlatformMaxShares}`);
   console.log(`Cross-Platform Depth Levels: ${config.crossPlatformDepthLevels}`);
   console.log(`Cross-Platform Slippage Bps: ${config.crossPlatformSlippageBps}`);
+  console.log(`Cross-Platform Limit Orders: ${config.crossPlatformLimitOrders ? '✅' : '❌'}`);
+  console.log(`Cross-Platform Use FOK: ${config.crossPlatformUseFok ? '✅' : '❌'}`);
+  console.log(`Cross-Platform Parallel Submit: ${config.crossPlatformParallelSubmit ? '✅' : '❌'}`);
+  console.log(`Cross-Platform Cancel Open Ms: ${config.crossPlatformCancelOpenMs}`);
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
   console.log(`Dependency Arb: ${config.dependencyEnabled ? '✅' : '❌'}`);
