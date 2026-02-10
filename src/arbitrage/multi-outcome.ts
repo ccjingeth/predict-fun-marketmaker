@@ -5,7 +5,7 @@
 
 import type { Market, Orderbook } from '../types.js';
 import type { ArbitrageOpportunity } from './types.js';
-import { calcFeeCost } from './fee-utils.js';
+import { estimateBuy, sumDepth } from './orderbook-vwap.js';
 
 export interface MultiOutcomeArbitrage {
   marketId: string;
@@ -55,9 +55,6 @@ export class MultiOutcomeArbitrageDetector {
       }
 
       const outcomes: MultiOutcomeArbitrage['outcomes'] = [];
-      let totalCost = 0;
-      let totalFees = 0;
-      let totalSlippage = 0;
       let minDepth = Infinity;
 
       for (const market of group) {
@@ -66,15 +63,12 @@ export class MultiOutcomeArbitrageDetector {
         const ask = top?.ask ?? market.best_ask ?? 0;
         const askSize = top?.askSize ?? 0;
         if (!ask || ask <= 0) {
-          totalCost = 0;
+          minDepth = 0;
           break;
         }
 
-        const feeBps = market.fee_rate_bps || this.config.feeBps;
-        totalCost += ask;
-        totalFees += calcFeeCost(ask, feeBps);
-        totalSlippage += ask * (this.config.slippageBps / 10000);
-        minDepth = Math.min(minDepth, askSize > 0 ? askSize : minDepth);
+        const depth = Math.max(sumDepth(book?.asks), askSize);
+        minDepth = Math.min(minDepth, depth > 0 ? depth : minDepth);
 
         outcomes.push({
           tokenId: market.token_id,
@@ -84,16 +78,7 @@ export class MultiOutcomeArbitrageDetector {
         });
       }
 
-      if (!totalCost || !Number.isFinite(totalCost)) {
-        continue;
-      }
-
       if (!Number.isFinite(minDepth) || minDepth <= 0) {
-        minDepth = 0;
-      }
-
-      const guaranteedProfit = 1 - totalCost - totalFees - totalSlippage;
-      if (guaranteedProfit < this.config.minProfitThreshold) {
         continue;
       }
 
@@ -101,6 +86,36 @@ export class MultiOutcomeArbitrageDetector {
         1,
         Math.floor(Math.min(minDepth, this.config.maxRecommendedShares))
       );
+
+      let totalCost = 0;
+      let totalFees = 0;
+      let totalSlippage = 0;
+      let totalAllIn = 0;
+      let usable = true;
+
+      for (const market of group) {
+        const book = orderbooks.get(market.token_id);
+        const feeBps = market.fee_rate_bps || this.config.feeBps;
+        const fill = estimateBuy(book?.asks, recommendedSize, feeBps, undefined, undefined, this.config.slippageBps);
+        if (!fill) {
+          usable = false;
+          break;
+        }
+        totalCost += fill.totalNotional;
+        totalFees += fill.totalFees;
+        totalSlippage += fill.totalSlippage;
+        totalAllIn += fill.totalAllIn;
+      }
+
+      if (!usable) {
+        continue;
+      }
+
+      const allInPerShare = totalAllIn / recommendedSize;
+      const guaranteedProfit = 1 - allInPerShare;
+      if (guaranteedProfit < this.config.minProfitThreshold) {
+        continue;
+      }
 
       const marketId = group[0].condition_id || group[0].event_id || group[0].token_id;
       const question = group[0].question;
@@ -117,7 +132,9 @@ export class MultiOutcomeArbitrageDetector {
         positionSize: recommendedSize,
         riskLevel: guaranteedProfit > 0.05 ? 'LOW' : 'MEDIUM',
         guaranteedProfit,
-        totalCost,
+        totalCost: totalCost / recommendedSize,
+        totalFees: totalFees / recommendedSize,
+        totalSlippage: totalSlippage / recommendedSize,
         legs: outcomes.map((o) => ({
           tokenId: o.tokenId,
           side: 'BUY',

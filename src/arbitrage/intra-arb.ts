@@ -6,7 +6,7 @@
 import type { Market, Orderbook } from '../types.js';
 import type { ArbitrageOpportunity, InPlatformArbitrage } from './types.js';
 import { buildYesNoPairs } from './pairs.js';
-import { calcFeeCost } from './fee-utils.js';
+import { estimateBuy, estimateSell, sumDepth } from './orderbook-vwap.js';
 
 export class InPlatformArbitrageDetector {
   private minProfitThreshold: number;
@@ -68,18 +68,41 @@ export class InPlatformArbitrageDetector {
       return null;
     }
 
-    const buyCost = yesTop.ask + noTop.ask;
-    const sellProceeds = yesTop.bid + noTop.bid;
-
     const fallbackBps = this.estimatedFee * 10000;
     const yesFeeBps = yesMarket.fee_rate_bps || fallbackBps;
     const noFeeBps = noMarket.fee_rate_bps || fallbackBps;
-    const feeCostBuy = calcFeeCost(yesTop.ask, yesFeeBps) + calcFeeCost(noTop.ask, noFeeBps);
-    const feeCostSell = calcFeeCost(yesTop.bid, yesFeeBps) + calcFeeCost(noTop.bid, noFeeBps);
-    const slippageCost = this.estimatedSlippage * 2;
+    const slippageBps = this.estimatedSlippage * 10000;
 
-    const buyNetEdge = 1 - buyCost - feeCostBuy - slippageCost;
-    const sellNetEdge = sellProceeds - 1 - feeCostSell - slippageCost;
+    const buyDepth = Math.min(sumDepth(yesBook.asks), sumDepth(noBook.asks));
+    const sellDepth = Math.min(sumDepth(yesBook.bids), sumDepth(noBook.bids));
+
+    const buySize = Math.floor(Math.min(buyDepth, this.maxRecommendedShares));
+    const sellSize = Math.floor(Math.min(sellDepth, this.maxRecommendedShares));
+
+    let buyNetEdge = -Infinity;
+    let sellNetEdge = -Infinity;
+    let buyYes = null;
+    let buyNo = null;
+    let sellYes = null;
+    let sellNo = null;
+
+    if (buySize > 0) {
+      buyYes = estimateBuy(yesBook.asks, buySize, yesFeeBps, undefined, undefined, slippageBps);
+      buyNo = estimateBuy(noBook.asks, buySize, noFeeBps, undefined, undefined, slippageBps);
+      if (buyYes && buyNo) {
+        const buyCostPerShare = (buyYes.totalAllIn + buyNo.totalAllIn) / buySize;
+        buyNetEdge = 1 - buyCostPerShare;
+      }
+    }
+
+    if (sellSize > 0) {
+      sellYes = estimateSell(yesBook.bids, sellSize, yesFeeBps, undefined, undefined, slippageBps);
+      sellNo = estimateSell(noBook.bids, sellSize, noFeeBps, undefined, undefined, slippageBps);
+      if (sellYes && sellNo) {
+        const sellRevenuePerShare = (sellYes.totalAllIn + sellNo.totalAllIn) / sellSize;
+        sellNetEdge = sellRevenuePerShare - 1;
+      }
+    }
 
     const canBuy = buyNetEdge >= this.minProfitThreshold;
     const canSell = this.allowShorting && sellNetEdge >= this.minProfitThreshold;
@@ -90,53 +113,56 @@ export class InPlatformArbitrageDetector {
 
     const useSell = canSell && sellNetEdge > buyNetEdge;
 
-    const depthShares = Math.max(0, Math.min(yesTop.askSize, noTop.askSize, yesTop.bidSize, noTop.bidSize));
-    const recommendedSize = Math.max(1, Math.floor(Math.min(depthShares, this.maxRecommendedShares)));
-
-    if (useSell) {
+    if (useSell && sellYes && sellNo) {
+      const recommendedSize = Math.max(1, sellSize);
       return {
         marketId: yesMarket.condition_id || yesMarket.event_id || yesMarket.token_id,
         yesTokenId: yesMarket.token_id,
         noTokenId: noMarket.token_id,
         question: yesMarket.question,
-        yesPrice: yesTop.bid,
-        noPrice: noTop.bid,
+        yesPrice: sellYes.avgPrice,
+        noPrice: sellNo.avgPrice,
         yesBid: yesTop.bid,
         yesAsk: yesTop.ask,
         noBid: noTop.bid,
         noAsk: noTop.ask,
-        yesPlusNo: sellProceeds,
+        yesPlusNo: sellYes.avgAllIn + sellNo.avgAllIn,
         arbitrageExists: true,
         arbitrageType: 'OVER_ONE',
-        profitPercentage: Math.max(0, (sellProceeds - 1) * 100),
+        profitPercentage: Math.max(0, sellNetEdge * 100),
         maxProfit: Math.max(0, sellNetEdge * 100),
-        depthShares,
+        depthShares: sellSize,
         action: 'SELL_BOTH',
         recommendedSize,
-        breakEvenFee: Math.abs(sellProceeds - 1) * 100,
+        breakEvenFee: Math.abs(sellYes.avgAllIn + sellNo.avgAllIn - 1) * 100,
       };
     }
 
+    if (!buyYes || !buyNo) {
+      return null;
+    }
+
+    const recommendedSize = Math.max(1, buySize);
     return {
       marketId: yesMarket.condition_id || yesMarket.event_id || yesMarket.token_id,
       yesTokenId: yesMarket.token_id,
       noTokenId: noMarket.token_id,
       question: yesMarket.question,
-      yesPrice: yesTop.ask,
-      noPrice: noTop.ask,
+      yesPrice: buyYes.avgPrice,
+      noPrice: buyNo.avgPrice,
       yesBid: yesTop.bid,
       yesAsk: yesTop.ask,
       noBid: noTop.bid,
       noAsk: noTop.ask,
-      yesPlusNo: buyCost,
+      yesPlusNo: buyYes.avgAllIn + buyNo.avgAllIn,
       arbitrageExists: true,
       arbitrageType: 'UNDER_ONE',
-      profitPercentage: Math.max(0, (1 - buyCost) * 100),
+      profitPercentage: Math.max(0, buyNetEdge * 100),
       maxProfit: Math.max(0, buyNetEdge * 100),
-      depthShares,
+      depthShares: buySize,
       action: 'BUY_BOTH',
       recommendedSize,
-      breakEvenFee: Math.abs(buyCost - 1) * 100,
+      breakEvenFee: Math.abs(buyYes.avgAllIn + buyNo.avgAllIn - 1) * 100,
     };
   }
 

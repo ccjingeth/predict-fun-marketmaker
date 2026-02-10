@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { Market, Orderbook } from '../types.js';
 import type { ArbitrageOpportunity } from './types.js';
+import { sumDepth } from './orderbook-vwap.js';
 
 export interface DependencyCondition {
   id: string;
@@ -233,8 +234,8 @@ export class DependencyArbitrageDetector {
     if (!orderbook || orderbook.best_bid === undefined || orderbook.best_ask === undefined) {
       return null;
     }
-    const bidSize = Number(orderbook.bids[0]?.shares || 0);
-    const askSize = Number(orderbook.asks[0]?.shares || 0);
+    const bidSize = Math.max(Number(orderbook.bids[0]?.shares || 0), sumDepth(orderbook.bids));
+    const askSize = Math.max(Number(orderbook.asks[0]?.shares || 0), sumDepth(orderbook.asks));
     return {
       bid: orderbook.best_bid,
       ask: orderbook.best_ask,
