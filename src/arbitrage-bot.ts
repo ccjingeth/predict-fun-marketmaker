@@ -63,6 +63,8 @@ class ArbitrageBot {
       dependencyMaxNotional: this.config.dependencyMaxNotional || 200,
       dependencyMinDepth: this.config.dependencyMinDepth || 1,
       dependencyFeeBps: this.config.dependencyFeeBps || 100,
+      dependencyFeeCurveRate: this.config.dependencyFeeCurveRate || 0,
+      dependencyFeeCurveExponent: this.config.dependencyFeeCurveExponent || 0,
       dependencySlippageBps: this.config.dependencySlippageBps || 20,
       dependencyMaxIter: this.config.dependencyMaxIter || 12,
       dependencyOracleTimeoutSec: this.config.dependencyOracleTimeoutSec || 2,

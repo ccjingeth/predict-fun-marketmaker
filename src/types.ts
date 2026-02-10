@@ -44,6 +44,7 @@ export interface Config {
   crossPlatformSlippageBps?: number;
   crossPlatformMaxShares?: number;
   crossPlatformDepthLevels?: number;
+  crossPlatformExecutionVwapCheck?: boolean;
   autoConfirmAll?: boolean;
   crossPlatformMappingPath?: string;
   crossPlatformUseMapping?: boolean;

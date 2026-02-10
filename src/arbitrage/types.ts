@@ -58,6 +58,8 @@ export interface ArbitrageOpportunity {
   riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
   guaranteedProfit?: number;
   totalCost?: number;
+  totalFees?: number;
+  totalSlippage?: number;
   legs?: {
     platform?: string;
     tokenId: string;

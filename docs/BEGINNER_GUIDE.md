@@ -54,6 +54,7 @@
 - `CROSS_PLATFORM_ENABLED=true`
 - 配好 Polymarket / Opinion 密钥
 - 编辑 `cross-platform-mapping.json`
+- 如需更稳健执行：`CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true`
 
 ## 7. 依赖套利（进阶）
 

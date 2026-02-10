@@ -39,6 +39,8 @@ export interface ArbitrageConfig {
   dependencyMaxNotional: number;
   dependencyMinDepth: number;
   dependencyFeeBps: number;
+  dependencyFeeCurveRate: number;
+  dependencyFeeCurveExponent: number;
   dependencySlippageBps: number;
   dependencyMaxIter: number;
   dependencyOracleTimeoutSec: number;
@@ -88,6 +90,8 @@ export class ArbitrageMonitor {
       dependencyMaxNotional: 200,
       dependencyMinDepth: 1,
       dependencyFeeBps: 100,
+      dependencyFeeCurveRate: 0,
+      dependencyFeeCurveExponent: 0,
       dependencySlippageBps: 20,
       dependencyMaxIter: 12,
       dependencyOracleTimeoutSec: 2,

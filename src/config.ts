@@ -59,6 +59,7 @@ export function loadConfig(): Config {
     crossPlatformSlippageBps: parseInt(process.env.CROSS_PLATFORM_SLIPPAGE_BPS || '250'),
     crossPlatformMaxShares: parseInt(process.env.CROSS_PLATFORM_MAX_SHARES || '200'),
     crossPlatformDepthLevels: parseInt(process.env.CROSS_PLATFORM_DEPTH_LEVELS || '10'),
+    crossPlatformExecutionVwapCheck: process.env.CROSS_PLATFORM_EXECUTION_VWAP_CHECK !== 'false',
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
     crossPlatformUseMapping: process.env.CROSS_PLATFORM_USE_MAPPING !== 'false',
