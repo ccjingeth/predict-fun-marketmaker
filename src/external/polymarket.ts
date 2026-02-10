@@ -11,6 +11,7 @@ interface PolymarketConfig {
   feeRateCacheMs?: number;
   feeCurveRate?: number;
   feeCurveExponent?: number;
+  depthLevels?: number;
   useWebSocket?: boolean;
   cacheTtlMs?: number;
   wsMaxAgeMs?: number;
@@ -38,7 +39,17 @@ function toArray<T>(value: T[] | string | undefined): T[] {
   }
 }
 
-function parseOrderbook(data: any): { bid?: number; ask?: number; bidSize?: number; askSize?: number } {
+function parseOrderbook(
+  data: any,
+  depthLevels?: number
+): {
+  bid?: number;
+  ask?: number;
+  bidSize?: number;
+  askSize?: number;
+  bids?: { price: number; shares: number }[];
+  asks?: { price: number; shares: number }[];
+} {
   const bids: any[] = data?.bids || [];
   const asks: any[] = data?.asks || [];
 
@@ -50,11 +61,32 @@ function parseOrderbook(data: any): { bid?: number; ask?: number; bidSize?: numb
   const bidSize = bidEntry ? Number(bidEntry.size ?? bidEntry.shares ?? bidEntry[1]) : undefined;
   const askSize = askEntry ? Number(askEntry.size ?? askEntry.shares ?? askEntry[1]) : undefined;
 
+  const bidLevels = bids
+    .map((level) => ({
+      price: Number(level.price ?? level.priceFloat ?? level[0]),
+      shares: Number(level.size ?? level.shares ?? level[1]),
+    }))
+    .filter((level) => Number.isFinite(level.price) && level.price > 0 && Number.isFinite(level.shares) && level.shares > 0)
+    .sort((a, b) => b.price - a.price);
+  const askLevels = asks
+    .map((level) => ({
+      price: Number(level.price ?? level.priceFloat ?? level[0]),
+      shares: Number(level.size ?? level.shares ?? level[1]),
+    }))
+    .filter((level) => Number.isFinite(level.price) && level.price > 0 && Number.isFinite(level.shares) && level.shares > 0)
+    .sort((a, b) => a.price - b.price);
+
+  const limit = depthLevels && depthLevels > 0 ? depthLevels : undefined;
+  const limitedBids = limit ? bidLevels.slice(0, limit) : bidLevels;
+  const limitedAsks = limit ? askLevels.slice(0, limit) : askLevels;
+
   return {
     bid: Number.isFinite(bid) ? bid : undefined,
     ask: Number.isFinite(ask) ? ask : undefined,
     bidSize: Number.isFinite(bidSize) ? bidSize : undefined,
     askSize: Number.isFinite(askSize) ? askSize : undefined,
+    bids: limitedBids,
+    asks: limitedAsks,
   };
 }
 
@@ -118,28 +150,38 @@ export class PolymarketDataProvider implements PlatformProvider {
 
       const feeRateBps = await this.getFeeRateBps(yesTokenId);
 
-      let yesTop = this.wsFeed?.getTopOfBook(yesTokenId, this.config.wsMaxAgeMs);
-      let noTop = this.wsFeed?.getTopOfBook(noTokenId, this.config.wsMaxAgeMs);
+      const yesBook = this.wsFeed?.getOrderbook(yesTokenId, this.config.wsMaxAgeMs);
+      const noBook = this.wsFeed?.getOrderbook(noTokenId, this.config.wsMaxAgeMs);
 
-      if (!yesTop || !yesTop.bestBid || !yesTop.bestAsk || !noTop || !noTop.bestBid || !noTop.bestAsk) {
+      let yesTop = yesBook;
+      let noTop = noBook;
+
+      const needsDepth = (this.config.depthLevels || 0) > 0;
+      const hasDepth = Boolean(yesBook?.bids?.length && yesBook?.asks?.length && noBook?.bids?.length && noBook?.asks?.length);
+
+      if (!yesTop || !yesTop.bestBid || !yesTop.bestAsk || !noTop || !noTop.bestBid || !noTop.bestAsk || (needsDepth && !hasDepth)) {
         const [yesBook, noBook] = await Promise.all([
           axios.get(`${clobUrl}/book`, { params: { token_id: yesTokenId }, timeout: 8000 }).then((r) => r.data),
           axios.get(`${clobUrl}/book`, { params: { token_id: noTokenId }, timeout: 8000 }).then((r) => r.data),
         ]);
 
-        const yesParsed = parseOrderbook(yesBook);
-        const noParsed = parseOrderbook(noBook);
+        const yesParsed = parseOrderbook(yesBook, this.config.depthLevels);
+        const noParsed = parseOrderbook(noBook, this.config.depthLevels);
         yesTop = {
           bestBid: yesParsed.bid,
           bestAsk: yesParsed.ask,
           bidSize: yesParsed.bidSize,
           askSize: yesParsed.askSize,
+          bids: yesParsed.bids,
+          asks: yesParsed.asks,
         };
         noTop = {
           bestBid: noParsed.bid,
           bestAsk: noParsed.ask,
           bidSize: noParsed.bidSize,
           askSize: noParsed.askSize,
+          bids: noParsed.bids,
+          asks: noParsed.asks,
         };
       }
 
@@ -166,6 +208,10 @@ export class PolymarketDataProvider implements PlatformProvider {
         feeBps: Number.isFinite(feeRateBps) ? feeRateBps : feeBps,
         feeCurveRate: this.config.feeCurveRate,
         feeCurveExponent: this.config.feeCurveExponent,
+        yesBids: yesTop.bids,
+        yesAsks: yesTop.asks,
+        noBids: noTop.bids,
+        noAsks: noTop.asks,
         timestamp: Date.now(),
       });
     });

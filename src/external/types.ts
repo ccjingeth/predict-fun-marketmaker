@@ -1,10 +1,17 @@
 export type ExternalPlatform = 'Predict' | 'Polymarket' | 'Opinion';
 
+export interface DepthLevel {
+  price: number;
+  shares: number;
+}
+
 export interface PlatformOrderbook {
   bestBid?: number;
   bestAsk?: number;
   bidSize?: number;
   askSize?: number;
+  bids?: DepthLevel[];
+  asks?: DepthLevel[];
 }
 
 export interface PlatformMarket {
@@ -26,6 +33,10 @@ export interface PlatformMarket {
   feeBps?: number;
   feeCurveRate?: number;
   feeCurveExponent?: number;
+  yesBids?: DepthLevel[];
+  yesAsks?: DepthLevel[];
+  noBids?: DepthLevel[];
+  noAsks?: DepthLevel[];
   timestamp: number;
   metadata?: Record<string, string>;
 }

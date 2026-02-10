@@ -42,6 +42,8 @@ export interface Config {
   crossPlatformMaxMatches?: number;
   crossPlatformTransferCost?: number;
   crossPlatformSlippageBps?: number;
+  crossPlatformMaxShares?: number;
+  crossPlatformDepthLevels?: number;
   autoConfirmAll?: boolean;
   crossPlatformMappingPath?: string;
   crossPlatformUseMapping?: boolean;

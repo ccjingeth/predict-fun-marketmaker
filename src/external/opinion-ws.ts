@@ -1,5 +1,5 @@
 import WebSocket, { type RawData } from 'ws';
-import type { PlatformOrderbook } from './types.js';
+import type { DepthLevel, PlatformOrderbook } from './types.js';
 
 export interface OpinionWsConfig {
   url: string;
@@ -125,6 +125,46 @@ export class OpinionWebSocketFeed {
       bidSize: book.bidSize,
       askSize: book.askSize,
     };
+  }
+
+  getOrderbook(tokenId: string, maxAgeMs?: number, depthLevels?: number): PlatformOrderbook | undefined {
+    const book = this.books.get(tokenId);
+    if (!book) {
+      return undefined;
+    }
+    if (maxAgeMs && Date.now() - book.timestamp > maxAgeMs) {
+      return undefined;
+    }
+
+    const bids = this.mapSide(book.bids, 'BID', depthLevels);
+    const asks = this.mapSide(book.asks, 'ASK', depthLevels);
+
+    return {
+      bestBid: book.bestBid,
+      bestAsk: book.bestAsk,
+      bidSize: book.bidSize,
+      askSize: book.askSize,
+      bids,
+      asks,
+    };
+  }
+
+  private mapSide(side: OrderbookSide, kind: 'BID' | 'ASK', depthLevels?: number): DepthLevel[] {
+    const levels: DepthLevel[] = [];
+    for (const [price, size] of side.entries()) {
+      const p = Number(price);
+      const s = Number(size);
+      if (!Number.isFinite(p) || p <= 0 || !Number.isFinite(s) || s <= 0) {
+        continue;
+      }
+      levels.push({ price: p, shares: s });
+    }
+
+    levels.sort((a, b) => (kind === 'BID' ? b.price - a.price : a.price - b.price));
+    if (depthLevels && depthLevels > 0) {
+      return levels.slice(0, depthLevels);
+    }
+    return levels;
   }
 
   private buildUrl(): string {

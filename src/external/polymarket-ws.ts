@@ -5,6 +5,7 @@ export interface PolymarketWsConfig {
   url: string;
   customFeatureEnabled?: boolean;
   initialDump?: boolean;
+  maxDepthLevels?: number;
   reconnectMinMs?: number;
   reconnectMaxMs?: number;
 }
@@ -114,6 +115,10 @@ export class PolymarketWebSocketFeed {
       return undefined;
     }
     return book;
+  }
+
+  getOrderbook(assetId: string, maxAgeMs?: number): PlatformOrderbook | undefined {
+    return this.getTopOfBook(assetId, maxAgeMs);
   }
 
   private onOpen(): void {
@@ -228,6 +233,19 @@ export class PolymarketWebSocketFeed {
     const bidSize = bestBid ? Number(bestBid.size) : undefined;
     const askSize = bestAsk ? Number(bestAsk.size) : undefined;
 
+    const depthLimit = this.config.maxDepthLevels ?? 0;
+    const bidLevels = bids
+      .map((level) => ({ price: Number(level.price), shares: Number(level.size) }))
+      .filter((level) => Number.isFinite(level.price) && level.price > 0 && Number.isFinite(level.shares) && level.shares > 0)
+      .sort((a, b) => b.price - a.price);
+    const askLevels = asks
+      .map((level) => ({ price: Number(level.price), shares: Number(level.size) }))
+      .filter((level) => Number.isFinite(level.price) && level.price > 0 && Number.isFinite(level.shares) && level.shares > 0)
+      .sort((a, b) => a.price - b.price);
+
+    const limitedBids = depthLimit > 0 ? bidLevels.slice(0, depthLimit) : bidLevels;
+    const limitedAsks = depthLimit > 0 ? askLevels.slice(0, depthLimit) : askLevels;
+
     if (!Number.isFinite(bid) && !Number.isFinite(ask)) {
       return;
     }
@@ -237,6 +255,8 @@ export class PolymarketWebSocketFeed {
       bestAsk: Number.isFinite(ask) ? ask : undefined,
       bidSize: Number.isFinite(bidSize) ? bidSize : undefined,
       askSize: Number.isFinite(askSize) ? askSize : undefined,
+      bids: limitedBids,
+      asks: limitedAsks,
       timestamp: Date.now(),
     });
   }
@@ -274,6 +294,8 @@ export class PolymarketWebSocketFeed {
       bestAsk: Number.isFinite(bestAsk) ? bestAsk : undefined,
       bidSize,
       askSize,
+      bids: current.bids,
+      asks: current.asks,
       timestamp: Date.now(),
     });
   }
@@ -290,6 +312,8 @@ export class PolymarketWebSocketFeed {
       bestAsk: Number.isFinite(ask) ? ask : current.bestAsk,
       bidSize: current.bidSize,
       askSize: current.askSize,
+      bids: current.bids,
+      asks: current.asks,
       timestamp: Date.now(),
     });
   }

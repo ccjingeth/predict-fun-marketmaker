@@ -57,6 +57,8 @@ export function loadConfig(): Config {
     crossPlatformMaxMatches: parseInt(process.env.CROSS_PLATFORM_MAX_MATCHES || '20'),
     crossPlatformTransferCost: parseFloat(process.env.CROSS_PLATFORM_TRANSFER_COST || '0.002'),
     crossPlatformSlippageBps: parseInt(process.env.CROSS_PLATFORM_SLIPPAGE_BPS || '250'),
+    crossPlatformMaxShares: parseInt(process.env.CROSS_PLATFORM_MAX_SHARES || '200'),
+    crossPlatformDepthLevels: parseInt(process.env.CROSS_PLATFORM_DEPTH_LEVELS || '10'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
     crossPlatformUseMapping: process.env.CROSS_PLATFORM_USE_MAPPING !== 'false',
@@ -199,6 +201,9 @@ export function printConfig(config: Config): void {
   console.log(`Hedge Mode: ${config.hedgeMode}`);
   console.log(`Cross-Platform Enabled: ${config.crossPlatformEnabled ? '✅' : '❌'}`);
   console.log(`Cross-Platform Mapping: ${config.crossPlatformUseMapping ? '✅' : '❌'}`);
+  console.log(`Cross-Platform Max Shares: ${config.crossPlatformMaxShares}`);
+  console.log(`Cross-Platform Depth Levels: ${config.crossPlatformDepthLevels}`);
+  console.log(`Cross-Platform Slippage Bps: ${config.crossPlatformSlippageBps}`);
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
   console.log(`Dependency Arb: ${config.dependencyEnabled ? '✅' : '❌'}`);

@@ -24,25 +24,27 @@ export class CrossPlatformAggregator {
           url: config.polymarketWsUrl || 'wss://ws-subscriptions-clob.polymarket.com/ws/market',
           customFeatureEnabled: config.polymarketWsCustomFeature,
           initialDump: config.polymarketWsInitialDump,
+          maxDepthLevels: config.crossPlatformDepthLevels,
           reconnectMinMs: 1000,
           reconnectMaxMs: 15000,
         });
         this.polymarketWs.start();
       }
 
-      this.polymarket = new PolymarketDataProvider({
-        gammaUrl: config.polymarketGammaUrl,
-        clobUrl: config.polymarketClobUrl,
-        maxMarkets: config.polymarketMaxMarkets || 30,
-        feeBps: config.polymarketFeeBps || 0,
-        feeRateUrl: config.polymarketFeeRateUrl,
-        feeRateCacheMs: config.polymarketFeeRateCacheMs,
-        feeCurveRate: config.polymarketFeeCurveRate,
-        feeCurveExponent: config.polymarketFeeCurveExponent,
-        useWebSocket: config.polymarketWsEnabled,
-        cacheTtlMs: config.polymarketCacheTtlMs || 60000,
-        wsMaxAgeMs: config.arbWsMaxAgeMs || 10000,
-      }, this.polymarketWs);
+        this.polymarket = new PolymarketDataProvider({
+          gammaUrl: config.polymarketGammaUrl,
+          clobUrl: config.polymarketClobUrl,
+          maxMarkets: config.polymarketMaxMarkets || 30,
+          feeBps: config.polymarketFeeBps || 0,
+          feeRateUrl: config.polymarketFeeRateUrl,
+          feeRateCacheMs: config.polymarketFeeRateCacheMs,
+          feeCurveRate: config.polymarketFeeCurveRate,
+          feeCurveExponent: config.polymarketFeeCurveExponent,
+          depthLevels: config.crossPlatformDepthLevels,
+          useWebSocket: config.polymarketWsEnabled,
+          cacheTtlMs: config.polymarketCacheTtlMs || 60000,
+          wsMaxAgeMs: config.arbWsMaxAgeMs || 10000,
+        }, this.polymarketWs);
     }
 
     if (config.opinionOpenApiUrl && config.opinionApiKey) {
@@ -62,6 +64,7 @@ export class CrossPlatformAggregator {
         apiKey: config.opinionApiKey,
         maxMarkets: config.opinionMaxMarkets || 30,
         feeBps: config.opinionFeeBps || 0,
+        depthLevels: config.crossPlatformDepthLevels,
         useWebSocket: config.opinionWsEnabled,
         wsMaxAgeMs: config.arbWsMaxAgeMs || 10000,
       }, this.opinionWs);
@@ -104,11 +107,12 @@ export class CrossPlatformAggregator {
   ): Promise<Map<string, PlatformMarket[]>> {
     const platformMap = new Map<string, PlatformMarket[]>();
 
-    const predict = buildPredictPlatformMarkets(
-      predictMarkets,
-      predictOrderbooks,
-      this.config.predictFeeBps || 0
-    );
+      const predict = buildPredictPlatformMarkets(
+        predictMarkets,
+        predictOrderbooks,
+        this.config.predictFeeBps || 0,
+        this.config.crossPlatformDepthLevels
+      );
     platformMap.set('Predict', predict);
 
     if (this.polymarket) {
