@@ -360,6 +360,9 @@ export class CrossPlatformExecutionRouter {
   private executors: Map<ExternalPlatform, PlatformExecutor> = new Map();
   private config: Config;
   private api: PredictAPI;
+  private circuitFailures = 0;
+  private circuitOpenedAt = 0;
+  private lastSuccessAt = 0;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -386,6 +389,8 @@ export class CrossPlatformExecutionRouter {
       await this.preflightVwap(legs);
     }
 
+    this.assertCircuitHealthy();
+
     const maxRetries = Math.max(0, this.config.crossPlatformMaxRetries || 0);
     const retryDelayMs = Math.max(0, this.config.crossPlatformRetryDelayMs || 0);
 
@@ -393,9 +398,11 @@ export class CrossPlatformExecutionRouter {
     while (true) {
       try {
         await this.executeOnce(legs);
+        this.onSuccess();
         return;
       } catch (error: any) {
         const hadSuccess = Boolean(error?.hadSuccess);
+        this.onFailure();
         if (hadSuccess || attempt >= maxRetries) {
           throw error;
         }
@@ -506,6 +513,39 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private assertCircuitHealthy(): void {
+    const maxFailures = Math.max(1, this.config.crossPlatformCircuitMaxFailures || 3);
+    const windowMs = Math.max(1000, this.config.crossPlatformCircuitWindowMs || 60000);
+    const cooldownMs = Math.max(1000, this.config.crossPlatformCircuitCooldownMs || 60000);
+
+    if (this.circuitOpenedAt > 0) {
+      if (Date.now() - this.circuitOpenedAt < cooldownMs) {
+        throw new Error('Cross-platform circuit breaker open');
+      }
+      this.circuitOpenedAt = 0;
+      this.circuitFailures = 0;
+    }
+
+    if (this.circuitFailures >= maxFailures) {
+      this.circuitOpenedAt = Date.now();
+      throw new Error('Cross-platform circuit breaker open');
+    }
+
+    if (this.lastSuccessAt > 0 && Date.now() - this.lastSuccessAt > windowMs) {
+      this.circuitFailures = 0;
+    }
+  }
+
+  private onFailure(): void {
+    this.circuitFailures += 1;
+  }
+
+  private onSuccess(): void {
+    this.lastSuccessAt = Date.now();
+    this.circuitFailures = 0;
+    this.circuitOpenedAt = 0;
   }
 
   private async preflightVwap(legs: PlatformLeg[]): Promise<void> {

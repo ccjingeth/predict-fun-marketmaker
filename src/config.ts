@@ -69,6 +69,9 @@ export function loadConfig(): Config {
     crossPlatformHedgeSlippageBps: parseInt(process.env.CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS || '400'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
+    crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
+    crossPlatformCircuitWindowMs: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_WINDOW_MS || '60000'),
+    crossPlatformCircuitCooldownMs: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS || '60000'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
     crossPlatformUseMapping: process.env.CROSS_PLATFORM_USE_MAPPING !== 'false',
@@ -223,6 +226,9 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Hedge Slippage Bps: ${config.crossPlatformHedgeSlippageBps}`);
   console.log(`Cross-Platform Max Retries: ${config.crossPlatformMaxRetries}`);
   console.log(`Cross-Platform Retry Delay Ms: ${config.crossPlatformRetryDelayMs}`);
+  console.log(`Cross-Platform Circuit Max Failures: ${config.crossPlatformCircuitMaxFailures}`);
+  console.log(`Cross-Platform Circuit Window Ms: ${config.crossPlatformCircuitWindowMs}`);
+  console.log(`Cross-Platform Circuit Cooldown Ms: ${config.crossPlatformCircuitCooldownMs}`);
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
   console.log(`Dependency Arb: ${config.dependencyEnabled ? '✅' : '❌'}`);
