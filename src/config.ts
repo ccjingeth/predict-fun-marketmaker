@@ -64,6 +64,12 @@ export function loadConfig(): Config {
     crossPlatformPriceDriftBps: parseInt(process.env.CROSS_PLATFORM_PRICE_DRIFT_BPS || '40'),
     crossPlatformAdaptiveSize: process.env.CROSS_PLATFORM_ADAPTIVE_SIZE !== 'false',
     crossPlatformMinDepthShares: parseFloat(process.env.CROSS_PLATFORM_MIN_DEPTH_SHARES || '1'),
+    crossPlatformVolatilityBps: parseFloat(process.env.CROSS_PLATFORM_VOLATILITY_BPS || '80'),
+    crossPlatformVolatilityLookbackMs: parseInt(process.env.CROSS_PLATFORM_VOLATILITY_LOOKBACK_MS || '2000'),
+    crossPlatformTokenMaxFailures: parseInt(process.env.CROSS_PLATFORM_TOKEN_MAX_FAILURES || '2'),
+    crossPlatformTokenFailureWindowMs: parseInt(process.env.CROSS_PLATFORM_TOKEN_FAILURE_WINDOW_MS || '30000'),
+    crossPlatformTokenCooldownMs: parseInt(process.env.CROSS_PLATFORM_TOKEN_COOLDOWN_MS || '120000'),
+    crossPlatformMetricsLogMs: parseInt(process.env.CROSS_PLATFORM_METRICS_LOG_MS || '0'),
     crossPlatformOrderType: (crossPlatformOrderTypeRaw || undefined) as Config['crossPlatformOrderType'],
     crossPlatformBatchOrders: process.env.CROSS_PLATFORM_BATCH_ORDERS === 'true',
     crossPlatformBatchMax: parseInt(process.env.CROSS_PLATFORM_BATCH_MAX || '15'),
@@ -207,6 +213,34 @@ export function loadConfig(): Config {
 
   if ((config.crossPlatformBatchMax ?? 1) < 1) {
     config.crossPlatformBatchMax = 1;
+  }
+
+  if ((config.crossPlatformVolatilityBps ?? 0) < 0) {
+    config.crossPlatformVolatilityBps = 0;
+  }
+
+  if ((config.crossPlatformVolatilityLookbackMs ?? 0) < 0) {
+    config.crossPlatformVolatilityLookbackMs = 0;
+  }
+
+  if ((config.crossPlatformTokenMaxFailures ?? 1) < 1) {
+    config.crossPlatformTokenMaxFailures = 1;
+  }
+
+  if ((config.crossPlatformTokenFailureWindowMs ?? 0) < 0) {
+    config.crossPlatformTokenFailureWindowMs = 0;
+  }
+
+  if ((config.crossPlatformTokenCooldownMs ?? 0) < 0) {
+    config.crossPlatformTokenCooldownMs = 0;
+  }
+
+  if ((config.crossPlatformMinDepthShares ?? 0) < 0) {
+    config.crossPlatformMinDepthShares = 0;
+  }
+
+  if ((config.crossPlatformMetricsLogMs ?? 0) < 0) {
+    config.crossPlatformMetricsLogMs = 0;
   }
 
   return config;

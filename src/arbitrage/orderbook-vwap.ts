@@ -134,3 +134,99 @@ export function estimateSell(
     levelsUsed,
   };
 }
+
+export function maxBuySharesForLimit(
+  asks: OrderbookEntry[] | undefined,
+  limitPrice: number,
+  maxDeviationBps: number,
+  feeBps: number,
+  feeCurveRate?: number,
+  feeCurveExponent?: number,
+  slippageBps: number = 0
+): number {
+  const levels = normalizeLevels(asks, 'ASK');
+  if (levels.length === 0 || limitPrice <= 0) {
+    return 0;
+  }
+
+  const maxDev = Math.max(0, maxDeviationBps) / 10000;
+  const limitAllIn = limitPrice * (1 + maxDev);
+  let totalAllIn = 0;
+  let shares = 0;
+
+  for (const level of levels) {
+    const unitFee = calcFeeCost(level.price, feeBps, feeCurveRate, feeCurveExponent);
+    const unitSlippage = level.price * (slippageBps / 10000);
+    const unitCost = level.price + unitFee + unitSlippage;
+
+    if (unitCost <= limitAllIn) {
+      const fill = level.shares;
+      totalAllIn += unitCost * fill;
+      shares += fill;
+      continue;
+    }
+
+    const numerator = limitAllIn * shares - totalAllIn;
+    if (numerator <= 0) {
+      break;
+    }
+    const maxFill = numerator / (unitCost - limitAllIn);
+    if (maxFill <= 0) {
+      break;
+    }
+    const fill = Math.min(level.shares, maxFill);
+    totalAllIn += unitCost * fill;
+    shares += fill;
+    break;
+  }
+
+  return shares;
+}
+
+export function maxSellSharesForLimit(
+  bids: OrderbookEntry[] | undefined,
+  limitPrice: number,
+  maxDeviationBps: number,
+  feeBps: number,
+  feeCurveRate?: number,
+  feeCurveExponent?: number,
+  slippageBps: number = 0
+): number {
+  const levels = normalizeLevels(bids, 'BID');
+  if (levels.length === 0 || limitPrice <= 0) {
+    return 0;
+  }
+
+  const maxDev = Math.max(0, maxDeviationBps) / 10000;
+  const limitAllIn = limitPrice * (1 - maxDev);
+  let totalAllIn = 0;
+  let shares = 0;
+
+  for (const level of levels) {
+    const unitFee = calcFeeCost(level.price, feeBps, feeCurveRate, feeCurveExponent);
+    const unitSlippage = level.price * (slippageBps / 10000);
+    const unitProceeds = level.price - unitFee - unitSlippage;
+
+    if (unitProceeds >= limitAllIn) {
+      const fill = level.shares;
+      totalAllIn += unitProceeds * fill;
+      shares += fill;
+      continue;
+    }
+
+    const numerator = totalAllIn - limitAllIn * shares;
+    if (numerator <= 0) {
+      break;
+    }
+    const maxFill = numerator / (limitAllIn - unitProceeds);
+    if (maxFill <= 0) {
+      break;
+    }
+    const fill = Math.min(level.shares, maxFill);
+    totalAllIn += unitProceeds * fill;
+    shares += fill;
+    break;
+  }
+
+  return shares;
+}

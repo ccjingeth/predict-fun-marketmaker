@@ -48,6 +48,12 @@ export interface Config {
   crossPlatformPriceDriftBps?: number;
   crossPlatformAdaptiveSize?: boolean;
   crossPlatformMinDepthShares?: number;
+  crossPlatformVolatilityBps?: number;
+  crossPlatformVolatilityLookbackMs?: number;
+  crossPlatformTokenMaxFailures?: number;
+  crossPlatformTokenFailureWindowMs?: number;
+  crossPlatformTokenCooldownMs?: number;
+  crossPlatformMetricsLogMs?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;

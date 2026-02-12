@@ -5,7 +5,12 @@ import { PredictAPI } from '../api/client.js';
 import { OrderManager } from '../order-manager.js';
 import { Wallet } from 'ethers';
 import { ClobClient } from '@polymarket/clob-client';
-import { estimateBuy, estimateSell, sumDepth } from '../arbitrage/orderbook-vwap.js';
+import {
+  estimateBuy,
+  estimateSell,
+  maxBuySharesForLimit,
+  maxSellSharesForLimit,
+} from '../arbitrage/orderbook-vwap.js';
 import type { OrderbookEntry } from '../types.js';
 
 interface ExecutionResult {
@@ -584,6 +589,18 @@ export class CrossPlatformExecutionRouter {
   private circuitFailures = 0;
   private circuitOpenedAt = 0;
   private lastSuccessAt = 0;
+  private recentQuotes = new Map<string, { price: number; ts: number }>();
+  private tokenFailures = new Map<string, { count: number; windowStart: number; cooldownUntil: number }>();
+  private metrics = {
+    attempts: 0,
+    successes: 0,
+    failures: 0,
+    emaPreflightMs: 0,
+    emaExecMs: 0,
+    emaTotalMs: 0,
+    lastError: '',
+  };
+  private lastMetricsLogAt = 0;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -618,16 +635,41 @@ export class CrossPlatformExecutionRouter {
       if (!plannedLegs.length) {
         throw new Error('No executable legs after retry scaling');
       }
-      const preparedLegs = await this.prepareLegs(plannedLegs);
+      this.assertTokenHealthy(plannedLegs);
+      const attemptStart = Date.now();
+      let preflightMs = 0;
+      let execMs = 0;
+      let preparedLegs: PlatformLeg[] = [];
 
       try {
+        const preflightStart = Date.now();
+        preparedLegs = await this.prepareLegs(plannedLegs);
+        preflightMs = Date.now() - preflightStart;
+
+        const execStart = Date.now();
         const results = await this.executeOnce(preparedLegs);
+        execMs = Date.now() - execStart;
         await this.postFillCheck(results);
         this.onSuccess();
+        this.recordTokenSuccess(preparedLegs);
+        this.recordMetrics({
+          success: true,
+          preflightMs,
+          execMs,
+          totalMs: Date.now() - attemptStart,
+        });
         return;
       } catch (error: any) {
         const hadSuccess = Boolean(error?.hadSuccess);
         this.onFailure();
+        this.recordTokenFailure(preparedLegs.length ? preparedLegs : plannedLegs);
+        this.recordMetrics({
+          success: false,
+          preflightMs,
+          execMs,
+          totalMs: Date.now() - attemptStart,
+          error,
+        });
         if (hadSuccess || attempt >= maxRetries) {
           throw error;
         }
@@ -810,6 +852,135 @@ export class CrossPlatformExecutionRouter {
     this.circuitOpenedAt = 0;
   }
 
+  private assertTokenHealthy(legs: PlatformLeg[]): void {
+    const now = Date.now();
+    const windowMs = Math.max(1000, this.config.crossPlatformTokenFailureWindowMs || 30000);
+    for (const leg of legs) {
+      if (!leg.tokenId) continue;
+      const state = this.tokenFailures.get(leg.tokenId);
+      if (!state) {
+        continue;
+      }
+      if (state.cooldownUntil > now) {
+        throw new Error(`Token cooldown active for ${leg.tokenId}`);
+      }
+      if (now - state.windowStart > windowMs) {
+        this.tokenFailures.delete(leg.tokenId);
+      }
+    }
+  }
+
+  private recordTokenFailure(legs: PlatformLeg[]): void {
+    const now = Date.now();
+    const maxFailures = Math.max(1, this.config.crossPlatformTokenMaxFailures || 2);
+    const windowMs = Math.max(1000, this.config.crossPlatformTokenFailureWindowMs || 30000);
+    const cooldownMs = Math.max(1000, this.config.crossPlatformTokenCooldownMs || 120000);
+
+    for (const leg of legs) {
+      if (!leg.tokenId) continue;
+      const state = this.tokenFailures.get(leg.tokenId) || {
+        count: 0,
+        windowStart: now,
+        cooldownUntil: 0,
+      };
+
+      if (now - state.windowStart > windowMs) {
+        state.count = 0;
+        state.windowStart = now;
+      }
+
+      state.count += 1;
+      if (state.count >= maxFailures) {
+        state.cooldownUntil = now + cooldownMs;
+        state.count = 0;
+        state.windowStart = now;
+      }
+
+      this.tokenFailures.set(leg.tokenId, state);
+    }
+  }
+
+  private recordTokenSuccess(legs: PlatformLeg[]): void {
+    for (const leg of legs) {
+      if (!leg.tokenId) continue;
+      this.tokenFailures.delete(leg.tokenId);
+    }
+  }
+
+  private recordMetrics(input: {
+    success: boolean;
+    preflightMs: number;
+    execMs: number;
+    totalMs: number;
+    error?: any;
+  }): void {
+    const alpha = 0.2;
+    this.metrics.attempts += 1;
+    if (input.success) {
+      this.metrics.successes += 1;
+    } else {
+      this.metrics.failures += 1;
+      if (input.error) {
+        this.metrics.lastError = String(input.error?.message || input.error);
+      }
+    }
+    this.metrics.emaPreflightMs = this.updateEma(this.metrics.emaPreflightMs, input.preflightMs, alpha);
+    this.metrics.emaExecMs = this.updateEma(this.metrics.emaExecMs, input.execMs, alpha);
+    this.metrics.emaTotalMs = this.updateEma(this.metrics.emaTotalMs, input.totalMs, alpha);
+    this.logMetricsIfNeeded();
+  }
+
+  private updateEma(current: number, next: number, alpha: number): number {
+    if (!Number.isFinite(next) || next <= 0) {
+      return current;
+    }
+    if (!Number.isFinite(current) || current <= 0) {
+      return next;
+    }
+    return current * (1 - alpha) + next * alpha;
+  }
+
+  private logMetricsIfNeeded(): void {
+    const interval = Number(this.config.crossPlatformMetricsLogMs || 0);
+    if (!interval || interval <= 0) {
+      return;
+    }
+    const now = Date.now();
+    if (now - this.lastMetricsLogAt < interval) {
+      return;
+    }
+    this.lastMetricsLogAt = now;
+    console.log(
+      `[CrossExec] attempts=${this.metrics.attempts} success=${this.metrics.successes} fail=${this.metrics.failures} ` +
+        `preflight=${this.metrics.emaPreflightMs.toFixed(0)}ms exec=${this.metrics.emaExecMs.toFixed(0)}ms ` +
+        `total=${this.metrics.emaTotalMs.toFixed(0)}ms lastError=${this.metrics.lastError || 'none'}`
+    );
+  }
+
+  private checkVolatility(tokenId: string, book: OrderbookSnapshot): void {
+    const threshold = this.config.crossPlatformVolatilityBps ?? 0;
+    const lookbackMs = this.config.crossPlatformVolatilityLookbackMs ?? 0;
+    if (!tokenId || threshold <= 0 || lookbackMs <= 0) {
+      return;
+    }
+    const bestBid = book.bestBid;
+    const bestAsk = book.bestAsk;
+    const price =
+      Number.isFinite(bestBid) && Number.isFinite(bestAsk) ? ((bestBid + bestAsk) / 2) : bestBid ?? bestAsk;
+    if (!Number.isFinite(price) || !price) {
+      return;
+    }
+    const now = Date.now();
+    const prev = this.recentQuotes.get(tokenId);
+    if (prev && now - prev.ts <= lookbackMs) {
+      const drift = Math.abs((price - prev.price) / prev.price) * 10000;
+      if (drift > threshold) {
+        throw new Error(`Preflight failed: volatility ${drift.toFixed(1)} bps (max ${threshold}) for ${tokenId}`);
+      }
+    }
+    this.recentQuotes.set(tokenId, { price, ts: now });
+  }
+
   private async preflightVwap(legs: PlatformLeg[]): Promise<void> {
     const cache = new Map<string, Promise<OrderbookSnapshot | null>>();
     await this.preflightVwapWithCache(legs, cache);
@@ -827,6 +998,7 @@ export class CrossPlatformExecutionRouter {
       if (!book) {
         throw new Error(`Preflight failed: missing orderbook for ${leg.platform}:${leg.tokenId}`);
       }
+      this.checkVolatility(leg.tokenId, book);
 
       const feeBps = this.getFeeBps(leg.platform);
       const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
@@ -878,14 +1050,18 @@ export class CrossPlatformExecutionRouter {
     let adjustedLegs = legs;
 
     if (this.config.crossPlatformAdaptiveSize !== false) {
-      const minDepth = await this.getMinDepthShares(legs, cache);
+      let maxShares = await this.getMaxExecutableShares(legs, cache);
+      const maxConfigShares = this.config.crossPlatformMaxShares;
+      if (Number.isFinite(maxConfigShares) && Number(maxConfigShares) > 0) {
+        maxShares = Math.min(maxShares, Number(maxConfigShares));
+      }
       const minAllowed = this.config.crossPlatformMinDepthShares ?? 1;
-      if (!Number.isFinite(minDepth) || minDepth <= 0 || minDepth < minAllowed) {
+      if (!Number.isFinite(maxShares) || maxShares <= 0 || maxShares < minAllowed) {
         throw new Error(`Preflight failed: insufficient depth (min ${minAllowed})`);
       }
       const target = Math.min(...legs.map((leg) => leg.shares));
-      if (minDepth < target) {
-        adjustedLegs = legs.map((leg) => ({ ...leg, shares: minDepth }));
+      if (maxShares < target) {
+        adjustedLegs = legs.map((leg) => ({ ...leg, shares: maxShares }));
       }
     }
 
@@ -896,18 +1072,43 @@ export class CrossPlatformExecutionRouter {
     return adjustedLegs;
   }
 
-  private async getMinDepthShares(
+  private async getMaxExecutableShares(
     legs: PlatformLeg[],
     cache: Map<string, Promise<OrderbookSnapshot | null>>
   ): Promise<number> {
+    const maxDeviation = this.config.crossPlatformSlippageBps || 250;
+    const slippageBps = this.config.crossPlatformSlippageBps || 0;
+
     const depths = await Promise.all(
       legs.map(async (leg) => {
         const book = await this.fetchOrderbook(leg, cache);
         if (!book) {
           return 0;
         }
-        const side = leg.side === 'BUY' ? book.asks : book.bids;
-        return sumDepth(side);
+        this.checkVolatility(leg.tokenId, book);
+        const feeBps = this.getFeeBps(leg.platform);
+        const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
+
+        if (leg.side === 'BUY') {
+          return maxBuySharesForLimit(
+            book.asks,
+            leg.price,
+            maxDeviation,
+            feeBps,
+            curveRate,
+            curveExponent,
+            slippageBps
+          );
+        }
+        return maxSellSharesForLimit(
+          book.bids,
+          leg.price,
+          maxDeviation,
+          feeBps,
+          curveRate,
+          curveExponent,
+          slippageBps
+        );
       })
     );
     if (!depths.length) {

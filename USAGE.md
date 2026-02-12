@@ -35,6 +35,8 @@
 - 配置 Polymarket / Opinion 的密钥
 - 可选：`CROSS_PLATFORM_ADAPTIVE_SIZE=true`（按深度缩小下单量）
 - 可选：`CROSS_PLATFORM_ORDER_TYPE=FOK`（也可 FAK/GTC）
+- 可选：`CROSS_PLATFORM_VOLATILITY_BPS=80`（短时波动过滤）
+- 可选：`CROSS_PLATFORM_METRICS_LOG_MS=10000`（执行指标日志）
 
 实时行情（Polymarket WebSocket）：
 - `POLYMARKET_WS_ENABLED=true`

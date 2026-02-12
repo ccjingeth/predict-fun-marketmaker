@@ -104,6 +104,12 @@
 - `CROSS_PLATFORM_PRICE_DRIFT_BPS`：预检时允许的最优价漂移上限（bps）。
 - `CROSS_PLATFORM_ADAPTIVE_SIZE`：执行前根据订单簿深度自动缩小下单份额。
 - `CROSS_PLATFORM_MIN_DEPTH_SHARES`：深度不足时的最小下单份额门槛。
+- `CROSS_PLATFORM_VOLATILITY_BPS`：短时间内价格波动阈值（bps），超出则跳过。
+- `CROSS_PLATFORM_VOLATILITY_LOOKBACK_MS`：波动检测的回看窗口（毫秒）。
+- `CROSS_PLATFORM_TOKEN_MAX_FAILURES`：单 token 失败次数阈值。
+- `CROSS_PLATFORM_TOKEN_FAILURE_WINDOW_MS`：单 token 失败统计窗口。
+- `CROSS_PLATFORM_TOKEN_COOLDOWN_MS`：单 token 冷却时间。
+- `CROSS_PLATFORM_METRICS_LOG_MS`：执行指标日志间隔（毫秒，0 关闭）。
 - `CROSS_PLATFORM_ORDER_TYPE`：跨平台下单类型（FOK / FAK / GTC / GTD）。
 - `CROSS_PLATFORM_BATCH_ORDERS`：Polymarket 批量下单（仅 Polymarket，最多 15）。
 - `CROSS_PLATFORM_BATCH_MAX`：批量下单单次最大腿数（默认 15）。
