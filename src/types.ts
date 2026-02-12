@@ -45,10 +45,13 @@ export interface Config {
   crossPlatformMaxShares?: number;
   crossPlatformDepthLevels?: number;
   crossPlatformExecutionVwapCheck?: boolean;
+  crossPlatformPriceDriftBps?: number;
   crossPlatformUseFok?: boolean;
   crossPlatformParallelSubmit?: boolean;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
+  crossPlatformPostFillCheck?: boolean;
+  crossPlatformFillCheckMs?: number;
   crossPlatformHedgeOnFailure?: boolean;
   crossPlatformHedgePredictOnly?: boolean;
   crossPlatformHedgeSlippageBps?: number;

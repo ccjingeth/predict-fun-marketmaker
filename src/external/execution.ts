@@ -27,6 +27,7 @@ interface PlatformExecutor {
   execute(legs: PlatformLeg[], options?: { useFok?: boolean; useLimit?: boolean }): Promise<ExecutionResult>;
   cancelOrders?(orderIds: string[]): Promise<void>;
   hedgeLegs?(legs: PlatformLeg[], slippageBps: number): Promise<void>;
+  checkOpenOrders?(orderIds: string[]): Promise<string[]>;
 }
 
 class PredictExecutor implements PlatformExecutor {
@@ -100,6 +101,22 @@ class PredictExecutor implements PlatformExecutor {
     }
   }
 
+  async checkOpenOrders(orderIds: string[]): Promise<string[]> {
+    if (!orderIds || orderIds.length === 0) {
+      return [];
+    }
+    try {
+      const openOrders = await this.api.getOrders(this.maker);
+      return openOrders
+        .filter((order) => orderIds.includes(order.order_hash) || (order.id && orderIds.includes(order.id)))
+        .map((order) => order.order_hash || order.id || '')
+        .filter((id) => Boolean(id));
+    } catch (error) {
+      console.warn('Predict open order check failed:', error);
+      return [];
+    }
+  }
+
   async hedgeLegs(legs: PlatformLeg[], slippageBps: number): Promise<void> {
     for (const leg of legs) {
       const market = await this.api.getMarket(leg.tokenId);
@@ -159,6 +176,7 @@ class PolymarketExecutor implements PlatformExecutor {
   private autoDerive: boolean;
   private useFok: boolean;
   private cancelOpenMs: number;
+  private ownerAddress?: string;
 
   constructor(config: Config) {
     const signer = new Wallet(config.polymarketPrivateKey || '');
@@ -171,6 +189,7 @@ class PolymarketExecutor implements PlatformExecutor {
     this.autoDerive = config.polymarketAutoDeriveApiKey !== false;
     this.useFok = config.crossPlatformUseFok !== false;
     this.cancelOpenMs = config.crossPlatformCancelOpenMs || 0;
+    this.ownerAddress = signer.address;
 
     if (config.polymarketApiKey && config.polymarketApiSecret && config.polymarketApiPassphrase) {
       this.apiCreds = {
@@ -243,6 +262,33 @@ class PolymarketExecutor implements PlatformExecutor {
       }
     } catch (error) {
       console.warn('Polymarket cancel failed:', error);
+    }
+  }
+
+  async checkOpenOrders(orderIds: string[]): Promise<string[]> {
+    if (!orderIds || orderIds.length === 0) {
+      return [];
+    }
+    await this.ensureApiCreds();
+    if (!this.apiCreds) {
+      return [];
+    }
+    try {
+      const clientAny = this.client as any;
+      if (typeof clientAny.getOpenOrders !== 'function') {
+        return [];
+      }
+      const openOrders = await clientAny.getOpenOrders({ owner: this.ownerAddress });
+      if (!Array.isArray(openOrders)) {
+        return [];
+      }
+      return openOrders
+        .filter((order: any) => orderIds.includes(order.id))
+        .map((order: any) => order.id)
+        .filter((id: any) => Boolean(id));
+    } catch (error) {
+      console.warn('Polymarket open order check failed:', error);
+      return [];
     }
   }
 
@@ -402,7 +448,8 @@ export class CrossPlatformExecutionRouter {
       }
 
       try {
-        await this.executeOnce(plannedLegs);
+        const results = await this.executeOnce(plannedLegs);
+        await this.postFillCheck(results);
         this.onSuccess();
         return;
       } catch (error: any) {
@@ -419,7 +466,7 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
-  private async executeOnce(legs: PlatformLeg[]): Promise<void> {
+  private async executeOnce(legs: PlatformLeg[]): Promise<ExecutionResult[]> {
     const grouped = new Map<ExternalPlatform, PlatformLeg[]>();
 
     for (const leg of legs) {
@@ -454,7 +501,9 @@ export class CrossPlatformExecutionRouter {
         const hadSuccess = results.some((r) => r.status === 'fulfilled');
         throw new ExecutionAttemptError(failed.reason?.message || 'Cross-platform execution failed', hadSuccess);
       }
-      return;
+      return results
+        .filter((result): result is PromiseFulfilledResult<ExecutionResult> => result.status === 'fulfilled')
+        .map((result) => result.value);
     }
 
     const results: ExecutionResult[] = [];
@@ -467,6 +516,8 @@ export class CrossPlatformExecutionRouter {
         throw new ExecutionAttemptError(error?.message || 'Cross-platform execution failed', results.length > 0);
       }
     }
+
+    return results;
   }
 
   private async cancelSubmitted(
@@ -613,6 +664,17 @@ export class CrossPlatformExecutionRouter {
         throw new Error(`Preflight failed: invalid price for ${leg.platform}:${leg.tokenId}`);
       }
 
+      const driftBps = this.config.crossPlatformPriceDriftBps ?? 40;
+      const bestRef = leg.side === 'BUY' ? book.bestAsk : book.bestBid;
+      if (bestRef && Number.isFinite(bestRef) && bestRef > 0) {
+        const drift = Math.abs((bestRef - limit) / limit) * 10000;
+        if (drift > driftBps) {
+          throw new Error(
+            `Preflight failed: price drift ${drift.toFixed(1)} bps (max ${driftBps}) for ${leg.platform}:${leg.tokenId}`
+          );
+        }
+      }
+
       const deviationBps =
         leg.side === 'BUY'
           ? ((vwap.avgPrice - limit) / limit) * 10000
@@ -654,8 +716,8 @@ export class CrossPlatformExecutionRouter {
 
   private async fetchOrderbook(
     leg: PlatformLeg,
-    cache: Map<string, Promise<{ bids: OrderbookEntry[]; asks: OrderbookEntry[] } | null>>
-  ): Promise<{ bids: OrderbookEntry[]; asks: OrderbookEntry[] } | null> {
+    cache: Map<string, Promise<OrderbookSnapshot | null>>
+  ): Promise<OrderbookSnapshot | null> {
     const key = `${leg.platform}:${leg.tokenId}`;
     if (cache.has(key)) {
       return cache.get(key)!;
@@ -666,16 +728,14 @@ export class CrossPlatformExecutionRouter {
     return promise;
   }
 
-  private async fetchOrderbookInternal(
-    leg: PlatformLeg
-  ): Promise<{ bids: OrderbookEntry[]; asks: OrderbookEntry[] } | null> {
+  private async fetchOrderbookInternal(leg: PlatformLeg): Promise<OrderbookSnapshot | null> {
     const depthLevels = this.config.crossPlatformDepthLevels || 0;
     if (leg.platform === 'Predict') {
       const book = await this.api.getOrderbook(leg.tokenId);
-      return {
-        bids: this.limitEntries(book.bids || [], depthLevels),
-        asks: this.limitEntries(book.asks || [], depthLevels),
-      };
+      return this.normalizeSnapshot(
+        this.limitEntries(book.bids || [], depthLevels),
+        this.limitEntries(book.asks || [], depthLevels)
+      );
     }
 
     if (leg.platform === 'Polymarket') {
@@ -686,10 +746,10 @@ export class CrossPlatformExecutionRouter {
         return null;
       }
       const data: any = await response.json();
-      return {
-        bids: this.limitEntries(this.parseRawEntries(data?.bids), depthLevels),
-        asks: this.limitEntries(this.parseRawEntries(data?.asks), depthLevels),
-      };
+      return this.normalizeSnapshot(
+        this.limitEntries(this.parseRawEntries(data?.bids), depthLevels),
+        this.limitEntries(this.parseRawEntries(data?.asks), depthLevels)
+      );
     }
 
     if (leg.platform === 'Opinion') {
@@ -705,10 +765,10 @@ export class CrossPlatformExecutionRouter {
       }
       const data: any = await response.json();
       const book = data?.result ? data.result : data;
-      return {
-        bids: this.limitEntries(this.parseRawEntries(book?.bids), depthLevels),
-        asks: this.limitEntries(this.parseRawEntries(book?.asks), depthLevels),
-      };
+      return this.normalizeSnapshot(
+        this.limitEntries(this.parseRawEntries(book?.bids), depthLevels),
+        this.limitEntries(this.parseRawEntries(book?.asks), depthLevels)
+      );
     }
 
     return null;
@@ -743,4 +803,55 @@ export class CrossPlatformExecutionRouter {
       })
       .filter((entry): entry is OrderbookEntry => Boolean(entry));
   }
+
+  private normalizeSnapshot(bids: OrderbookEntry[], asks: OrderbookEntry[]): OrderbookSnapshot {
+    const bestBid = bids.length > 0 ? Number(bids[0].price) : undefined;
+    const bestAsk = asks.length > 0 ? Number(asks[0].price) : undefined;
+    return { bids, asks, bestBid, bestAsk };
+  }
+
+  private async postFillCheck(results: ExecutionResult[]): Promise<void> {
+    if (this.config.crossPlatformPostFillCheck === false) {
+      return;
+    }
+    const delayMs = Math.max(0, this.config.crossPlatformFillCheckMs || 1500);
+    if (delayMs > 0) {
+      await this.sleep(delayMs);
+    }
+
+    const openResults: Array<{ platform: ExternalPlatform; orderIds: string[]; legs?: PlatformLeg[] }> = [];
+    for (const result of results) {
+      const executor = this.executors.get(result.platform);
+      if (!executor || !executor.checkOpenOrders || !result.orderIds || result.orderIds.length === 0) {
+        continue;
+      }
+      const openIds = await executor.checkOpenOrders(result.orderIds);
+      if (openIds.length > 0) {
+        openResults.push({ platform: result.platform, orderIds: openIds, legs: result.legs });
+        if (executor.cancelOrders) {
+          await executor.cancelOrders(openIds);
+        }
+      }
+    }
+
+    if (openResults.length > 0) {
+      if (this.config.crossPlatformHedgeOnFailure) {
+        const hedges = openResults
+          .filter((res) => res.legs && res.legs.length > 0)
+          .map((res) => ({
+            status: 'fulfilled' as const,
+            value: { platform: res.platform, orderIds: res.orderIds, legs: res.legs! },
+          }));
+        await this.hedgeOnFailure(hedges);
+      }
+      throw new ExecutionAttemptError('Open orders remain after fill check', true);
+    }
+  }
+}
+
+interface OrderbookSnapshot {
+  bids: OrderbookEntry[];
+  asks: OrderbookEntry[];
+  bestBid?: number;
+  bestAsk?: number;
 }
