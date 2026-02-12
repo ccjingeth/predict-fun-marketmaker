@@ -56,6 +56,7 @@
 - 编辑 `cross-platform-mapping.json`
 - 如需更稳健执行：`CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true`
 - 可选：`CROSS_PLATFORM_PRICE_DRIFT_BPS=40`（限制最优价漂移）
+- 可选：`CROSS_PLATFORM_ADAPTIVE_SIZE=true`（按深度自动缩小下单量）
 - 可选：`CROSS_PLATFORM_ORDER_TYPE=FOK`（FOK/FAK/GTC）
 - 可选：`CROSS_PLATFORM_BATCH_ORDERS=true`（Polymarket 批量下单）
 - 推荐：`CROSS_PLATFORM_USE_FOK=true`，`CROSS_PLATFORM_PARALLEL_SUBMIT=true`

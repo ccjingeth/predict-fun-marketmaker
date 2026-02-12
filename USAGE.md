@@ -33,6 +33,8 @@
 - `CROSS_PLATFORM_ENABLED=true`
 - `CROSS_PLATFORM_AUTO_EXECUTE=true`
 - 配置 Polymarket / Opinion 的密钥
+- 可选：`CROSS_PLATFORM_ADAPTIVE_SIZE=true`（按深度缩小下单量）
+- 可选：`CROSS_PLATFORM_ORDER_TYPE=FOK`（也可 FAK/GTC）
 
 实时行情（Polymarket WebSocket）：
 - `POLYMARKET_WS_ENABLED=true`

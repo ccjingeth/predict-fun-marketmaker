@@ -102,6 +102,8 @@
 - `CROSS_PLATFORM_DEPTH_LEVELS`：跨平台订单簿深度层级数。
 - `CROSS_PLATFORM_EXECUTION_VWAP_CHECK`：跨平台执行前 VWAP 预检（更稳健）。
 - `CROSS_PLATFORM_PRICE_DRIFT_BPS`：预检时允许的最优价漂移上限（bps）。
+- `CROSS_PLATFORM_ADAPTIVE_SIZE`：执行前根据订单簿深度自动缩小下单份额。
+- `CROSS_PLATFORM_MIN_DEPTH_SHARES`：深度不足时的最小下单份额门槛。
 - `CROSS_PLATFORM_ORDER_TYPE`：跨平台下单类型（FOK / FAK / GTC / GTD）。
 - `CROSS_PLATFORM_BATCH_ORDERS`：Polymarket 批量下单（仅 Polymarket，最多 15）。
 - `CROSS_PLATFORM_BATCH_MAX`：批量下单单次最大腿数（默认 15）。

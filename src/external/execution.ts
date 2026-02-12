@@ -5,7 +5,7 @@ import { PredictAPI } from '../api/client.js';
 import { OrderManager } from '../order-manager.js';
 import { Wallet } from 'ethers';
 import { ClobClient } from '@polymarket/clob-client';
-import { estimateBuy, estimateSell } from '../arbitrage/orderbook-vwap.js';
+import { estimateBuy, estimateSell, sumDepth } from '../arbitrage/orderbook-vwap.js';
 import type { OrderbookEntry } from '../types.js';
 
 interface ExecutionResult {
@@ -618,12 +618,10 @@ export class CrossPlatformExecutionRouter {
       if (!plannedLegs.length) {
         throw new Error('No executable legs after retry scaling');
       }
-      if (this.config.crossPlatformExecutionVwapCheck !== false) {
-        await this.preflightVwap(plannedLegs);
-      }
+      const preparedLegs = await this.prepareLegs(plannedLegs);
 
       try {
-        const results = await this.executeOnce(plannedLegs);
+        const results = await this.executeOnce(preparedLegs);
         await this.postFillCheck(results);
         this.onSuccess();
         return;
@@ -813,7 +811,14 @@ export class CrossPlatformExecutionRouter {
   }
 
   private async preflightVwap(legs: PlatformLeg[]): Promise<void> {
-    const cache = new Map<string, Promise<{ bids: OrderbookEntry[]; asks: OrderbookEntry[] } | null>>();
+    const cache = new Map<string, Promise<OrderbookSnapshot | null>>();
+    await this.preflightVwapWithCache(legs, cache);
+  }
+
+  private async preflightVwapWithCache(
+    legs: PlatformLeg[],
+    cache: Map<string, Promise<OrderbookSnapshot | null>>
+  ): Promise<void> {
     const checks = legs.map(async (leg) => {
       if (!leg.tokenId || !leg.price || !leg.shares) {
         throw new Error(`Invalid leg for preflight: ${leg.platform}`);
@@ -866,6 +871,49 @@ export class CrossPlatformExecutionRouter {
     });
 
     await Promise.all(checks);
+  }
+
+  private async prepareLegs(legs: PlatformLeg[]): Promise<PlatformLeg[]> {
+    const cache = new Map<string, Promise<OrderbookSnapshot | null>>();
+    let adjustedLegs = legs;
+
+    if (this.config.crossPlatformAdaptiveSize !== false) {
+      const minDepth = await this.getMinDepthShares(legs, cache);
+      const minAllowed = this.config.crossPlatformMinDepthShares ?? 1;
+      if (!Number.isFinite(minDepth) || minDepth <= 0 || minDepth < minAllowed) {
+        throw new Error(`Preflight failed: insufficient depth (min ${minAllowed})`);
+      }
+      const target = Math.min(...legs.map((leg) => leg.shares));
+      if (minDepth < target) {
+        adjustedLegs = legs.map((leg) => ({ ...leg, shares: minDepth }));
+      }
+    }
+
+    if (this.config.crossPlatformExecutionVwapCheck !== false) {
+      await this.preflightVwapWithCache(adjustedLegs, cache);
+    }
+
+    return adjustedLegs;
+  }
+
+  private async getMinDepthShares(
+    legs: PlatformLeg[],
+    cache: Map<string, Promise<OrderbookSnapshot | null>>
+  ): Promise<number> {
+    const depths = await Promise.all(
+      legs.map(async (leg) => {
+        const book = await this.fetchOrderbook(leg, cache);
+        if (!book) {
+          return 0;
+        }
+        const side = leg.side === 'BUY' ? book.asks : book.bids;
+        return sumDepth(side);
+      })
+    );
+    if (!depths.length) {
+      return 0;
+    }
+    return Math.min(...depths.filter((x) => Number.isFinite(x)));
   }
 
   private getFeeBps(platform: ExternalPlatform): number {

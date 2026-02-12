@@ -46,6 +46,8 @@ export interface Config {
   crossPlatformDepthLevels?: number;
   crossPlatformExecutionVwapCheck?: boolean;
   crossPlatformPriceDriftBps?: number;
+  crossPlatformAdaptiveSize?: boolean;
+  crossPlatformMinDepthShares?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;

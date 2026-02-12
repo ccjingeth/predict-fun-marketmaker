@@ -62,6 +62,8 @@ export function loadConfig(): Config {
     crossPlatformDepthLevels: parseInt(process.env.CROSS_PLATFORM_DEPTH_LEVELS || '10'),
     crossPlatformExecutionVwapCheck: process.env.CROSS_PLATFORM_EXECUTION_VWAP_CHECK !== 'false',
     crossPlatformPriceDriftBps: parseInt(process.env.CROSS_PLATFORM_PRICE_DRIFT_BPS || '40'),
+    crossPlatformAdaptiveSize: process.env.CROSS_PLATFORM_ADAPTIVE_SIZE !== 'false',
+    crossPlatformMinDepthShares: parseFloat(process.env.CROSS_PLATFORM_MIN_DEPTH_SHARES || '1'),
     crossPlatformOrderType: (crossPlatformOrderTypeRaw || undefined) as Config['crossPlatformOrderType'],
     crossPlatformBatchOrders: process.env.CROSS_PLATFORM_BATCH_ORDERS === 'true',
     crossPlatformBatchMax: parseInt(process.env.CROSS_PLATFORM_BATCH_MAX || '15'),
