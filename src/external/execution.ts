@@ -597,6 +597,8 @@ export class CrossPlatformExecutionRouter {
   private platformFailures = new Map<ExternalPlatform, { count: number; windowStart: number; cooldownUntil: number }>();
   private blockedTokens = new Map<string, number>();
   private blockedPlatforms = new Map<ExternalPlatform, number>();
+  private globalCooldownUntil = 0;
+  private chunkFactor = 1;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -640,6 +642,7 @@ export class CrossPlatformExecutionRouter {
 
   async execute(legs: PlatformLeg[]): Promise<void> {
     this.assertCircuitHealthy();
+    this.assertGlobalCooldown();
 
     const maxRetries = Math.max(0, this.config.crossPlatformMaxRetries || 0);
     const retryDelayMs = Math.max(0, this.config.crossPlatformRetryDelayMs || 0);
@@ -676,6 +679,7 @@ export class CrossPlatformExecutionRouter {
         this.recordTokenSuccess(preparedLegs.filter((leg) => !postTrade.penalizedTokenIds.has(leg.tokenId)));
         this.adjustPlatformScores(preparedLegs, this.config.crossPlatformPlatformScoreOnSuccess || 1);
         this.adjustTokenScores(preparedLegs, this.config.crossPlatformTokenScoreOnSuccess || 2);
+        this.adjustChunkFactor(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -702,6 +706,7 @@ export class CrossPlatformExecutionRouter {
         }
         this.updateQualityScore(true);
         this.recordPlatformSuccess(preparedLegs);
+        this.checkGlobalCooldown();
         this.recordMetrics({
           success: true,
           preflightMs,
@@ -725,6 +730,8 @@ export class CrossPlatformExecutionRouter {
         );
         this.maybeAutoBlock(preparedLegs.length ? preparedLegs : plannedLegs);
         this.updateQualityScore(false);
+        this.adjustChunkFactor(false);
+        this.checkGlobalCooldown();
         this.recordMetrics({
           success: false,
           preflightMs,
@@ -830,7 +837,7 @@ export class CrossPlatformExecutionRouter {
     const baseShares = Math.min(...legs.map((leg) => leg.shares));
     const maxChunkShares = this.config.crossPlatformChunkMaxShares || 0;
     const maxChunkNotional = this.config.crossPlatformChunkMaxNotional || 0;
-    let chunkShares = baseShares;
+    let chunkShares = baseShares * this.chunkFactor;
     if (maxChunkShares > 0) {
       chunkShares = Math.min(chunkShares, maxChunkShares);
     }
@@ -1185,6 +1192,13 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private assertGlobalCooldown(): void {
+    const now = Date.now();
+    if (this.globalCooldownUntil > now) {
+      throw new Error(`Global cooldown active until ${new Date(this.globalCooldownUntil).toISOString()}`);
+    }
+  }
+
   private maybeAutoBlock(legs: PlatformLeg[]): void {
     if (!this.config.crossPlatformAutoBlocklist) {
       return;
@@ -1203,6 +1217,17 @@ export class CrossPlatformExecutionRouter {
       if (platformScore <= threshold) {
         this.blockedPlatforms.set(leg.platform, now + cooldown);
       }
+    }
+  }
+
+  private checkGlobalCooldown(): void {
+    const minQuality = this.config.crossPlatformGlobalMinQuality || 0;
+    const cooldownMs = this.config.crossPlatformGlobalCooldownMs || 0;
+    if (!minQuality || !cooldownMs) {
+      return;
+    }
+    if (this.qualityScore <= minQuality) {
+      this.globalCooldownUntil = Date.now() + cooldownMs;
     }
   }
 
@@ -1241,6 +1266,21 @@ export class CrossPlatformExecutionRouter {
       this.qualityScore = Math.min(maxFactor, this.qualityScore + up);
     } else {
       this.qualityScore = Math.max(minFactor, this.qualityScore - down);
+    }
+  }
+
+  private adjustChunkFactor(success: boolean): void {
+    if (this.config.crossPlatformChunkAutoTune === false) {
+      return;
+    }
+    const up = Math.max(0, this.config.crossPlatformChunkFactorUp || 0.1);
+    const down = Math.max(0, this.config.crossPlatformChunkFactorDown || 0.2);
+    const minFactor = Math.max(0.1, this.config.crossPlatformChunkFactorMin || 0.5);
+    const maxFactor = Math.max(minFactor, this.config.crossPlatformChunkFactorMax || 1.5);
+    if (success) {
+      this.chunkFactor = Math.min(maxFactor, this.chunkFactor + up);
+    } else {
+      this.chunkFactor = Math.max(minFactor, this.chunkFactor - down);
     }
   }
 
