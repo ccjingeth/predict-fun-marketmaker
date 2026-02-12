@@ -59,6 +59,10 @@ export interface Config {
   crossPlatformRecheckMs?: number;
   crossPlatformRecheckDeviationBps?: number;
   crossPlatformRecheckDriftBps?: number;
+  crossPlatformStabilitySamples?: number;
+  crossPlatformStabilityIntervalMs?: number;
+  crossPlatformStabilityBps?: number;
+  crossPlatformPostTradeDriftBps?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;

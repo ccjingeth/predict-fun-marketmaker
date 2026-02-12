@@ -598,6 +598,8 @@ export class CrossPlatformExecutionRouter {
     emaPreflightMs: 0,
     emaExecMs: 0,
     emaTotalMs: 0,
+    emaPostTradeDriftBps: 0,
+    postTradeAlerts: 0,
     lastError: '',
   };
   private lastMetricsLogAt = 0;
@@ -650,13 +652,18 @@ export class CrossPlatformExecutionRouter {
         const results = await this.executeOnce(preparedLegs);
         execMs = Date.now() - execStart;
         await this.postFillCheck(results);
+        const postTrade = await this.postTradeCheck(preparedLegs);
         this.onSuccess();
-        this.recordTokenSuccess(preparedLegs);
+        if (postTrade.penalizedLegs.length > 0) {
+          this.recordTokenFailure(postTrade.penalizedLegs);
+        }
+        this.recordTokenSuccess(preparedLegs.filter((leg) => !postTrade.penalizedTokenIds.has(leg.tokenId)));
         this.recordMetrics({
           success: true,
           preflightMs,
           execMs,
           totalMs: Date.now() - attemptStart,
+          postTradeDriftBps: postTrade.maxDriftBps,
         });
         return;
       } catch (error: any) {
@@ -913,6 +920,7 @@ export class CrossPlatformExecutionRouter {
     execMs: number;
     totalMs: number;
     error?: any;
+    postTradeDriftBps?: number;
   }): void {
     const alpha = 0.2;
     this.metrics.attempts += 1;
@@ -927,6 +935,16 @@ export class CrossPlatformExecutionRouter {
     this.metrics.emaPreflightMs = this.updateEma(this.metrics.emaPreflightMs, input.preflightMs, alpha);
     this.metrics.emaExecMs = this.updateEma(this.metrics.emaExecMs, input.execMs, alpha);
     this.metrics.emaTotalMs = this.updateEma(this.metrics.emaTotalMs, input.totalMs, alpha);
+    if (input.postTradeDriftBps !== undefined) {
+      this.metrics.emaPostTradeDriftBps = this.updateEma(
+        this.metrics.emaPostTradeDriftBps,
+        input.postTradeDriftBps,
+        alpha
+      );
+      if (input.postTradeDriftBps > 0) {
+        this.metrics.postTradeAlerts += 1;
+      }
+    }
     this.logMetricsIfNeeded();
   }
 
@@ -953,7 +971,8 @@ export class CrossPlatformExecutionRouter {
     console.log(
       `[CrossExec] attempts=${this.metrics.attempts} success=${this.metrics.successes} fail=${this.metrics.failures} ` +
         `preflight=${this.metrics.emaPreflightMs.toFixed(0)}ms exec=${this.metrics.emaExecMs.toFixed(0)}ms ` +
-        `total=${this.metrics.emaTotalMs.toFixed(0)}ms lastError=${this.metrics.lastError || 'none'}`
+        `total=${this.metrics.emaTotalMs.toFixed(0)}ms postDrift=${this.metrics.emaPostTradeDriftBps.toFixed(1)}bps ` +
+        `alerts=${this.metrics.postTradeAlerts} lastError=${this.metrics.lastError || 'none'}`
     );
   }
 
@@ -1057,6 +1076,8 @@ export class CrossPlatformExecutionRouter {
     const cache = new Map<string, Promise<OrderbookSnapshot | null>>();
     let adjustedLegs = legs;
 
+    await this.stabilityCheck(legs);
+
     if (this.config.crossPlatformAdaptiveSize !== false) {
       let maxShares = await this.getMaxExecutableShares(legs, cache);
       const maxConfigShares = this.config.crossPlatformMaxShares;
@@ -1088,6 +1109,42 @@ export class CrossPlatformExecutionRouter {
     }
 
     return adjustedLegs;
+  }
+
+  private async stabilityCheck(legs: PlatformLeg[]): Promise<void> {
+    const samples = Math.max(1, this.config.crossPlatformStabilitySamples || 1);
+    const intervalMs = Math.max(0, this.config.crossPlatformStabilityIntervalMs || 0);
+    const threshold = Math.max(0, this.config.crossPlatformStabilityBps || 0);
+    if (samples <= 1 || threshold <= 0) {
+      return;
+    }
+
+    const baseline = new Map<string, number>();
+    for (let i = 0; i < samples; i += 1) {
+      for (const leg of legs) {
+        const book = await this.fetchOrderbookInternal(leg);
+        if (!book) {
+          continue;
+        }
+        const ref = leg.side === 'BUY' ? book.bestAsk : book.bestBid;
+        if (!ref || !Number.isFinite(ref)) {
+          continue;
+        }
+        const key = `${leg.platform}:${leg.tokenId}:${leg.side}`;
+        if (!baseline.has(key)) {
+          baseline.set(key, ref);
+        } else {
+          const base = baseline.get(key)!;
+          const drift = Math.abs((ref - base) / base) * 10000;
+          if (drift > threshold) {
+            throw new Error(`Preflight failed: unstable book ${drift.toFixed(1)} bps (max ${threshold}) for ${leg.tokenId}`);
+          }
+        }
+      }
+      if (i < samples - 1 && intervalMs > 0) {
+        await this.sleep(intervalMs);
+      }
+    }
   }
 
   private async getMaxExecutableShares(
@@ -1159,6 +1216,48 @@ export class CrossPlatformExecutionRouter {
     await this.sleep(recheckMs);
     const freshCache = new Map<string, Promise<OrderbookSnapshot | null>>();
     await this.preflightVwapWithCache(legs, freshCache);
+  }
+
+  private async postTradeCheck(legs: PlatformLeg[]): Promise<{
+    maxDriftBps: number;
+    penalizedLegs: PlatformLeg[];
+    penalizedTokenIds: Set<string>;
+  }> {
+    const threshold = Math.max(0, this.config.crossPlatformPostTradeDriftBps || 0);
+    if (!threshold) {
+      return { maxDriftBps: 0, penalizedLegs: [], penalizedTokenIds: new Set() };
+    }
+
+    let maxDriftBps = 0;
+    const penalizedLegs: PlatformLeg[] = [];
+    const penalizedTokenIds = new Set<string>();
+
+    for (const leg of legs) {
+      const book = await this.fetchOrderbookInternal(leg);
+      if (!book) {
+        continue;
+      }
+      const ref = leg.side === 'BUY' ? book.bestAsk : book.bestBid;
+      if (!ref || !Number.isFinite(ref) || !Number.isFinite(leg.price) || leg.price <= 0) {
+        continue;
+      }
+      const drift = Math.abs((ref - leg.price) / leg.price) * 10000;
+      if (drift > maxDriftBps) {
+        maxDriftBps = drift;
+      }
+      if (drift >= threshold) {
+        penalizedLegs.push(leg);
+        if (leg.tokenId) {
+          penalizedTokenIds.add(leg.tokenId);
+        }
+      }
+    }
+
+    if (penalizedLegs.length > 0) {
+      console.warn(`[CrossExec] post-trade drift exceeded ${threshold} bps on ${penalizedLegs.length} legs`);
+    }
+
+    return { maxDriftBps, penalizedLegs, penalizedTokenIds };
   }
 
   private getFeeBps(platform: ExternalPlatform): number {
