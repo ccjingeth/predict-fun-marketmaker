@@ -963,10 +963,9 @@ export class CrossPlatformExecutionRouter {
     if (!tokenId || threshold <= 0 || lookbackMs <= 0) {
       return;
     }
-    const bestBid = book.bestBid;
-    const bestAsk = book.bestAsk;
-    const price =
-      Number.isFinite(bestBid) && Number.isFinite(bestAsk) ? ((bestBid + bestAsk) / 2) : bestBid ?? bestAsk;
+    const bestBid = Number.isFinite(book.bestBid) ? book.bestBid : undefined;
+    const bestAsk = Number.isFinite(book.bestAsk) ? book.bestAsk : undefined;
+    const price = bestBid !== undefined && bestAsk !== undefined ? (bestBid + bestAsk) / 2 : bestBid ?? bestAsk;
     if (!Number.isFinite(price) || !price) {
       return;
     }
@@ -989,7 +988,9 @@ export class CrossPlatformExecutionRouter {
   private async preflightVwapWithCache(
     legs: PlatformLeg[],
     cache: Map<string, Promise<OrderbookSnapshot | null>>
-  ): Promise<void> {
+  ): Promise<{ maxDeviationBps: number; maxDriftBps: number }> {
+    let maxDeviationBps = 0;
+    let maxDriftBps = 0;
     const checks = legs.map(async (leg) => {
       if (!leg.tokenId || !leg.price || !leg.shares) {
         throw new Error(`Invalid leg for preflight: ${leg.platform}`);
@@ -1027,6 +1028,9 @@ export class CrossPlatformExecutionRouter {
             `Preflight failed: price drift ${drift.toFixed(1)} bps (max ${driftBps}) for ${leg.platform}:${leg.tokenId}`
           );
         }
+        if (drift > maxDriftBps) {
+          maxDriftBps = drift;
+        }
       }
 
       const deviationBps =
@@ -1040,9 +1044,13 @@ export class CrossPlatformExecutionRouter {
           `Preflight failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${maxDeviation}) for ${leg.platform}:${leg.tokenId}`
         );
       }
+      if (deviationBps > maxDeviationBps) {
+        maxDeviationBps = deviationBps;
+      }
     });
 
     await Promise.all(checks);
+    return { maxDeviationBps, maxDriftBps };
   }
 
   private async prepareLegs(legs: PlatformLeg[]): Promise<PlatformLeg[]> {
@@ -1075,7 +1083,8 @@ export class CrossPlatformExecutionRouter {
     }
 
     if (this.config.crossPlatformExecutionVwapCheck !== false) {
-      await this.preflightVwapWithCache(adjustedLegs, cache);
+      const preflight = await this.preflightVwapWithCache(adjustedLegs, cache);
+      await this.maybeRecheckPreflight(adjustedLegs, preflight);
     }
 
     return adjustedLegs;
@@ -1129,6 +1138,27 @@ export class CrossPlatformExecutionRouter {
       throw new Error(`Preflight failed: insufficient depth (min ${minAllowed})`);
     }
     return minDepth * Math.max(0, Math.min(1, usage));
+  }
+
+  private async maybeRecheckPreflight(
+    legs: PlatformLeg[],
+    stats: { maxDeviationBps: number; maxDriftBps: number }
+  ): Promise<void> {
+    const recheckMs = Math.max(0, this.config.crossPlatformRecheckMs || 0);
+    if (!recheckMs) {
+      return;
+    }
+    const deviationTrigger = Math.max(0, this.config.crossPlatformRecheckDeviationBps || 0);
+    const driftTrigger = Math.max(0, this.config.crossPlatformRecheckDriftBps || 0);
+    const shouldRecheck =
+      (deviationTrigger > 0 && stats.maxDeviationBps >= deviationTrigger) ||
+      (driftTrigger > 0 && stats.maxDriftBps >= driftTrigger);
+    if (!shouldRecheck) {
+      return;
+    }
+    await this.sleep(recheckMs);
+    const freshCache = new Map<string, Promise<OrderbookSnapshot | null>>();
+    await this.preflightVwapWithCache(legs, freshCache);
   }
 
   private getFeeBps(platform: ExternalPlatform): number {

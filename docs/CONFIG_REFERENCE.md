@@ -112,6 +112,9 @@
 - `CROSS_PLATFORM_METRICS_LOG_MS`：执行指标日志间隔（毫秒，0 关闭）。
 - `CROSS_PLATFORM_DEPTH_USAGE`：最多使用订单簿深度的比例（默认 0.5）。
 - `CROSS_PLATFORM_MAX_NOTIONAL`：跨平台执行最大名义金额上限。
+- `CROSS_PLATFORM_RECHECK_MS`：预检接近阈值时的二次确认间隔（毫秒）。
+- `CROSS_PLATFORM_RECHECK_DEVIATION_BPS`：VWAP 偏离超过该阈值触发二次确认。
+- `CROSS_PLATFORM_RECHECK_DRIFT_BPS`：最优价漂移超过该阈值触发二次确认。
 - `CROSS_PLATFORM_ORDER_TYPE`：跨平台下单类型（FOK / FAK / GTC / GTD）。
 - `CROSS_PLATFORM_BATCH_ORDERS`：Polymarket 批量下单（仅 Polymarket，最多 15）。
 - `CROSS_PLATFORM_BATCH_MAX`：批量下单单次最大腿数（默认 15）。
