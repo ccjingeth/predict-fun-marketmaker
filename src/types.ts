@@ -87,6 +87,12 @@ export interface Config {
   crossPlatformChunkMaxShares?: number;
   crossPlatformChunkMaxNotional?: number;
   crossPlatformChunkDelayMs?: number;
+  crossPlatformPlatformMaxFailures?: number;
+  crossPlatformPlatformFailureWindowMs?: number;
+  crossPlatformPlatformCooldownMs?: number;
+  crossPlatformAutoBlocklist?: boolean;
+  crossPlatformAutoBlocklistCooldownMs?: number;
+  crossPlatformAutoBlocklistScore?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;

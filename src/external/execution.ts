@@ -594,6 +594,9 @@ export class CrossPlatformExecutionRouter {
   private tokenScores = new Map<string, { score: number; ts: number }>();
   private qualityScore = 1;
   private platformScores = new Map<ExternalPlatform, { score: number; ts: number }>();
+  private platformFailures = new Map<ExternalPlatform, { count: number; windowStart: number; cooldownUntil: number }>();
+  private blockedTokens = new Map<string, number>();
+  private blockedPlatforms = new Map<ExternalPlatform, number>();
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -651,6 +654,7 @@ export class CrossPlatformExecutionRouter {
       this.assertAllowlist(plannedLegs);
       this.assertTokenHealthy(plannedLegs);
       this.assertPlatformScore(plannedLegs);
+      this.assertPlatformHealthy(plannedLegs);
       const attemptStart = Date.now();
       let preflightMs = 0;
       let execMs = 0;
@@ -682,6 +686,7 @@ export class CrossPlatformExecutionRouter {
             -Math.abs(this.config.crossPlatformPlatformScoreOnPostTrade || 8)
           );
           this.applyQualityPenalty(0.5);
+          this.maybeAutoBlock(postTrade.penalizedLegs);
         }
         if (postTrade.spreadPenalizedLegs.length > 0) {
           this.adjustTokenScores(
@@ -693,8 +698,10 @@ export class CrossPlatformExecutionRouter {
             -Math.abs(this.config.crossPlatformPlatformScoreOnSpread || 6)
           );
           this.applyQualityPenalty(0.3);
+          this.maybeAutoBlock(postTrade.spreadPenalizedLegs);
         }
         this.updateQualityScore(true);
+        this.recordPlatformSuccess(preparedLegs);
         this.recordMetrics({
           success: true,
           preflightMs,
@@ -707,6 +714,7 @@ export class CrossPlatformExecutionRouter {
         const hadSuccess = Boolean(error?.hadSuccess);
         this.onFailure();
         this.recordTokenFailure(preparedLegs.length ? preparedLegs : plannedLegs);
+        this.recordPlatformFailure(preparedLegs.length ? preparedLegs : plannedLegs);
         this.adjustTokenScores(
           preparedLegs.length ? preparedLegs : plannedLegs,
           -Math.abs(this.config.crossPlatformTokenScoreOnFailure || 5)
@@ -715,6 +723,7 @@ export class CrossPlatformExecutionRouter {
           preparedLegs.length ? preparedLegs : plannedLegs,
           -Math.abs(this.config.crossPlatformPlatformScoreOnFailure || 3)
         );
+        this.maybeAutoBlock(preparedLegs.length ? preparedLegs : plannedLegs);
         this.updateQualityScore(false);
         this.recordMetrics({
           success: false,
@@ -990,6 +999,23 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private assertPlatformHealthy(legs: PlatformLeg[]): void {
+    const now = Date.now();
+    const windowMs = Math.max(1000, this.config.crossPlatformPlatformFailureWindowMs || 60000);
+    for (const leg of legs) {
+      const state = this.platformFailures.get(leg.platform);
+      if (!state) {
+        continue;
+      }
+      if (state.cooldownUntil > now) {
+        throw new Error(`Platform cooldown active for ${leg.platform}`);
+      }
+      if (now - state.windowStart > windowMs) {
+        this.platformFailures.delete(leg.platform);
+      }
+    }
+  }
+
   private recordTokenFailure(legs: PlatformLeg[]): void {
     const now = Date.now();
     const maxFailures = Math.max(1, this.config.crossPlatformTokenMaxFailures || 2);
@@ -1048,6 +1074,41 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private recordPlatformFailure(legs: PlatformLeg[]): void {
+    const now = Date.now();
+    const maxFailures = Math.max(1, this.config.crossPlatformPlatformMaxFailures || 3);
+    const windowMs = Math.max(1000, this.config.crossPlatformPlatformFailureWindowMs || 60000);
+    const cooldownMs = Math.max(1000, this.config.crossPlatformPlatformCooldownMs || 120000);
+
+    for (const leg of legs) {
+      const state = this.platformFailures.get(leg.platform) || {
+        count: 0,
+        windowStart: now,
+        cooldownUntil: 0,
+      };
+
+      if (now - state.windowStart > windowMs) {
+        state.count = 0;
+        state.windowStart = now;
+      }
+
+      state.count += 1;
+      if (state.count >= maxFailures) {
+        state.cooldownUntil = now + cooldownMs;
+        state.count = 0;
+        state.windowStart = now;
+      }
+
+      this.platformFailures.set(leg.platform, state);
+    }
+  }
+
+  private recordPlatformSuccess(legs: PlatformLeg[]): void {
+    for (const leg of legs) {
+      this.platformFailures.delete(leg.platform);
+    }
+  }
+
   private adjustPlatformScoreSingle(platform: ExternalPlatform, delta: number): void {
     if (!platform || !delta) {
       return;
@@ -1078,6 +1139,20 @@ export class CrossPlatformExecutionRouter {
   }
 
   private assertAllowlist(legs: PlatformLeg[]): void {
+    const now = Date.now();
+    for (const leg of legs) {
+      if (!leg.tokenId) continue;
+      const blockedUntil = this.blockedTokens.get(leg.tokenId) || 0;
+      if (blockedUntil > now) {
+        throw new Error(`Token blocked: ${leg.tokenId}`);
+      }
+    }
+    for (const leg of legs) {
+      const blockedUntil = this.blockedPlatforms.get(leg.platform) || 0;
+      if (blockedUntil > now) {
+        throw new Error(`Platform blocked: ${leg.platform}`);
+      }
+    }
     if (this.allowlistTokens) {
       for (const leg of legs) {
         if (!leg.tokenId) continue;
@@ -1106,6 +1181,27 @@ export class CrossPlatformExecutionRouter {
         if (this.blocklistPlatforms.has(leg.platform)) {
           throw new Error(`Platform blocked: ${leg.platform}`);
         }
+      }
+    }
+  }
+
+  private maybeAutoBlock(legs: PlatformLeg[]): void {
+    if (!this.config.crossPlatformAutoBlocklist) {
+      return;
+    }
+    const cooldown = Math.max(1000, this.config.crossPlatformAutoBlocklistCooldownMs || 300000);
+    const threshold = Math.max(0, this.config.crossPlatformAutoBlocklistScore || 30);
+    const now = Date.now();
+    for (const leg of legs) {
+      if (leg.tokenId) {
+        const score = this.tokenScores.get(leg.tokenId)?.score ?? 100;
+        if (score <= threshold) {
+          this.blockedTokens.set(leg.tokenId, now + cooldown);
+        }
+      }
+      const platformScore = this.platformScores.get(leg.platform)?.score ?? 100;
+      if (platformScore <= threshold) {
+        this.blockedPlatforms.set(leg.platform, now + cooldown);
       }
     }
   }
