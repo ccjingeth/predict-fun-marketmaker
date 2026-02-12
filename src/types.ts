@@ -54,6 +54,8 @@ export interface Config {
   crossPlatformTokenFailureWindowMs?: number;
   crossPlatformTokenCooldownMs?: number;
   crossPlatformMetricsLogMs?: number;
+  crossPlatformDepthUsage?: number;
+  crossPlatformMaxNotional?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;

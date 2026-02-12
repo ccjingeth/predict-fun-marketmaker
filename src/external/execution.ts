@@ -1065,6 +1065,15 @@ export class CrossPlatformExecutionRouter {
       }
     }
 
+    const notionalCap = this.config.crossPlatformMaxNotional ?? 0;
+    if (notionalCap > 0) {
+      const currentNotional = adjustedLegs.reduce((sum, leg) => sum + leg.price * leg.shares, 0);
+      if (currentNotional > notionalCap) {
+        const factor = notionalCap / currentNotional;
+        adjustedLegs = adjustedLegs.map((leg) => ({ ...leg, shares: leg.shares * factor }));
+      }
+    }
+
     if (this.config.crossPlatformExecutionVwapCheck !== false) {
       await this.preflightVwapWithCache(adjustedLegs, cache);
     }
@@ -1078,7 +1087,7 @@ export class CrossPlatformExecutionRouter {
   ): Promise<number> {
     const maxDeviation = this.config.crossPlatformSlippageBps || 250;
     const slippageBps = this.config.crossPlatformSlippageBps || 0;
-
+    const usage = this.config.crossPlatformDepthUsage ?? 0.5;
     const depths = await Promise.all(
       legs.map(async (leg) => {
         const book = await this.fetchOrderbook(leg, cache);
@@ -1114,7 +1123,12 @@ export class CrossPlatformExecutionRouter {
     if (!depths.length) {
       return 0;
     }
-    return Math.min(...depths.filter((x) => Number.isFinite(x)));
+    const minDepth = Math.min(...depths.filter((x) => Number.isFinite(x)));
+    const minAllowed = this.config.crossPlatformMinDepthShares ?? 1;
+    if (!Number.isFinite(minDepth) || minDepth <= 0 || minDepth < minAllowed) {
+      throw new Error(`Preflight failed: insufficient depth (min ${minAllowed})`);
+    }
+    return minDepth * Math.max(0, Math.min(1, usage));
   }
 
   private getFeeBps(platform: ExternalPlatform): number {

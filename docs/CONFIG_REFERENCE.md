@@ -110,6 +110,8 @@
 - `CROSS_PLATFORM_TOKEN_FAILURE_WINDOW_MS`：单 token 失败统计窗口。
 - `CROSS_PLATFORM_TOKEN_COOLDOWN_MS`：单 token 冷却时间。
 - `CROSS_PLATFORM_METRICS_LOG_MS`：执行指标日志间隔（毫秒，0 关闭）。
+- `CROSS_PLATFORM_DEPTH_USAGE`：最多使用订单簿深度的比例（默认 0.5）。
+- `CROSS_PLATFORM_MAX_NOTIONAL`：跨平台执行最大名义金额上限。
 - `CROSS_PLATFORM_ORDER_TYPE`：跨平台下单类型（FOK / FAK / GTC / GTD）。
 - `CROSS_PLATFORM_BATCH_ORDERS`：Polymarket 批量下单（仅 Polymarket，最多 15）。
 - `CROSS_PLATFORM_BATCH_MAX`：批量下单单次最大腿数（默认 15）。

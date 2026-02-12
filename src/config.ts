@@ -70,6 +70,8 @@ export function loadConfig(): Config {
     crossPlatformTokenFailureWindowMs: parseInt(process.env.CROSS_PLATFORM_TOKEN_FAILURE_WINDOW_MS || '30000'),
     crossPlatformTokenCooldownMs: parseInt(process.env.CROSS_PLATFORM_TOKEN_COOLDOWN_MS || '120000'),
     crossPlatformMetricsLogMs: parseInt(process.env.CROSS_PLATFORM_METRICS_LOG_MS || '0'),
+    crossPlatformDepthUsage: parseFloat(process.env.CROSS_PLATFORM_DEPTH_USAGE || '0.5'),
+    crossPlatformMaxNotional: parseFloat(process.env.CROSS_PLATFORM_MAX_NOTIONAL || '200'),
     crossPlatformOrderType: (crossPlatformOrderTypeRaw || undefined) as Config['crossPlatformOrderType'],
     crossPlatformBatchOrders: process.env.CROSS_PLATFORM_BATCH_ORDERS === 'true',
     crossPlatformBatchMax: parseInt(process.env.CROSS_PLATFORM_BATCH_MAX || '15'),
