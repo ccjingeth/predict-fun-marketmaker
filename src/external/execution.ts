@@ -5,6 +5,8 @@ import { PredictAPI } from '../api/client.js';
 import { OrderManager } from '../order-manager.js';
 import { Wallet } from 'ethers';
 import { ClobClient } from '@polymarket/clob-client';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 import {
   estimateBuy,
   estimateSell,
@@ -599,6 +601,9 @@ export class CrossPlatformExecutionRouter {
   private blockedPlatforms = new Map<ExternalPlatform, number>();
   private globalCooldownUntil = 0;
   private chunkFactor = 1;
+  private chunkDelayMs = 0;
+  private lastMetricsFlush = 0;
+  private lastStateFlush = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -623,6 +628,10 @@ export class CrossPlatformExecutionRouter {
     this.blocklistTokens = this.buildSet(config.crossPlatformBlocklistTokens);
     this.allowlistPlatforms = this.buildSet(config.crossPlatformAllowlistPlatforms);
     this.blocklistPlatforms = this.buildSet(config.crossPlatformBlocklistPlatforms);
+    this.chunkDelayMs = Math.max(0, config.crossPlatformChunkDelayMs || 0);
+    this.restoreState().catch((error) => {
+      console.warn('Cross-platform state restore failed:', error);
+    });
     this.executors.set(
       'Predict',
       new PredictExecutor(api, orderManager, config.crossPlatformSlippageBps || 250, {
@@ -705,6 +714,7 @@ export class CrossPlatformExecutionRouter {
           this.maybeAutoBlock(postTrade.spreadPenalizedLegs);
         }
         this.updateQualityScore(true);
+        this.adjustChunkDelay(true);
         this.recordPlatformSuccess(preparedLegs);
         this.checkGlobalCooldown();
         this.recordMetrics({
@@ -731,6 +741,7 @@ export class CrossPlatformExecutionRouter {
         this.maybeAutoBlock(preparedLegs.length ? preparedLegs : plannedLegs);
         this.updateQualityScore(false);
         this.adjustChunkFactor(false);
+        this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.recordMetrics({
           success: false,
@@ -823,7 +834,7 @@ export class CrossPlatformExecutionRouter {
       this.mergeLegs(spreadPenalizedLegs, post.spreadPenalizedLegs);
       post.penalizedTokenIds.forEach((id) => penalizedTokenIds.add(id));
 
-      const delayMs = Math.max(0, this.config.crossPlatformChunkDelayMs || 0);
+      const delayMs = Math.max(0, this.chunkDelayMs || 0);
       if (delayMs > 0 && i < chunks.length - 1) {
         await this.sleep(delayMs);
       }
@@ -1284,6 +1295,21 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private adjustChunkDelay(success: boolean): void {
+    if (this.config.crossPlatformChunkDelayAutoTune === false) {
+      return;
+    }
+    const minMs = Math.max(0, this.config.crossPlatformChunkDelayMinMs ?? 0);
+    const maxMs = Math.max(minMs, this.config.crossPlatformChunkDelayMaxMs ?? 4000);
+    const up = Math.max(0, this.config.crossPlatformChunkDelayUpMs ?? 120);
+    const down = Math.max(0, this.config.crossPlatformChunkDelayDownMs ?? 60);
+    if (success) {
+      this.chunkDelayMs = Math.max(minMs, this.chunkDelayMs - down);
+    } else {
+      this.chunkDelayMs = Math.min(maxMs, this.chunkDelayMs + up);
+    }
+  }
+
   private applyQualityPenalty(multiplier: number): void {
     if (this.config.crossPlatformAutoTune === false) {
       return;
@@ -1334,6 +1360,8 @@ export class CrossPlatformExecutionRouter {
       }
     }
     this.logMetricsIfNeeded();
+    void this.flushMetricsIfNeeded();
+    void this.saveStateDebounced();
   }
 
   private updateEma(current: number, next: number, alpha: number): number {
@@ -1362,6 +1390,211 @@ export class CrossPlatformExecutionRouter {
         `total=${this.metrics.emaTotalMs.toFixed(0)}ms postDrift=${this.metrics.emaPostTradeDriftBps.toFixed(1)}bps ` +
         `alerts=${this.metrics.postTradeAlerts} quality=${this.qualityScore.toFixed(2)} lastError=${this.metrics.lastError || 'none'}`
     );
+  }
+
+  private async flushMetricsIfNeeded(): Promise<void> {
+    const target = this.config.crossPlatformMetricsPath;
+    const interval = Math.max(0, this.config.crossPlatformMetricsFlushMs || 0);
+    if (!target || !interval) {
+      return;
+    }
+    const now = Date.now();
+    if (now - this.lastMetricsFlush < interval) {
+      return;
+    }
+    this.lastMetricsFlush = now;
+    try {
+      await this.writeJson(target, this.buildMetricsSnapshot());
+    } catch (error) {
+      console.warn('Cross-platform metrics flush failed:', error);
+    }
+  }
+
+  private async saveStateDebounced(): Promise<void> {
+    const target = this.config.crossPlatformStatePath;
+    const interval = Math.max(0, this.config.crossPlatformMetricsFlushMs || 0);
+    if (!target || !interval) {
+      return;
+    }
+    const now = Date.now();
+    if (now - this.lastStateFlush < interval) {
+      return;
+    }
+    this.lastStateFlush = now;
+    try {
+      await this.writeJson(target, this.serializeState());
+    } catch (error) {
+      console.warn('Cross-platform state save failed:', error);
+    }
+  }
+
+  private buildMetricsSnapshot(): Record<string, unknown> {
+    return {
+      version: 1,
+      ts: Date.now(),
+      metrics: { ...this.metrics },
+      qualityScore: this.qualityScore,
+      chunkFactor: this.chunkFactor,
+      chunkDelayMs: this.chunkDelayMs,
+      globalCooldownUntil: this.globalCooldownUntil,
+      tokenScores: this.serializeTokenScores(),
+      platformScores: this.serializePlatformScores(),
+      blockedTokens: this.serializeBlockedTokens(),
+      blockedPlatforms: this.serializeBlockedPlatforms(),
+    };
+  }
+
+  private serializeState(): Record<string, unknown> {
+    return {
+      version: 1,
+      ts: Date.now(),
+      qualityScore: this.qualityScore,
+      chunkFactor: this.chunkFactor,
+      chunkDelayMs: this.chunkDelayMs,
+      globalCooldownUntil: this.globalCooldownUntil,
+      tokenScores: this.serializeTokenScores(),
+      platformScores: this.serializePlatformScores(),
+      blockedTokens: this.serializeBlockedTokens(),
+      blockedPlatforms: this.serializeBlockedPlatforms(),
+    };
+  }
+
+  private serializeTokenScores(): Array<{ tokenId: string; score: number; ts: number }> {
+    return Array.from(this.tokenScores.entries()).map(([tokenId, entry]) => ({
+      tokenId,
+      score: entry.score,
+      ts: entry.ts,
+    }));
+  }
+
+  private serializePlatformScores(): Array<{ platform: ExternalPlatform; score: number; ts: number }> {
+    return Array.from(this.platformScores.entries()).map(([platform, entry]) => ({
+      platform,
+      score: entry.score,
+      ts: entry.ts,
+    }));
+  }
+
+  private serializeBlockedTokens(): Array<{ tokenId: string; until: number }> {
+    return Array.from(this.blockedTokens.entries()).map(([tokenId, until]) => ({
+      tokenId,
+      until,
+    }));
+  }
+
+  private serializeBlockedPlatforms(): Array<{ platform: ExternalPlatform; until: number }> {
+    return Array.from(this.blockedPlatforms.entries()).map(([platform, until]) => ({
+      platform,
+      until,
+    }));
+  }
+
+  private async restoreState(): Promise<void> {
+    const target = this.config.crossPlatformStatePath;
+    if (!target) {
+      return;
+    }
+    const resolved = this.resolvePath(target);
+    let raw: string;
+    try {
+      raw = await fs.readFile(resolved, 'utf8');
+    } catch (error: any) {
+      if (error?.code === 'ENOENT') {
+        return;
+      }
+      throw error;
+    }
+    let data: any;
+    try {
+      data = JSON.parse(raw);
+    } catch (error) {
+      console.warn('Cross-platform state parse failed:', error);
+      return;
+    }
+
+    const minQuality = Math.max(0.1, this.config.crossPlatformAutoTuneMinFactor || 0.5);
+    const maxQuality = Math.max(minQuality, this.config.crossPlatformAutoTuneMaxFactor || 1.2);
+    if (Number.isFinite(data?.qualityScore)) {
+      this.qualityScore = Math.min(maxQuality, Math.max(minQuality, Number(data.qualityScore)));
+    }
+
+    const minChunk = Math.max(0.1, this.config.crossPlatformChunkFactorMin || 0.5);
+    const maxChunk = Math.max(minChunk, this.config.crossPlatformChunkFactorMax || 1.5);
+    if (Number.isFinite(data?.chunkFactor)) {
+      this.chunkFactor = Math.min(maxChunk, Math.max(minChunk, Number(data.chunkFactor)));
+    }
+
+    const minDelay = Math.max(0, this.config.crossPlatformChunkDelayMinMs ?? 0);
+    const maxDelay = Math.max(minDelay, this.config.crossPlatformChunkDelayMaxMs ?? 4000);
+    if (Number.isFinite(data?.chunkDelayMs)) {
+      this.chunkDelayMs = Math.min(maxDelay, Math.max(minDelay, Number(data.chunkDelayMs)));
+    }
+
+    if (Number.isFinite(data?.globalCooldownUntil)) {
+      this.globalCooldownUntil = Number(data.globalCooldownUntil);
+    }
+
+    const platformSet = new Set<ExternalPlatform>(['Predict', 'Polymarket', 'Opinion']);
+
+    if (Array.isArray(data?.tokenScores)) {
+      for (const entry of data.tokenScores) {
+        const tokenId = typeof entry?.tokenId === 'string' ? entry.tokenId : '';
+        const score = Number(entry?.score);
+        if (!tokenId || !Number.isFinite(score)) {
+          continue;
+        }
+        const ts = Number.isFinite(entry?.ts) ? Number(entry.ts) : Date.now();
+        this.tokenScores.set(tokenId, { score: Math.max(0, Math.min(100, score)), ts });
+      }
+    }
+
+    if (Array.isArray(data?.platformScores)) {
+      for (const entry of data.platformScores) {
+        const platform = entry?.platform as ExternalPlatform;
+        const score = Number(entry?.score);
+        if (!platformSet.has(platform) || !Number.isFinite(score)) {
+          continue;
+        }
+        const ts = Number.isFinite(entry?.ts) ? Number(entry.ts) : Date.now();
+        this.platformScores.set(platform, { score: Math.max(0, Math.min(100, score)), ts });
+      }
+    }
+
+    if (Array.isArray(data?.blockedTokens)) {
+      for (const entry of data.blockedTokens) {
+        const tokenId = typeof entry?.tokenId === 'string' ? entry.tokenId : '';
+        const until = Number(entry?.until);
+        if (tokenId && Number.isFinite(until) && until > Date.now()) {
+          this.blockedTokens.set(tokenId, until);
+        }
+      }
+    }
+
+    if (Array.isArray(data?.blockedPlatforms)) {
+      for (const entry of data.blockedPlatforms) {
+        const platform = entry?.platform as ExternalPlatform;
+        const until = Number(entry?.until);
+        if (platformSet.has(platform) && Number.isFinite(until) && until > Date.now()) {
+          this.blockedPlatforms.set(platform, until);
+        }
+      }
+    }
+  }
+
+  private resolvePath(target: string): string {
+    if (path.isAbsolute(target)) {
+      return target;
+    }
+    return path.resolve(process.cwd(), target);
+  }
+
+  private async writeJson(target: string, payload: Record<string, unknown>): Promise<void> {
+    const resolved = this.resolvePath(target);
+    const dir = path.dirname(resolved);
+    await fs.mkdir(dir, { recursive: true });
+    const tmp = `${resolved}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(payload, null, 2), 'utf8');
+    await fs.rename(tmp, resolved);
   }
 
   private checkVolatility(leg: PlatformLeg, book: OrderbookSnapshot): void {

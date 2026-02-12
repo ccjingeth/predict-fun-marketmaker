@@ -92,6 +92,11 @@ export interface Config {
   crossPlatformChunkFactorMax?: number;
   crossPlatformChunkFactorUp?: number;
   crossPlatformChunkFactorDown?: number;
+  crossPlatformChunkDelayAutoTune?: boolean;
+  crossPlatformChunkDelayMinMs?: number;
+  crossPlatformChunkDelayMaxMs?: number;
+  crossPlatformChunkDelayUpMs?: number;
+  crossPlatformChunkDelayDownMs?: number;
   crossPlatformPlatformMaxFailures?: number;
   crossPlatformPlatformFailureWindowMs?: number;
   crossPlatformPlatformCooldownMs?: number;
@@ -100,6 +105,9 @@ export interface Config {
   crossPlatformAutoBlocklistScore?: number;
   crossPlatformGlobalCooldownMs?: number;
   crossPlatformGlobalMinQuality?: number;
+  crossPlatformStatePath?: string;
+  crossPlatformMetricsPath?: string;
+  crossPlatformMetricsFlushMs?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;
