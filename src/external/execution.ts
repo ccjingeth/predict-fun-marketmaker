@@ -158,6 +158,7 @@ class PolymarketExecutor implements PlatformExecutor {
   private apiCreds?: { apiKey: string; apiSecret: string; apiPassphrase: string };
   private autoDerive: boolean;
   private useFok: boolean;
+  private cancelOpenMs: number;
 
   constructor(config: Config) {
     const signer = new Wallet(config.polymarketPrivateKey || '');
@@ -169,6 +170,7 @@ class PolymarketExecutor implements PlatformExecutor {
 
     this.autoDerive = config.polymarketAutoDeriveApiKey !== false;
     this.useFok = config.crossPlatformUseFok !== false;
+    this.cancelOpenMs = config.crossPlatformCancelOpenMs || 0;
 
     if (config.polymarketApiKey && config.polymarketApiSecret && config.polymarketApiPassphrase) {
       this.apiCreds = {
@@ -217,6 +219,9 @@ class PolymarketExecutor implements PlatformExecutor {
       const orderId = result?.orderID || result?.orderId || order?.order?.hash || order?.order?.orderHash;
       if (orderId) {
         orderIds.push(String(orderId));
+        if (orderType !== 'FOK' && this.cancelOpenMs > 0) {
+          this.scheduleCancel(String(orderId));
+        }
       }
     }
 
@@ -239,6 +244,51 @@ class PolymarketExecutor implements PlatformExecutor {
     } catch (error) {
       console.warn('Polymarket cancel failed:', error);
     }
+  }
+
+  async hedgeLegs(legs: PlatformLeg[], slippageBps: number): Promise<void> {
+    await this.ensureApiCreds();
+    if (!this.apiCreds) {
+      return;
+    }
+    const clientAny = this.client as any;
+    for (const leg of legs) {
+      if (!clientAny.getPrice) {
+        continue;
+      }
+      const hedgeSide = leg.side === 'BUY' ? 'SELL' : 'BUY';
+      const rawPrice = await clientAny.getPrice(leg.tokenId, hedgeSide);
+      const refPrice = Number(rawPrice);
+      if (!Number.isFinite(refPrice) || refPrice <= 0) {
+        continue;
+      }
+      const slippage = slippageBps / 10000;
+      const hedgePrice =
+        hedgeSide === 'BUY'
+          ? Math.min(1, refPrice * (1 + slippage))
+          : Math.max(0.0001, refPrice * (1 - slippage));
+
+      const order = await this.client.createOrder({
+        tokenId: leg.tokenId,
+        price: hedgePrice,
+        side: hedgeSide,
+        size: leg.shares,
+      });
+      await (this.client as any).postOrder(order, 'FOK');
+    }
+  }
+
+  private scheduleCancel(orderId: string): void {
+    if (!this.cancelOpenMs || this.cancelOpenMs <= 0) {
+      return;
+    }
+    setTimeout(async () => {
+      try {
+        await this.cancelOrders([orderId]);
+      } catch {
+        // ignore
+      }
+    }, this.cancelOpenMs);
   }
 }
 
