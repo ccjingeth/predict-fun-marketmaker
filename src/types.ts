@@ -63,6 +63,16 @@ export interface Config {
   crossPlatformStabilityIntervalMs?: number;
   crossPlatformStabilityBps?: number;
   crossPlatformPostTradeDriftBps?: number;
+  crossPlatformAutoTune?: boolean;
+  crossPlatformAutoTuneMinFactor?: number;
+  crossPlatformAutoTuneMaxFactor?: number;
+  crossPlatformAutoTuneUp?: number;
+  crossPlatformAutoTuneDown?: number;
+  crossPlatformTokenMinScore?: number;
+  crossPlatformTokenScoreOnSuccess?: number;
+  crossPlatformTokenScoreOnFailure?: number;
+  crossPlatformTokenScoreOnVolatility?: number;
+  crossPlatformTokenScoreOnPostTrade?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;

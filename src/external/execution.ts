@@ -591,6 +591,8 @@ export class CrossPlatformExecutionRouter {
   private lastSuccessAt = 0;
   private recentQuotes = new Map<string, { price: number; ts: number }>();
   private tokenFailures = new Map<string, { count: number; windowStart: number; cooldownUntil: number }>();
+  private tokenScores = new Map<string, { score: number; ts: number }>();
+  private qualityScore = 1;
   private metrics = {
     attempts: 0,
     successes: 0,
@@ -658,6 +660,14 @@ export class CrossPlatformExecutionRouter {
           this.recordTokenFailure(postTrade.penalizedLegs);
         }
         this.recordTokenSuccess(preparedLegs.filter((leg) => !postTrade.penalizedTokenIds.has(leg.tokenId)));
+        this.adjustTokenScores(preparedLegs, this.config.crossPlatformTokenScoreOnSuccess || 2);
+        if (postTrade.penalizedLegs.length > 0) {
+          this.adjustTokenScores(
+            postTrade.penalizedLegs,
+            -Math.abs(this.config.crossPlatformTokenScoreOnPostTrade || 15)
+          );
+        }
+        this.updateQualityScore(true);
         this.recordMetrics({
           success: true,
           preflightMs,
@@ -670,6 +680,11 @@ export class CrossPlatformExecutionRouter {
         const hadSuccess = Boolean(error?.hadSuccess);
         this.onFailure();
         this.recordTokenFailure(preparedLegs.length ? preparedLegs : plannedLegs);
+        this.adjustTokenScores(
+          preparedLegs.length ? preparedLegs : plannedLegs,
+          -Math.abs(this.config.crossPlatformTokenScoreOnFailure || 5)
+        );
+        this.updateQualityScore(false);
         this.recordMetrics({
           success: false,
           preflightMs,
@@ -860,6 +875,7 @@ export class CrossPlatformExecutionRouter {
   }
 
   private assertTokenHealthy(legs: PlatformLeg[]): void {
+    this.assertTokenScore(legs);
     const now = Date.now();
     const windowMs = Math.max(1000, this.config.crossPlatformTokenFailureWindowMs || 30000);
     for (const leg of legs) {
@@ -912,6 +928,65 @@ export class CrossPlatformExecutionRouter {
       if (!leg.tokenId) continue;
       this.tokenFailures.delete(leg.tokenId);
     }
+  }
+
+  private adjustTokenScores(legs: PlatformLeg[], delta: number): void {
+    if (!delta) {
+      return;
+    }
+    for (const leg of legs) {
+      if (!leg.tokenId) continue;
+      const current = this.tokenScores.get(leg.tokenId) || { score: 100, ts: Date.now() };
+      const next = Math.max(0, Math.min(100, current.score + delta));
+      this.tokenScores.set(leg.tokenId, { score: next, ts: Date.now() });
+    }
+  }
+
+  private adjustTokenScoreSingle(tokenId: string, delta: number): void {
+    if (!tokenId || !delta) {
+      return;
+    }
+    const current = this.tokenScores.get(tokenId) || { score: 100, ts: Date.now() };
+    const next = Math.max(0, Math.min(100, current.score + delta));
+    this.tokenScores.set(tokenId, { score: next, ts: Date.now() });
+  }
+
+  private assertTokenScore(legs: PlatformLeg[]): void {
+    const minScore = Math.max(0, this.config.crossPlatformTokenMinScore || 0);
+    if (!minScore) {
+      return;
+    }
+    for (const leg of legs) {
+      if (!leg.tokenId) continue;
+      const score = this.tokenScores.get(leg.tokenId)?.score ?? 100;
+      if (score < minScore) {
+        throw new Error(`Token score too low (${score}) for ${leg.tokenId}`);
+      }
+    }
+  }
+
+  private updateQualityScore(success: boolean): void {
+    if (this.config.crossPlatformAutoTune === false) {
+      return;
+    }
+    const up = Math.max(0, this.config.crossPlatformAutoTuneUp || 0.03);
+    const down = Math.max(0, this.config.crossPlatformAutoTuneDown || 0.08);
+    const minFactor = Math.max(0.1, this.config.crossPlatformAutoTuneMinFactor || 0.5);
+    const maxFactor = Math.max(minFactor, this.config.crossPlatformAutoTuneMaxFactor || 1.2);
+    if (success) {
+      this.qualityScore = Math.min(maxFactor, this.qualityScore + up);
+    } else {
+      this.qualityScore = Math.max(minFactor, this.qualityScore - down);
+    }
+  }
+
+  private getAutoTuneFactor(): number {
+    if (this.config.crossPlatformAutoTune === false) {
+      return 1;
+    }
+    const minFactor = Math.max(0.1, this.config.crossPlatformAutoTuneMinFactor || 0.5);
+    const maxFactor = Math.max(minFactor, this.config.crossPlatformAutoTuneMaxFactor || 1.2);
+    return Math.max(minFactor, Math.min(maxFactor, this.qualityScore));
   }
 
   private recordMetrics(input: {
@@ -972,12 +1047,12 @@ export class CrossPlatformExecutionRouter {
       `[CrossExec] attempts=${this.metrics.attempts} success=${this.metrics.successes} fail=${this.metrics.failures} ` +
         `preflight=${this.metrics.emaPreflightMs.toFixed(0)}ms exec=${this.metrics.emaExecMs.toFixed(0)}ms ` +
         `total=${this.metrics.emaTotalMs.toFixed(0)}ms postDrift=${this.metrics.emaPostTradeDriftBps.toFixed(1)}bps ` +
-        `alerts=${this.metrics.postTradeAlerts} lastError=${this.metrics.lastError || 'none'}`
+        `alerts=${this.metrics.postTradeAlerts} quality=${this.qualityScore.toFixed(2)} lastError=${this.metrics.lastError || 'none'}`
     );
   }
 
   private checkVolatility(tokenId: string, book: OrderbookSnapshot): void {
-    const threshold = this.config.crossPlatformVolatilityBps ?? 0;
+    const threshold = (this.config.crossPlatformVolatilityBps ?? 0) * this.getAutoTuneFactor();
     const lookbackMs = this.config.crossPlatformVolatilityLookbackMs ?? 0;
     if (!tokenId || threshold <= 0 || lookbackMs <= 0) {
       return;
@@ -993,6 +1068,7 @@ export class CrossPlatformExecutionRouter {
     if (prev && now - prev.ts <= lookbackMs) {
       const drift = Math.abs((price - prev.price) / prev.price) * 10000;
       if (drift > threshold) {
+        this.adjustTokenScoreSingle(tokenId, -Math.abs(this.config.crossPlatformTokenScoreOnVolatility || 10));
         throw new Error(`Preflight failed: volatility ${drift.toFixed(1)} bps (max ${threshold}) for ${tokenId}`);
       }
     }
@@ -1038,7 +1114,8 @@ export class CrossPlatformExecutionRouter {
         throw new Error(`Preflight failed: invalid price for ${leg.platform}:${leg.tokenId}`);
       }
 
-      const driftBps = this.config.crossPlatformPriceDriftBps ?? 40;
+      const driftBase = this.config.crossPlatformPriceDriftBps ?? 40;
+      const driftBps = Math.max(1, driftBase * this.getAutoTuneFactor());
       const bestRef = leg.side === 'BUY' ? book.bestAsk : book.bestBid;
       if (bestRef && Number.isFinite(bestRef) && bestRef > 0) {
         const drift = Math.abs((bestRef - limit) / limit) * 10000;
@@ -1057,7 +1134,7 @@ export class CrossPlatformExecutionRouter {
           ? ((vwap.avgPrice - limit) / limit) * 10000
           : ((limit - vwap.avgPrice) / limit) * 10000;
 
-      const maxDeviation = this.config.crossPlatformSlippageBps || 250;
+      const maxDeviation = Math.max(1, (this.config.crossPlatformSlippageBps || 250) * this.getAutoTuneFactor());
       if (deviationBps > maxDeviation) {
         throw new Error(
           `Preflight failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${maxDeviation}) for ${leg.platform}:${leg.tokenId}`
@@ -1114,7 +1191,7 @@ export class CrossPlatformExecutionRouter {
   private async stabilityCheck(legs: PlatformLeg[]): Promise<void> {
     const samples = Math.max(1, this.config.crossPlatformStabilitySamples || 1);
     const intervalMs = Math.max(0, this.config.crossPlatformStabilityIntervalMs || 0);
-    const threshold = Math.max(0, this.config.crossPlatformStabilityBps || 0);
+    const threshold = Math.max(0, (this.config.crossPlatformStabilityBps || 0) * this.getAutoTuneFactor());
     if (samples <= 1 || threshold <= 0) {
       return;
     }
@@ -1137,6 +1214,10 @@ export class CrossPlatformExecutionRouter {
           const base = baseline.get(key)!;
           const drift = Math.abs((ref - base) / base) * 10000;
           if (drift > threshold) {
+            this.adjustTokenScoreSingle(
+              leg.tokenId,
+              -Math.abs(this.config.crossPlatformTokenScoreOnVolatility || 10)
+            );
             throw new Error(`Preflight failed: unstable book ${drift.toFixed(1)} bps (max ${threshold}) for ${leg.tokenId}`);
           }
         }
@@ -1151,9 +1232,9 @@ export class CrossPlatformExecutionRouter {
     legs: PlatformLeg[],
     cache: Map<string, Promise<OrderbookSnapshot | null>>
   ): Promise<number> {
-    const maxDeviation = this.config.crossPlatformSlippageBps || 250;
+    const maxDeviation = Math.max(1, (this.config.crossPlatformSlippageBps || 250) * this.getAutoTuneFactor());
     const slippageBps = this.config.crossPlatformSlippageBps || 0;
-    const usage = this.config.crossPlatformDepthUsage ?? 0.5;
+    const usage = Math.max(0.05, Math.min(1, (this.config.crossPlatformDepthUsage ?? 0.5) * this.getAutoTuneFactor()));
     const depths = await Promise.all(
       legs.map(async (leg) => {
         const book = await this.fetchOrderbook(leg, cache);
