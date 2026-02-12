@@ -7,6 +7,8 @@ export interface OpinionWsConfig {
   heartbeatMs?: number;
   reconnectMinMs?: number;
   reconnectMaxMs?: number;
+  staleTimeoutMs?: number;
+  resetOnReconnect?: boolean;
 }
 
 interface DepthDiffMessage {
@@ -38,10 +40,12 @@ export class OpinionWebSocketFeed {
   private reconnectDelay: number;
   private reconnectTimer?: NodeJS.Timeout;
   private heartbeatTimer?: NodeJS.Timeout;
+  private staleTimer?: NodeJS.Timeout;
   private subscribedMarkets = new Set<string>();
   private books = new Map<string, OrderbookState>();
   private lastMessageAt = 0;
   private messageCount = 0;
+  private hasConnected = false;
 
   constructor(config: OpinionWsConfig) {
     this.config = config;
@@ -58,6 +62,7 @@ export class OpinionWebSocketFeed {
     this.ws.on('message', (data) => this.onMessage(data));
     this.ws.on('close', () => this.onClose());
     this.ws.on('error', () => this.onClose());
+    this.startStaleMonitor();
   }
 
   stop(): void {
@@ -66,6 +71,9 @@ export class OpinionWebSocketFeed {
     }
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
+    }
+    if (this.staleTimer) {
+      clearInterval(this.staleTimer);
     }
     if (this.ws) {
       this.ws.close();
@@ -175,6 +183,11 @@ export class OpinionWebSocketFeed {
   private onOpen(): void {
     this.connected = true;
     this.reconnectDelay = this.config.reconnectMinMs ?? 1000;
+    if (this.hasConnected && this.config.resetOnReconnect !== false) {
+      this.books.clear();
+    }
+    this.hasConnected = true;
+    this.lastMessageAt = Date.now();
     for (const id of this.subscribedMarkets) {
       this.sendSubscribe(id);
     }
@@ -203,6 +216,36 @@ export class OpinionWebSocketFeed {
       this.start();
       this.reconnectDelay = Math.min(this.reconnectDelay * 1.7, maxDelay);
     }, this.reconnectDelay);
+  }
+
+  private startStaleMonitor(): void {
+    const timeoutMs = this.config.staleTimeoutMs ?? 0;
+    if (!timeoutMs || timeoutMs <= 0) {
+      return;
+    }
+    if (this.staleTimer) {
+      clearInterval(this.staleTimer);
+    }
+    const interval = Math.min(timeoutMs, 5000);
+    this.staleTimer = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      if (!this.lastMessageAt) {
+        return;
+      }
+      if (Date.now() - this.lastMessageAt > timeoutMs) {
+        try {
+          if (typeof this.ws.terminate === 'function') {
+            this.ws.terminate();
+          } else {
+            this.ws.close();
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }, interval);
   }
 
   private startHeartbeat(): void {

@@ -46,6 +46,9 @@ export interface Config {
   crossPlatformDepthLevels?: number;
   crossPlatformExecutionVwapCheck?: boolean;
   crossPlatformPriceDriftBps?: number;
+  crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
+  crossPlatformBatchOrders?: boolean;
+  crossPlatformBatchMax?: number;
   crossPlatformUseFok?: boolean;
   crossPlatformParallelSubmit?: boolean;
   crossPlatformLimitOrders?: boolean;
@@ -112,11 +115,15 @@ export interface Config {
   polymarketWsUrl?: string;
   polymarketWsCustomFeature?: boolean;
   polymarketWsInitialDump?: boolean;
+  polymarketWsStaleMs?: number;
+  polymarketWsResetOnReconnect?: boolean;
   polymarketCacheTtlMs?: number;
   predictWsEnabled?: boolean;
   predictWsUrl?: string;
   predictWsApiKey?: string;
   predictWsTopicKey?: 'token_id' | 'condition_id' | 'event_id';
+  predictWsStaleMs?: number;
+  predictWsResetOnReconnect?: boolean;
   polymarketPrivateKey?: string;
   polymarketApiKey?: string;
   polymarketApiSecret?: string;
@@ -135,6 +142,8 @@ export interface Config {
   opinionWsEnabled?: boolean;
   opinionWsUrl?: string;
   opinionWsHeartbeatMs?: number;
+  opinionWsStaleMs?: number;
+  opinionWsResetOnReconnect?: boolean;
   marketTokenIds?: string[];
   refreshInterval: number;
   enableTrading: boolean;

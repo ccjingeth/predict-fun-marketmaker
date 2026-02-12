@@ -129,6 +129,8 @@ class ArbitrageBot {
         topicKey: this.config.predictWsTopicKey || 'token_id',
         reconnectMinMs: 1000,
         reconnectMaxMs: 15000,
+        staleTimeoutMs: this.config.predictWsStaleMs,
+        resetOnReconnect: this.config.predictWsResetOnReconnect,
       });
       this.predictWs.start();
     }

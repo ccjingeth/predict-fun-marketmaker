@@ -27,6 +27,8 @@ export class CrossPlatformAggregator {
           maxDepthLevels: config.crossPlatformDepthLevels,
           reconnectMinMs: 1000,
           reconnectMaxMs: 15000,
+          staleTimeoutMs: config.polymarketWsStaleMs,
+          resetOnReconnect: config.polymarketWsResetOnReconnect,
         });
         this.polymarketWs.start();
       }
@@ -55,6 +57,8 @@ export class CrossPlatformAggregator {
           heartbeatMs: config.opinionWsHeartbeatMs || 30000,
           reconnectMinMs: 1000,
           reconnectMaxMs: 15000,
+          staleTimeoutMs: config.opinionWsStaleMs,
+          resetOnReconnect: config.opinionWsResetOnReconnect,
         });
         this.opinionWs.start();
       }

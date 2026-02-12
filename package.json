@@ -13,7 +13,8 @@
     "debug": "tsx src/debug-api.ts",
     "check:api": "node scripts/check-api.cjs",
     "auth:jwt": "tsx src/auth-jwt.ts",
-    "setup:approvals": "tsx src/setup-approvals.ts"
+    "setup:approvals": "tsx src/setup-approvals.ts",
+    "smoke:predict": "tsx scripts/smoke-trade.ts"
   },
   "keywords": [
     "predict",

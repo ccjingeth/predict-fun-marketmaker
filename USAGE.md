@@ -80,6 +80,19 @@ WS 健康日志：
 - `ARB_WS_HEALTH_LOG_MS=0`（>0 启用，单位毫秒）
 开启后 `npm run start:arb` 会进入持续监控模式
 
+## 小额实盘演练（推荐）
+
+用于验证下单与撤单链路是否正常：
+
+```bash
+npm run smoke:predict
+```
+
+如需真实下单再撤单：
+- `ENABLE_TRADING=true`
+- `SMOKE_LIVE=true`
+- 可选：`SMOKE_SHARES=1`、`SMOKE_PRICE_BUFFER_BPS=50`、`SMOKE_CANCEL_MS=5000`
+
 ## 跨平台严格映射（强烈建议）
 
 编辑 `cross-platform-mapping.json`，将 Predict 的 `condition_id` 映射到外部平台 token：

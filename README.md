@@ -108,6 +108,9 @@ CROSS_PLATFORM_MAX_SHARES=200
 CROSS_PLATFORM_DEPTH_LEVELS=10
 CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true
 CROSS_PLATFORM_PRICE_DRIFT_BPS=40
+CROSS_PLATFORM_ORDER_TYPE=FOK
+CROSS_PLATFORM_BATCH_ORDERS=false
+CROSS_PLATFORM_BATCH_MAX=15
 CROSS_PLATFORM_USE_FOK=true
 CROSS_PLATFORM_PARALLEL_SUBMIT=true
 CROSS_PLATFORM_LIMIT_ORDERS=true
@@ -181,11 +184,15 @@ POLYMARKET_WS_ENABLED=false
 POLYMARKET_WS_URL=wss://ws-subscriptions-clob.polymarket.com/ws/market
 POLYMARKET_WS_CUSTOM_FEATURE=false
 POLYMARKET_WS_INITIAL_DUMP=true
+POLYMARKET_WS_STALE_MS=20000
+POLYMARKET_WS_RESET_ON_RECONNECT=true
 POLYMARKET_CACHE_TTL_MS=60000
 PREDICT_WS_ENABLED=false
 PREDICT_WS_URL=wss://ws.predict.fun/ws
 PREDICT_WS_API_KEY=
 PREDICT_WS_TOPIC_KEY=token_id
+PREDICT_WS_STALE_MS=20000
+PREDICT_WS_RESET_ON_RECONNECT=true
 POLYMARKET_PRIVATE_KEY=
 POLYMARKET_API_KEY=
 POLYMARKET_API_SECRET=
@@ -200,7 +207,28 @@ OPINION_HOST=https://proxy.opinion.trade:8443
 OPINION_WS_ENABLED=false
 OPINION_WS_URL=wss://ws.opinion.trade
 OPINION_WS_HEARTBEAT_MS=30000
+OPINION_WS_STALE_MS=20000
+OPINION_WS_RESET_ON_RECONNECT=true
 ```
+
+## Smoke Test (Tiny Live Order)
+
+Use this to validate end-to-end order placement and auto-cancel with minimal size:
+
+```bash
+npm run smoke:predict
+```
+
+Optional env overrides:
+
+- `SMOKE_TOKEN_ID` (token to test)
+- `SMOKE_SIDE` (`BUY` / `SELL`)
+- `SMOKE_SHARES` (default `1`)
+- `SMOKE_PRICE_BUFFER_BPS` (default `50`, keep away from top of book)
+- `SMOKE_CANCEL_MS` (default `5000`)
+- `SMOKE_LIVE=true` to actually place and cancel the order
+
+To run live, also set `ENABLE_TRADING=true` and `JWT_TOKEN` in `.env`.
 
 ### 3. Get API Key (REQUIRED)
 

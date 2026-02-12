@@ -8,6 +8,8 @@ export interface PolymarketWsConfig {
   maxDepthLevels?: number;
   reconnectMinMs?: number;
   reconnectMaxMs?: number;
+  staleTimeoutMs?: number;
+  resetOnReconnect?: boolean;
 }
 
 interface BookUpdate {
@@ -40,10 +42,12 @@ export class PolymarketWebSocketFeed {
   private connected = false;
   private reconnectDelay: number;
   private reconnectTimer?: NodeJS.Timeout;
+  private staleTimer?: NodeJS.Timeout;
   private subscribed = new Set<string>();
   private topOfBook = new Map<string, PlatformOrderbook & { timestamp: number }>();
   private lastMessageAt = 0;
   private messageCount = 0;
+  private hasConnected = false;
 
   constructor(config: PolymarketWsConfig) {
     this.config = config;
@@ -61,11 +65,15 @@ export class PolymarketWebSocketFeed {
     this.ws.on('close', () => this.onClose());
     this.ws.on('error', () => this.onClose());
     this.ws.on('ping', () => this.ws?.pong());
+    this.startStaleMonitor();
   }
 
   stop(): void {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
+    }
+    if (this.staleTimer) {
+      clearInterval(this.staleTimer);
     }
     if (this.ws) {
       this.ws.close();
@@ -124,6 +132,11 @@ export class PolymarketWebSocketFeed {
   private onOpen(): void {
     this.connected = true;
     this.reconnectDelay = this.config.reconnectMinMs ?? 1000;
+    if (this.hasConnected && this.config.resetOnReconnect !== false) {
+      this.topOfBook.clear();
+    }
+    this.hasConnected = true;
+    this.lastMessageAt = Date.now();
     if (this.subscribed.size > 0) {
       this.sendSubscribe(Array.from(this.subscribed));
     }
@@ -148,6 +161,36 @@ export class PolymarketWebSocketFeed {
       this.start();
       this.reconnectDelay = Math.min(this.reconnectDelay * 1.7, maxDelay);
     }, this.reconnectDelay);
+  }
+
+  private startStaleMonitor(): void {
+    const timeoutMs = this.config.staleTimeoutMs ?? 0;
+    if (!timeoutMs || timeoutMs <= 0) {
+      return;
+    }
+    if (this.staleTimer) {
+      clearInterval(this.staleTimer);
+    }
+    const interval = Math.min(timeoutMs, 5000);
+    this.staleTimer = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      if (!this.lastMessageAt) {
+        return;
+      }
+      if (Date.now() - this.lastMessageAt > timeoutMs) {
+        try {
+          if (typeof this.ws.terminate === 'function') {
+            this.ws.terminate();
+          } else {
+            this.ws.close();
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }, interval);
   }
 
   private sendSubscribe(assetIds: string[], operation?: 'subscribe' | 'unsubscribe'): void {

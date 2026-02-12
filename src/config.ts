@@ -17,6 +17,7 @@ dotenvConfig({ path: envPath });
  * Load and validate configuration
  */
 export function loadConfig(): Config {
+  const crossPlatformOrderTypeRaw = (process.env.CROSS_PLATFORM_ORDER_TYPE || '').toUpperCase();
   const config: Config = {
     apiBaseUrl: process.env.API_BASE_URL || 'https://api.predict.fun',
     privateKey: process.env.PRIVATE_KEY || '',
@@ -61,6 +62,9 @@ export function loadConfig(): Config {
     crossPlatformDepthLevels: parseInt(process.env.CROSS_PLATFORM_DEPTH_LEVELS || '10'),
     crossPlatformExecutionVwapCheck: process.env.CROSS_PLATFORM_EXECUTION_VWAP_CHECK !== 'false',
     crossPlatformPriceDriftBps: parseInt(process.env.CROSS_PLATFORM_PRICE_DRIFT_BPS || '40'),
+    crossPlatformOrderType: (crossPlatformOrderTypeRaw || undefined) as Config['crossPlatformOrderType'],
+    crossPlatformBatchOrders: process.env.CROSS_PLATFORM_BATCH_ORDERS === 'true',
+    crossPlatformBatchMax: parseInt(process.env.CROSS_PLATFORM_BATCH_MAX || '15'),
     crossPlatformUseFok: process.env.CROSS_PLATFORM_USE_FOK !== 'false',
     crossPlatformParallelSubmit: process.env.CROSS_PLATFORM_PARALLEL_SUBMIT !== 'false',
     crossPlatformLimitOrders: process.env.CROSS_PLATFORM_LIMIT_ORDERS !== 'false',
@@ -127,11 +131,15 @@ export function loadConfig(): Config {
     polymarketWsUrl: process.env.POLYMARKET_WS_URL || 'wss://ws-subscriptions-clob.polymarket.com/ws/market',
     polymarketWsCustomFeature: process.env.POLYMARKET_WS_CUSTOM_FEATURE === 'true',
     polymarketWsInitialDump: process.env.POLYMARKET_WS_INITIAL_DUMP !== 'false',
+    polymarketWsStaleMs: parseInt(process.env.POLYMARKET_WS_STALE_MS || '20000'),
+    polymarketWsResetOnReconnect: process.env.POLYMARKET_WS_RESET_ON_RECONNECT !== 'false',
     polymarketCacheTtlMs: parseInt(process.env.POLYMARKET_CACHE_TTL_MS || '60000'),
     predictWsEnabled: process.env.PREDICT_WS_ENABLED === 'true',
     predictWsUrl: process.env.PREDICT_WS_URL || 'wss://ws.predict.fun/ws',
     predictWsApiKey: process.env.PREDICT_WS_API_KEY || process.env.API_KEY,
     predictWsTopicKey: (process.env.PREDICT_WS_TOPIC_KEY || 'token_id') as Config['predictWsTopicKey'],
+    predictWsStaleMs: parseInt(process.env.PREDICT_WS_STALE_MS || '20000'),
+    predictWsResetOnReconnect: process.env.PREDICT_WS_RESET_ON_RECONNECT !== 'false',
     polymarketPrivateKey: process.env.POLYMARKET_PRIVATE_KEY,
     polymarketApiKey: process.env.POLYMARKET_API_KEY,
     polymarketApiSecret: process.env.POLYMARKET_API_SECRET,
@@ -150,6 +158,8 @@ export function loadConfig(): Config {
     opinionWsEnabled: process.env.OPINION_WS_ENABLED === 'true',
     opinionWsUrl: process.env.OPINION_WS_URL || 'wss://ws.opinion.trade',
     opinionWsHeartbeatMs: parseInt(process.env.OPINION_WS_HEARTBEAT_MS || '30000'),
+    opinionWsStaleMs: parseInt(process.env.OPINION_WS_STALE_MS || '20000'),
+    opinionWsResetOnReconnect: process.env.OPINION_WS_RESET_ON_RECONNECT !== 'false',
     marketTokenIds: process.env.MARKET_TOKEN_IDS
       ? process.env.MARKET_TOKEN_IDS.split(',').map((s) => s.trim())
       : undefined,
@@ -184,6 +194,17 @@ export function loadConfig(): Config {
 
   if ((config.crossPlatformMinProfit ?? 0) < 0) {
     throw new Error('CROSS_PLATFORM_MIN_PROFIT must be >= 0');
+  }
+
+  if (
+    config.crossPlatformOrderType &&
+    !['FOK', 'FAK', 'GTC', 'GTD'].includes(config.crossPlatformOrderType)
+  ) {
+    throw new Error('CROSS_PLATFORM_ORDER_TYPE must be one of FOK/FAK/GTC/GTD');
+  }
+
+  if ((config.crossPlatformBatchMax ?? 1) < 1) {
+    config.crossPlatformBatchMax = 1;
   }
 
   return config;

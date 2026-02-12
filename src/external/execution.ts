@@ -14,6 +14,13 @@ interface ExecutionResult {
   legs?: PlatformLeg[];
 }
 
+interface PlatformExecuteOptions {
+  useFok?: boolean;
+  useLimit?: boolean;
+  orderType?: string;
+  batch?: boolean;
+}
+
 class ExecutionAttemptError extends Error {
   hadSuccess: boolean;
   constructor(message: string, hadSuccess: boolean) {
@@ -24,7 +31,7 @@ class ExecutionAttemptError extends Error {
 
 interface PlatformExecutor {
   platform: ExternalPlatform;
-  execute(legs: PlatformLeg[], options?: { useFok?: boolean; useLimit?: boolean }): Promise<ExecutionResult>;
+  execute(legs: PlatformLeg[], options?: PlatformExecuteOptions): Promise<ExecutionResult>;
   cancelOrders?(orderIds: string[]): Promise<void>;
   hedgeLegs?(legs: PlatformLeg[], slippageBps: number): Promise<void>;
   checkOpenOrders?(orderIds: string[]): Promise<string[]>;
@@ -53,7 +60,7 @@ class PredictExecutor implements PlatformExecutor {
     this.maker = orderManager.getMakerAddress();
   }
 
-  async execute(legs: PlatformLeg[], options?: { useLimit?: boolean }): Promise<ExecutionResult> {
+  async execute(legs: PlatformLeg[], options?: PlatformExecuteOptions): Promise<ExecutionResult> {
     const orderIds: string[] = [];
     const useLimit = options?.useLimit ?? this.useLimitOrders;
 
@@ -177,6 +184,9 @@ class PolymarketExecutor implements PlatformExecutor {
   private useFok: boolean;
   private cancelOpenMs: number;
   private ownerAddress?: string;
+  private orderType?: string;
+  private batchOrders: boolean;
+  private batchMax: number;
 
   constructor(config: Config) {
     const signer = new Wallet(config.polymarketPrivateKey || '');
@@ -190,6 +200,10 @@ class PolymarketExecutor implements PlatformExecutor {
     this.useFok = config.crossPlatformUseFok !== false;
     this.cancelOpenMs = config.crossPlatformCancelOpenMs || 0;
     this.ownerAddress = signer.address;
+    this.orderType = config.crossPlatformOrderType;
+    this.batchOrders = config.crossPlatformBatchOrders === true;
+    const rawBatchMax = Math.max(1, config.crossPlatformBatchMax || 15);
+    this.batchMax = Math.min(rawBatchMax, 15);
 
     if (config.polymarketApiKey && config.polymarketApiSecret && config.polymarketApiPassphrase) {
       this.apiCreds = {
@@ -197,35 +211,45 @@ class PolymarketExecutor implements PlatformExecutor {
         apiSecret: config.polymarketApiSecret,
         apiPassphrase: config.polymarketApiPassphrase,
       };
+      this.applyCredsToClient();
     }
   }
 
   private async ensureApiCreds() {
     if (!this.apiCreds && this.autoDerive) {
-      const creds = await this.client.createOrDeriveApiKey();
-      this.apiCreds = {
-        apiKey: creds.apiKey,
-        apiSecret: creds.apiSecret,
-        apiPassphrase: creds.apiPassphrase,
-      };
+      const clientAny = this.client as any;
+      let creds: any;
+      if (typeof clientAny.deriveApiKey === 'function') {
+        creds = await clientAny.deriveApiKey();
+      } else if (typeof clientAny.createApiKey === 'function') {
+        creds = await clientAny.createApiKey();
+      } else if (typeof clientAny.createOrDeriveApiKey === 'function') {
+        creds = await clientAny.createOrDeriveApiKey();
+      }
+      if (creds) {
+        this.apiCreds = {
+          apiKey: creds.apiKey || creds.key,
+          apiSecret: creds.apiSecret || creds.secret,
+          apiPassphrase: creds.apiPassphrase || creds.passphrase,
+        };
+        this.applyCredsToClient();
+      }
     }
   }
 
-  async execute(legs: PlatformLeg[], options?: { useFok?: boolean }): Promise<ExecutionResult> {
+  async execute(legs: PlatformLeg[], options?: PlatformExecuteOptions): Promise<ExecutionResult> {
     await this.ensureApiCreds();
     if (!this.apiCreds) {
       throw new Error('Polymarket API credentials missing');
     }
 
+    const orderType = this.resolveOrderType(options);
+
+    if ((options?.batch ?? this.batchOrders) && legs.length > 1) {
+      return this.executeBatch(legs, orderType);
+    }
+
     const orderIds: string[] = [];
-    const orderType: 'GTC' | 'FOK' | 'GTD' =
-      options?.useFok === undefined
-        ? this.useFok
-          ? 'FOK'
-          : 'GTC'
-        : options.useFok
-          ? 'FOK'
-          : 'GTC';
 
     for (const leg of legs) {
       const order = await this.client.createOrder({
@@ -234,7 +258,7 @@ class PolymarketExecutor implements PlatformExecutor {
         side: leg.side,
         size: leg.shares,
       });
-      const result: any = await (this.client as any).postOrder(order, orderType);
+      const result: any = await (this.client as any).postOrder(order, orderType as any);
       const orderId = result?.orderID || result?.orderId || order?.order?.hash || order?.order?.orderHash;
       if (orderId) {
         orderIds.push(String(orderId));
@@ -245,6 +269,148 @@ class PolymarketExecutor implements PlatformExecutor {
     }
 
     return { platform: this.platform, orderIds, legs };
+  }
+
+  private resolveOrderType(options?: PlatformExecuteOptions): string {
+    const configured = (options?.orderType || this.orderType || '').toUpperCase();
+    const valid = new Set(['FOK', 'FAK', 'GTC', 'GTD']);
+    if (configured && valid.has(configured)) {
+      return configured;
+    }
+    const useFok = options?.useFok === undefined ? this.useFok : options.useFok;
+    return useFok ? 'FOK' : 'GTC';
+  }
+
+  private async executeBatch(legs: PlatformLeg[], orderType: string): Promise<ExecutionResult> {
+    const orderIds: string[] = [];
+    const orders = [];
+    for (const leg of legs) {
+      const order = await this.client.createOrder({
+        tokenId: leg.tokenId,
+        price: leg.price,
+        side: leg.side,
+        size: leg.shares,
+      });
+      orders.push(order);
+    }
+
+    const chunks: any[][] = [];
+    for (let i = 0; i < orders.length; i += this.batchMax) {
+      chunks.push(orders.slice(i, i + this.batchMax));
+    }
+
+    for (const chunk of chunks) {
+      try {
+        const resp = await this.postOrdersBatch(chunk, orderType);
+        const batchIds = this.extractBatchOrderIds(resp);
+        if (batchIds.length > 0) {
+          orderIds.push(...batchIds);
+          if (orderType !== 'FOK' && this.cancelOpenMs > 0) {
+            batchIds.forEach((id) => this.scheduleCancel(id));
+          }
+        }
+      } catch (error) {
+        console.warn('Polymarket batch submit failed, falling back to single orders:', error);
+        for (const order of chunk) {
+          const result: any = await (this.client as any).postOrder(order, orderType as any);
+          const orderId = result?.orderID || result?.orderId || order?.order?.hash || order?.order?.orderHash;
+          if (orderId) {
+            orderIds.push(String(orderId));
+            if (orderType !== 'FOK' && this.cancelOpenMs > 0) {
+              this.scheduleCancel(String(orderId));
+            }
+          }
+        }
+      }
+    }
+
+    return { platform: this.platform, orderIds, legs };
+  }
+
+  private async postOrdersBatch(orders: any[], orderType: string): Promise<any> {
+    const clientAny = this.client as any;
+    const creds = clientAny.creds || this.mapApiCreds();
+    if (!creds) {
+      throw new Error('Polymarket API credentials missing for batch order');
+    }
+    clientAny.creds = creds;
+
+    const [{ createL2Headers }, { orderToJson }] = await Promise.all([
+      import('@polymarket/clob-client/dist/headers/index.js'),
+      import('@polymarket/clob-client/dist/utilities.js'),
+    ]);
+
+    const payload = orders.map((order) => orderToJson(order, creds.key, orderType as any));
+    const body = JSON.stringify(payload);
+    const requestPath = '/orders';
+    const headers = await createL2Headers(clientAny.signer, creds, {
+      method: 'POST',
+      requestPath,
+      body,
+    });
+
+    const response = await fetch(`${clientAny.host}${requestPath}`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Batch order failed: ${response.status} ${text}`);
+    }
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
+  private extractBatchOrderIds(resp: any): string[] {
+    const ids: string[] = [];
+    if (resp?.orderId || resp?.orderID) {
+      ids.push(String(resp.orderId || resp.orderID));
+    }
+    if (Array.isArray(resp?.orderIds)) {
+      for (const id of resp.orderIds) {
+        if (id) ids.push(String(id));
+      }
+    }
+    const items = Array.isArray(resp)
+      ? resp
+      : Array.isArray(resp?.data)
+        ? resp.data
+        : Array.isArray(resp?.orders)
+          ? resp.orders
+          : Array.isArray(resp?.result)
+            ? resp.result
+            : [];
+    for (const item of items) {
+      const orderId = item?.orderID || item?.orderId || item?.id || item?.order?.id;
+      if (orderId) {
+        ids.push(String(orderId));
+      }
+    }
+    return ids;
+  }
+
+  private mapApiCreds(): { key: string; secret: string; passphrase: string } | null {
+    if (!this.apiCreds) {
+      return null;
+    }
+    return {
+      key: this.apiCreds.apiKey,
+      secret: this.apiCreds.apiSecret,
+      passphrase: this.apiCreds.apiPassphrase,
+    };
+  }
+
+  private applyCredsToClient(): void {
+    const clientAny = this.client as any;
+    const mapped = this.mapApiCreds();
+    if (mapped) {
+      clientAny.creds = mapped;
+    }
   }
 
   async cancelOrders(orderIds: string[]): Promise<void> {
@@ -279,10 +445,19 @@ class PolymarketExecutor implements PlatformExecutor {
         return [];
       }
       const openOrders = await clientAny.getOpenOrders({ owner: this.ownerAddress });
-      if (!Array.isArray(openOrders)) {
+      const list = Array.isArray(openOrders)
+        ? openOrders
+        : Array.isArray(openOrders?.orders)
+          ? openOrders.orders
+          : Array.isArray(openOrders?.data)
+            ? openOrders.data
+            : Array.isArray(openOrders?.result)
+              ? openOrders.result
+              : [];
+      if (!Array.isArray(list)) {
         return [];
       }
-      return openOrders
+      return list
         .filter((order: any) => orderIds.includes(order.id))
         .map((order: any) => order.id)
         .filter((id: any) => Boolean(id));
@@ -356,7 +531,7 @@ class OpinionExecutor implements PlatformExecutor {
     this.chainId = config.opinionChainId;
   }
 
-  async execute(legs: PlatformLeg[]): Promise<ExecutionResult> {
+  async execute(legs: PlatformLeg[], _options?: PlatformExecuteOptions): Promise<ExecutionResult> {
     if (!this.apiKey || !this.privateKey) {
       throw new Error('Opinion API key or private key missing');
     }
@@ -484,6 +659,8 @@ export class CrossPlatformExecutionRouter {
       return executor.execute(legsForPlatform, {
         useFok: this.config.crossPlatformUseFok,
         useLimit: this.config.crossPlatformLimitOrders,
+        orderType: this.config.crossPlatformOrderType,
+        batch: this.config.crossPlatformBatchOrders,
       });
     };
 

@@ -102,6 +102,9 @@
 - `CROSS_PLATFORM_DEPTH_LEVELS`：跨平台订单簿深度层级数。
 - `CROSS_PLATFORM_EXECUTION_VWAP_CHECK`：跨平台执行前 VWAP 预检（更稳健）。
 - `CROSS_PLATFORM_PRICE_DRIFT_BPS`：预检时允许的最优价漂移上限（bps）。
+- `CROSS_PLATFORM_ORDER_TYPE`：跨平台下单类型（FOK / FAK / GTC / GTD）。
+- `CROSS_PLATFORM_BATCH_ORDERS`：Polymarket 批量下单（仅 Polymarket，最多 15）。
+- `CROSS_PLATFORM_BATCH_MAX`：批量下单单次最大腿数（默认 15）。
 - `CROSS_PLATFORM_USE_FOK`：Polymarket 使用 FOK 下单（更安全）。
 - `CROSS_PLATFORM_PARALLEL_SUBMIT`：跨平台并行下单（降低腿间风险）。
 - `CROSS_PLATFORM_LIMIT_ORDERS`：跨平台优先使用限价单。
@@ -140,6 +143,8 @@
 - `POLYMARKET_WS_URL`：WS 地址。
 - `POLYMARKET_WS_CUSTOM_FEATURE`：特殊订阅模式。
 - `POLYMARKET_WS_INITIAL_DUMP`：连接后是否请求初始快照。
+- `POLYMARKET_WS_STALE_MS`：WS 无消息的最大容忍时长，超时重连。
+- `POLYMARKET_WS_RESET_ON_RECONNECT`：重连后清空缓存，触发 REST 回补。
 - `POLYMARKET_CACHE_TTL_MS`：市场列表缓存。
 - `POLYMARKET_PRIVATE_KEY`：签名私钥。
 - `POLYMARKET_API_KEY/SECRET/PASSPHRASE`：API 凭证。
@@ -152,6 +157,8 @@
 - `PREDICT_WS_URL`：WS 地址。
 - `PREDICT_WS_API_KEY`：WS Key。
 - `PREDICT_WS_TOPIC_KEY`：订阅维度。
+- `PREDICT_WS_STALE_MS`：WS 无消息的最大容忍时长，超时重连。
+- `PREDICT_WS_RESET_ON_RECONNECT`：重连后清空缓存，触发 REST 回补。
 
 ## 13. Opinion
 
@@ -167,6 +174,8 @@
 - `OPINION_WS_ENABLED`：WS 开关。
 - `OPINION_WS_URL`：WS 地址。
 - `OPINION_WS_HEARTBEAT_MS`：心跳间隔。
+- `OPINION_WS_STALE_MS`：WS 无消息的最大容忍时长，超时重连。
+- `OPINION_WS_RESET_ON_RECONNECT`：重连后清空缓存，触发 REST 回补。
 
 ## 14. 其他
 
