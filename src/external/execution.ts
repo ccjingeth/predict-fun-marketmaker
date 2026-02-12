@@ -385,10 +385,6 @@ export class CrossPlatformExecutionRouter {
   }
 
   async execute(legs: PlatformLeg[]): Promise<void> {
-    if (this.config.crossPlatformExecutionVwapCheck !== false) {
-      await this.preflightVwap(legs);
-    }
-
     this.assertCircuitHealthy();
 
     const maxRetries = Math.max(0, this.config.crossPlatformMaxRetries || 0);
@@ -396,8 +392,17 @@ export class CrossPlatformExecutionRouter {
 
     let attempt = 0;
     while (true) {
+      this.assertCircuitHealthy();
+      const plannedLegs = this.adjustLegsForAttempt(legs, attempt);
+      if (!plannedLegs.length) {
+        throw new Error('No executable legs after retry scaling');
+      }
+      if (this.config.crossPlatformExecutionVwapCheck !== false) {
+        await this.preflightVwap(plannedLegs);
+      }
+
       try {
-        await this.executeOnce(legs);
+        await this.executeOnce(plannedLegs);
         this.onSuccess();
         return;
       } catch (error: any) {
@@ -513,6 +518,37 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private adjustLegsForAttempt(legs: PlatformLeg[], attempt: number): PlatformLeg[] {
+    if (attempt <= 0) {
+      return legs;
+    }
+
+    const factor = this.config.crossPlatformRetrySizeFactor ?? 0.6;
+    const aggressiveBps = (this.config.crossPlatformRetryAggressiveBps ?? 0) * attempt;
+    const maxBps = this.config.crossPlatformSlippageBps || 250;
+    const adjBps = Math.min(Math.max(0, aggressiveBps), maxBps);
+
+    return legs
+      .map((leg) => {
+        const scaledShares = leg.shares * Math.pow(factor, attempt);
+        if (scaledShares <= 0.0001) {
+          return null;
+        }
+        let price = leg.price;
+        if (adjBps > 0) {
+          const bump = adjBps / 10000;
+          price = leg.side === 'BUY' ? price * (1 + bump) : price * (1 - bump);
+        }
+        price = Math.min(0.9999, Math.max(0.0001, price));
+        return {
+          ...leg,
+          price,
+          shares: scaledShares,
+        };
+      })
+      .filter((leg): leg is PlatformLeg => Boolean(leg));
   }
 
   private assertCircuitHealthy(): void {

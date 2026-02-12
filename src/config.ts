@@ -72,6 +72,8 @@ export function loadConfig(): Config {
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
     crossPlatformCircuitWindowMs: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_WINDOW_MS || '60000'),
     crossPlatformCircuitCooldownMs: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS || '60000'),
+    crossPlatformRetrySizeFactor: parseFloat(process.env.CROSS_PLATFORM_RETRY_SIZE_FACTOR || '0.6'),
+    crossPlatformRetryAggressiveBps: parseInt(process.env.CROSS_PLATFORM_RETRY_AGGRESSIVE_BPS || '0'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
     crossPlatformUseMapping: process.env.CROSS_PLATFORM_USE_MAPPING !== 'false',
@@ -229,6 +231,8 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Circuit Max Failures: ${config.crossPlatformCircuitMaxFailures}`);
   console.log(`Cross-Platform Circuit Window Ms: ${config.crossPlatformCircuitWindowMs}`);
   console.log(`Cross-Platform Circuit Cooldown Ms: ${config.crossPlatformCircuitCooldownMs}`);
+  console.log(`Cross-Platform Retry Size Factor: ${config.crossPlatformRetrySizeFactor}`);
+  console.log(`Cross-Platform Retry Aggressive Bps: ${config.crossPlatformRetryAggressiveBps}`);
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
   console.log(`Dependency Arb: ${config.dependencyEnabled ? '✅' : '❌'}`);
