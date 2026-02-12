@@ -13,6 +13,15 @@ const __dirname = path.dirname(__filename);
 const envPath = process.env.ENV_PATH || path.join(__dirname, '../.env');
 dotenvConfig({ path: envPath });
 
+const parseList = (value?: string): string[] | undefined => {
+  if (!value) return undefined;
+  const items = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return items.length > 0 ? items : undefined;
+};
+
 /**
  * Load and validate configuration
  */
@@ -89,6 +98,20 @@ export function loadConfig(): Config {
     crossPlatformTokenScoreOnFailure: parseInt(process.env.CROSS_PLATFORM_TOKEN_SCORE_ON_FAILURE || '5'),
     crossPlatformTokenScoreOnVolatility: parseInt(process.env.CROSS_PLATFORM_TOKEN_SCORE_ON_VOLATILITY || '10'),
     crossPlatformTokenScoreOnPostTrade: parseInt(process.env.CROSS_PLATFORM_TOKEN_SCORE_ON_POST_TRADE || '15'),
+    crossPlatformPlatformMinScore: parseInt(process.env.CROSS_PLATFORM_PLATFORM_MIN_SCORE || '40'),
+    crossPlatformPlatformScoreOnSuccess: parseInt(process.env.CROSS_PLATFORM_PLATFORM_SCORE_ON_SUCCESS || '1'),
+    crossPlatformPlatformScoreOnFailure: parseInt(process.env.CROSS_PLATFORM_PLATFORM_SCORE_ON_FAILURE || '3'),
+    crossPlatformPlatformScoreOnVolatility: parseInt(process.env.CROSS_PLATFORM_PLATFORM_SCORE_ON_VOLATILITY || '6'),
+    crossPlatformPlatformScoreOnPostTrade: parseInt(process.env.CROSS_PLATFORM_PLATFORM_SCORE_ON_POST_TRADE || '8'),
+    crossPlatformPlatformScoreOnSpread: parseInt(process.env.CROSS_PLATFORM_PLATFORM_SCORE_ON_SPREAD || '6'),
+    crossPlatformLegDriftSpreadBps: parseInt(process.env.CROSS_PLATFORM_LEG_DRIFT_SPREAD_BPS || '0'),
+    crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
+    crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
+    crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),
+    crossPlatformBlocklistPlatforms: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_PLATFORMS),
+    crossPlatformChunkMaxShares: parseFloat(process.env.CROSS_PLATFORM_CHUNK_MAX_SHARES || '0'),
+    crossPlatformChunkMaxNotional: parseFloat(process.env.CROSS_PLATFORM_CHUNK_MAX_NOTIONAL || '0'),
+    crossPlatformChunkDelayMs: parseInt(process.env.CROSS_PLATFORM_CHUNK_DELAY_MS || '0'),
     crossPlatformOrderType: (crossPlatformOrderTypeRaw || undefined) as Config['crossPlatformOrderType'],
     crossPlatformBatchOrders: process.env.CROSS_PLATFORM_BATCH_ORDERS === 'true',
     crossPlatformBatchMax: parseInt(process.env.CROSS_PLATFORM_BATCH_MAX || '15'),

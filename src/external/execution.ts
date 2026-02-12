@@ -593,6 +593,11 @@ export class CrossPlatformExecutionRouter {
   private tokenFailures = new Map<string, { count: number; windowStart: number; cooldownUntil: number }>();
   private tokenScores = new Map<string, { score: number; ts: number }>();
   private qualityScore = 1;
+  private platformScores = new Map<ExternalPlatform, { score: number; ts: number }>();
+  private allowlistTokens?: Set<string>;
+  private blocklistTokens?: Set<string>;
+  private allowlistPlatforms?: Set<string>;
+  private blocklistPlatforms?: Set<string>;
   private metrics = {
     attempts: 0,
     successes: 0,
@@ -609,6 +614,10 @@ export class CrossPlatformExecutionRouter {
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
     this.api = api;
+    this.allowlistTokens = this.buildSet(config.crossPlatformAllowlistTokens);
+    this.blocklistTokens = this.buildSet(config.crossPlatformBlocklistTokens);
+    this.allowlistPlatforms = this.buildSet(config.crossPlatformAllowlistPlatforms);
+    this.blocklistPlatforms = this.buildSet(config.crossPlatformBlocklistPlatforms);
     this.executors.set(
       'Predict',
       new PredictExecutor(api, orderManager, config.crossPlatformSlippageBps || 250, {
@@ -639,7 +648,9 @@ export class CrossPlatformExecutionRouter {
       if (!plannedLegs.length) {
         throw new Error('No executable legs after retry scaling');
       }
+      this.assertAllowlist(plannedLegs);
       this.assertTokenHealthy(plannedLegs);
+      this.assertPlatformScore(plannedLegs);
       const attemptStart = Date.now();
       let preflightMs = 0;
       let execMs = 0;
@@ -651,21 +662,37 @@ export class CrossPlatformExecutionRouter {
         preflightMs = Date.now() - preflightStart;
 
         const execStart = Date.now();
-        const results = await this.executeOnce(preparedLegs);
+        const chunkResult = await this.executeChunks(preparedLegs);
         execMs = Date.now() - execStart;
-        await this.postFillCheck(results);
-        const postTrade = await this.postTradeCheck(preparedLegs);
+        const postTrade = chunkResult.postTrade;
         this.onSuccess();
         if (postTrade.penalizedLegs.length > 0) {
           this.recordTokenFailure(postTrade.penalizedLegs);
         }
         this.recordTokenSuccess(preparedLegs.filter((leg) => !postTrade.penalizedTokenIds.has(leg.tokenId)));
+        this.adjustPlatformScores(preparedLegs, this.config.crossPlatformPlatformScoreOnSuccess || 1);
         this.adjustTokenScores(preparedLegs, this.config.crossPlatformTokenScoreOnSuccess || 2);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
             -Math.abs(this.config.crossPlatformTokenScoreOnPostTrade || 15)
           );
+          this.adjustPlatformScores(
+            postTrade.penalizedLegs,
+            -Math.abs(this.config.crossPlatformPlatformScoreOnPostTrade || 8)
+          );
+          this.applyQualityPenalty(0.5);
+        }
+        if (postTrade.spreadPenalizedLegs.length > 0) {
+          this.adjustTokenScores(
+            postTrade.spreadPenalizedLegs,
+            -Math.abs(this.config.crossPlatformTokenScoreOnPostTrade || 15)
+          );
+          this.adjustPlatformScores(
+            postTrade.spreadPenalizedLegs,
+            -Math.abs(this.config.crossPlatformPlatformScoreOnSpread || 6)
+          );
+          this.applyQualityPenalty(0.3);
         }
         this.updateQualityScore(true);
         this.recordMetrics({
@@ -683,6 +710,10 @@ export class CrossPlatformExecutionRouter {
         this.adjustTokenScores(
           preparedLegs.length ? preparedLegs : plannedLegs,
           -Math.abs(this.config.crossPlatformTokenScoreOnFailure || 5)
+        );
+        this.adjustPlatformScores(
+          preparedLegs.length ? preparedLegs : plannedLegs,
+          -Math.abs(this.config.crossPlatformPlatformScoreOnFailure || 3)
         );
         this.updateQualityScore(false);
         this.recordMetrics({
@@ -757,6 +788,72 @@ export class CrossPlatformExecutionRouter {
     }
 
     return results;
+  }
+
+  private async executeChunks(legs: PlatformLeg[]): Promise<{ postTrade: { maxDriftBps: number; penalizedLegs: PlatformLeg[]; penalizedTokenIds: Set<string>; spreadPenalizedLegs: PlatformLeg[] } }> {
+    const chunks = this.splitLegsIntoChunks(legs);
+    let maxDriftBps = 0;
+    const penalizedLegs: PlatformLeg[] = [];
+    const penalizedTokenIds = new Set<string>();
+    const spreadPenalizedLegs: PlatformLeg[] = [];
+
+    for (let i = 0; i < chunks.length; i += 1) {
+      const chunk = chunks[i];
+      const results = await this.executeOnce(chunk);
+      await this.postFillCheck(results);
+      const post = await this.postTradeCheck(chunk);
+      maxDriftBps = Math.max(maxDriftBps, post.maxDriftBps);
+      this.mergeLegs(penalizedLegs, post.penalizedLegs);
+      this.mergeLegs(spreadPenalizedLegs, post.spreadPenalizedLegs);
+      post.penalizedTokenIds.forEach((id) => penalizedTokenIds.add(id));
+
+      const delayMs = Math.max(0, this.config.crossPlatformChunkDelayMs || 0);
+      if (delayMs > 0 && i < chunks.length - 1) {
+        await this.sleep(delayMs);
+      }
+    }
+
+    return { postTrade: { maxDriftBps, penalizedLegs, penalizedTokenIds, spreadPenalizedLegs } };
+  }
+
+  private splitLegsIntoChunks(legs: PlatformLeg[]): PlatformLeg[][] {
+    if (!legs.length) return [];
+    const baseShares = Math.min(...legs.map((leg) => leg.shares));
+    const maxChunkShares = this.config.crossPlatformChunkMaxShares || 0;
+    const maxChunkNotional = this.config.crossPlatformChunkMaxNotional || 0;
+    let chunkShares = baseShares;
+    if (maxChunkShares > 0) {
+      chunkShares = Math.min(chunkShares, maxChunkShares);
+    }
+    if (maxChunkNotional > 0) {
+      const perShareNotional = legs.reduce((sum, leg) => sum + leg.price, 0);
+      if (perShareNotional > 0) {
+        chunkShares = Math.min(chunkShares, maxChunkNotional / perShareNotional);
+      }
+    }
+    if (!Number.isFinite(chunkShares) || chunkShares <= 0 || chunkShares >= baseShares) {
+      return [legs];
+    }
+
+    const chunks: PlatformLeg[][] = [];
+    let remaining = baseShares;
+    while (remaining > 0) {
+      const size = Math.min(chunkShares, remaining);
+      const chunk = legs.map((leg) => ({ ...leg, shares: size }));
+      chunks.push(chunk);
+      remaining -= size;
+    }
+    return chunks;
+  }
+
+  private mergeLegs(target: PlatformLeg[], incoming: PlatformLeg[]): void {
+    const seen = new Set(target.map((leg) => `${leg.platform}:${leg.tokenId}:${leg.side}`));
+    for (const leg of incoming) {
+      const key = `${leg.platform}:${leg.tokenId}:${leg.side}`;
+      if (seen.has(key)) continue;
+      target.push(leg);
+      seen.add(key);
+    }
   }
 
   private async cancelSubmitted(
@@ -942,6 +1039,77 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private adjustPlatformScores(legs: PlatformLeg[], delta: number): void {
+    if (!delta) {
+      return;
+    }
+    for (const leg of legs) {
+      this.adjustPlatformScoreSingle(leg.platform, delta);
+    }
+  }
+
+  private adjustPlatformScoreSingle(platform: ExternalPlatform, delta: number): void {
+    if (!platform || !delta) {
+      return;
+    }
+    const current = this.platformScores.get(platform) || { score: 100, ts: Date.now() };
+    const next = Math.max(0, Math.min(100, current.score + delta));
+    this.platformScores.set(platform, { score: next, ts: Date.now() });
+  }
+
+  private assertPlatformScore(legs: PlatformLeg[]): void {
+    const minScore = Math.max(0, this.config.crossPlatformPlatformMinScore || 0);
+    if (!minScore) {
+      return;
+    }
+    for (const leg of legs) {
+      const score = this.platformScores.get(leg.platform)?.score ?? 100;
+      if (score < minScore) {
+        throw new Error(`Platform score too low (${score}) for ${leg.platform}`);
+      }
+    }
+  }
+
+  private buildSet(values?: string[]): Set<string> | undefined {
+    if (!values || values.length === 0) {
+      return undefined;
+    }
+    return new Set(values.map((item) => item.trim()).filter((item) => item.length > 0));
+  }
+
+  private assertAllowlist(legs: PlatformLeg[]): void {
+    if (this.allowlistTokens) {
+      for (const leg of legs) {
+        if (!leg.tokenId) continue;
+        if (!this.allowlistTokens.has(leg.tokenId)) {
+          throw new Error(`Token not in allowlist: ${leg.tokenId}`);
+        }
+      }
+    }
+    if (this.blocklistTokens) {
+      for (const leg of legs) {
+        if (!leg.tokenId) continue;
+        if (this.blocklistTokens.has(leg.tokenId)) {
+          throw new Error(`Token blocked: ${leg.tokenId}`);
+        }
+      }
+    }
+    if (this.allowlistPlatforms) {
+      for (const leg of legs) {
+        if (!this.allowlistPlatforms.has(leg.platform)) {
+          throw new Error(`Platform not in allowlist: ${leg.platform}`);
+        }
+      }
+    }
+    if (this.blocklistPlatforms) {
+      for (const leg of legs) {
+        if (this.blocklistPlatforms.has(leg.platform)) {
+          throw new Error(`Platform blocked: ${leg.platform}`);
+        }
+      }
+    }
+  }
+
   private adjustTokenScoreSingle(tokenId: string, delta: number): void {
     if (!tokenId || !delta) {
       return;
@@ -978,6 +1146,15 @@ export class CrossPlatformExecutionRouter {
     } else {
       this.qualityScore = Math.max(minFactor, this.qualityScore - down);
     }
+  }
+
+  private applyQualityPenalty(multiplier: number): void {
+    if (this.config.crossPlatformAutoTune === false) {
+      return;
+    }
+    const down = Math.max(0, this.config.crossPlatformAutoTuneDown || 0.08);
+    const minFactor = Math.max(0.1, this.config.crossPlatformAutoTuneMinFactor || 0.5);
+    this.qualityScore = Math.max(minFactor, this.qualityScore - down * Math.max(0, multiplier));
   }
 
   private getAutoTuneFactor(): number {
@@ -1051,9 +1228,10 @@ export class CrossPlatformExecutionRouter {
     );
   }
 
-  private checkVolatility(tokenId: string, book: OrderbookSnapshot): void {
+  private checkVolatility(leg: PlatformLeg, book: OrderbookSnapshot): void {
     const threshold = (this.config.crossPlatformVolatilityBps ?? 0) * this.getAutoTuneFactor();
     const lookbackMs = this.config.crossPlatformVolatilityLookbackMs ?? 0;
+    const tokenId = leg.tokenId;
     if (!tokenId || threshold <= 0 || lookbackMs <= 0) {
       return;
     }
@@ -1069,6 +1247,10 @@ export class CrossPlatformExecutionRouter {
       const drift = Math.abs((price - prev.price) / prev.price) * 10000;
       if (drift > threshold) {
         this.adjustTokenScoreSingle(tokenId, -Math.abs(this.config.crossPlatformTokenScoreOnVolatility || 10));
+        this.adjustPlatformScoreSingle(
+          leg.platform,
+          -Math.abs(this.config.crossPlatformPlatformScoreOnVolatility || 6)
+        );
         throw new Error(`Preflight failed: volatility ${drift.toFixed(1)} bps (max ${threshold}) for ${tokenId}`);
       }
     }
@@ -1094,7 +1276,7 @@ export class CrossPlatformExecutionRouter {
       if (!book) {
         throw new Error(`Preflight failed: missing orderbook for ${leg.platform}:${leg.tokenId}`);
       }
-      this.checkVolatility(leg.tokenId, book);
+      this.checkVolatility(leg, book);
 
       const feeBps = this.getFeeBps(leg.platform);
       const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
@@ -1218,6 +1400,10 @@ export class CrossPlatformExecutionRouter {
               leg.tokenId,
               -Math.abs(this.config.crossPlatformTokenScoreOnVolatility || 10)
             );
+            this.adjustPlatformScoreSingle(
+              leg.platform,
+              -Math.abs(this.config.crossPlatformPlatformScoreOnVolatility || 6)
+            );
             throw new Error(`Preflight failed: unstable book ${drift.toFixed(1)} bps (max ${threshold}) for ${leg.tokenId}`);
           }
         }
@@ -1241,7 +1427,7 @@ export class CrossPlatformExecutionRouter {
         if (!book) {
           return 0;
         }
-        this.checkVolatility(leg.tokenId, book);
+        this.checkVolatility(leg, book);
         const feeBps = this.getFeeBps(leg.platform);
         const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
 
@@ -1303,15 +1489,17 @@ export class CrossPlatformExecutionRouter {
     maxDriftBps: number;
     penalizedLegs: PlatformLeg[];
     penalizedTokenIds: Set<string>;
+    spreadPenalizedLegs: PlatformLeg[];
   }> {
     const threshold = Math.max(0, this.config.crossPlatformPostTradeDriftBps || 0);
     if (!threshold) {
-      return { maxDriftBps: 0, penalizedLegs: [], penalizedTokenIds: new Set() };
+      return { maxDriftBps: 0, penalizedLegs: [], penalizedTokenIds: new Set(), spreadPenalizedLegs: [] };
     }
 
     let maxDriftBps = 0;
     const penalizedLegs: PlatformLeg[] = [];
     const penalizedTokenIds = new Set<string>();
+    const drifts: Array<{ leg: PlatformLeg; drift: number }> = [];
 
     for (const leg of legs) {
       const book = await this.fetchOrderbookInternal(leg);
@@ -1323,6 +1511,7 @@ export class CrossPlatformExecutionRouter {
         continue;
       }
       const drift = Math.abs((ref - leg.price) / leg.price) * 10000;
+      drifts.push({ leg, drift });
       if (drift > maxDriftBps) {
         maxDriftBps = drift;
       }
@@ -1331,6 +1520,26 @@ export class CrossPlatformExecutionRouter {
         if (leg.tokenId) {
           penalizedTokenIds.add(leg.tokenId);
         }
+        this.adjustPlatformScoreSingle(
+          leg.platform,
+          -Math.abs(this.config.crossPlatformPlatformScoreOnPostTrade || 8)
+        );
+      }
+    }
+
+    const spreadPenalizedLegs: PlatformLeg[] = [];
+    const spreadThreshold = Math.max(0, this.config.crossPlatformLegDriftSpreadBps || 0);
+    if (spreadThreshold > 0 && drifts.length >= 2) {
+      const driftValues = drifts.map((d) => d.drift);
+      const minDrift = Math.min(...driftValues);
+      const maxDrift = Math.max(...driftValues);
+      if (maxDrift - minDrift > spreadThreshold) {
+        const cutoff = maxDrift - spreadThreshold / 2;
+        for (const entry of drifts) {
+          if (entry.drift >= cutoff) {
+            spreadPenalizedLegs.push(entry.leg);
+          }
+        }
       }
     }
 
@@ -1338,7 +1547,19 @@ export class CrossPlatformExecutionRouter {
       console.warn(`[CrossExec] post-trade drift exceeded ${threshold} bps on ${penalizedLegs.length} legs`);
     }
 
-    return { maxDriftBps, penalizedLegs, penalizedTokenIds };
+    if (spreadPenalizedLegs.length > 0 && spreadThreshold > 0) {
+      console.warn(
+        `[CrossExec] drift spread exceeded ${spreadThreshold} bps on ${spreadPenalizedLegs.length} legs`
+      );
+      for (const leg of spreadPenalizedLegs) {
+        this.adjustPlatformScoreSingle(
+          leg.platform,
+          -Math.abs(this.config.crossPlatformPlatformScoreOnSpread || 6)
+        );
+      }
+    }
+
+    return { maxDriftBps, penalizedLegs, penalizedTokenIds, spreadPenalizedLegs };
   }
 
   private getFeeBps(platform: ExternalPlatform): number {
