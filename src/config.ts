@@ -119,6 +119,10 @@ export function loadConfig(): Config {
     mmIntervalProfileVolatileMultiplier: parseFloat(process.env.MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER || '1.3'),
     mmIntervalProfileCalmMultiplier: parseFloat(process.env.MM_INTERVAL_PROFILE_CALM_MULTIPLIER || '0.8'),
     mmMaxSharesPerOrder: parseFloat(process.env.MM_MAX_SHARES_PER_ORDER || '0'),
+    mmSizeInventoryWeight: parseFloat(process.env.MM_SIZE_INVENTORY_WEIGHT || '0.4'),
+    mmSizeImbalanceWeight: parseFloat(process.env.MM_SIZE_IMBALANCE_WEIGHT || '0.3'),
+    mmSizeMinFactor: parseFloat(process.env.MM_SIZE_MIN_FACTOR || '0.3'),
+    mmSizeMaxFactor: parseFloat(process.env.MM_SIZE_MAX_FACTOR || '1.4'),
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -414,6 +418,14 @@ export function loadConfig(): Config {
     config.mmMaxSharesPerOrder = 0;
   }
 
+  if ((config.mmSizeMinFactor ?? 0) <= 0) {
+    config.mmSizeMinFactor = 0.3;
+  }
+
+  if ((config.mmSizeMaxFactor ?? 0) < (config.mmSizeMinFactor ?? 0.3)) {
+    config.mmSizeMaxFactor = config.mmSizeMinFactor ?? 0.3;
+  }
+
   return config;
 }
 
@@ -446,6 +458,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `MM Asym Weights: inv=${config.mmAsymSpreadInventoryWeight} imb=${config.mmAsymSpreadImbalanceWeight}`
+  );
+  console.log(
+    `MM Size Weights: inv=${config.mmSizeInventoryWeight} imb=${config.mmSizeImbalanceWeight} clamp=${config.mmSizeMinFactor}-${config.mmSizeMaxFactor}`
   );
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);

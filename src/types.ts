@@ -94,6 +94,10 @@ export interface Config {
   mmIntervalProfileVolatileMultiplier?: number;
   mmIntervalProfileCalmMultiplier?: number;
   mmMaxSharesPerOrder?: number;
+  mmSizeInventoryWeight?: number;
+  mmSizeImbalanceWeight?: number;
+  mmSizeMinFactor?: number;
+  mmSizeMaxFactor?: number;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;

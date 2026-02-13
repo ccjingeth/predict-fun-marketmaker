@@ -941,6 +941,23 @@ export class MarketMaker {
       depthCap = Math.floor(this.sumDepthLevels(sideLevels, levels) * depthFactor);
     }
 
+    const inventoryBias = this.calculateInventoryBias(market.token_id);
+    const imbalance = this.calculateOrderbookImbalance(orderbook);
+    const sizeInvWeight = this.config.mmSizeInventoryWeight ?? 0.4;
+    const sizeImbWeight = this.config.mmSizeImbalanceWeight ?? 0.3;
+    const sizeMin = this.config.mmSizeMinFactor ?? 0.3;
+    const sizeMax = this.config.mmSizeMaxFactor ?? 1.4;
+    let sizeFactor = 1;
+    if (side === 'BUY') {
+      sizeFactor *= 1 - inventoryBias * sizeInvWeight;
+      sizeFactor *= 1 + imbalance * sizeImbWeight;
+    } else {
+      sizeFactor *= 1 + inventoryBias * sizeInvWeight;
+      sizeFactor *= 1 - imbalance * sizeImbWeight;
+    }
+    sizeFactor = this.clamp(sizeFactor, sizeMin, sizeMax);
+    shares = Math.floor(shares * sizeFactor);
+
     const minShares = market.liquidity_activation?.min_shares || 0;
     if (minShares > 0 && shares < minShares) {
       const minOrderValue = minShares * price;

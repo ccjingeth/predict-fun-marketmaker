@@ -42,6 +42,10 @@
 - `MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER`：波动档下单间隔倍率。
 - `MM_INTERVAL_PROFILE_CALM_MULTIPLIER`：平稳档下单间隔倍率。
 - `MM_MAX_SHARES_PER_ORDER`：单笔挂单最大份额上限（0=不限制）。
+- `MM_SIZE_INVENTORY_WEIGHT`：库存方向对“挂单份额”的影响权重。
+- `MM_SIZE_IMBALANCE_WEIGHT`：盘口不平衡对“挂单份额”的影响权重。
+- `MM_SIZE_MIN_FACTOR`：挂单份额缩放下限（防止缩得过小）。
+- `MM_SIZE_MAX_FACTOR`：挂单份额缩放上限（防止过度放大）。
 
 ### 做市自适应参数（新增）
 
