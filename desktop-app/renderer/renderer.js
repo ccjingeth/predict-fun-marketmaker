@@ -4,6 +4,7 @@ const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
 const failureCategoryFilter = document.getElementById('failureCategoryFilter');
+const logKeyword = document.getElementById('logKeyword');
 const globalStatus = document.getElementById('globalStatus');
 const tradingMode = document.getElementById('tradingMode');
 const statusMM = document.getElementById('statusMM');
@@ -48,6 +49,8 @@ const resetRiskWeightsBtn = document.getElementById('resetRiskWeights');
 const saveWeightPresetBtn = document.getElementById('saveWeightPreset');
 const weightPresetSelect = document.getElementById('weightPresetSelect');
 const deleteWeightPresetBtn = document.getElementById('deleteWeightPreset');
+const exportWeightPresetBtn = document.getElementById('exportWeightPreset');
+const importWeightPresetBtn = document.getElementById('importWeightPreset');
 const metricRiskScore = document.getElementById('metricRiskScore');
 const metricRiskBar = document.getElementById('metricRiskBar');
 const chartSuccess = document.getElementById('chartSuccess');
@@ -296,6 +299,45 @@ function bindRiskWeightInputs() {
       pushLog({ type: 'system', level: 'system', message: `已删除权重预设：${name}` });
     });
   }
+  if (exportWeightPresetBtn) {
+    exportWeightPresetBtn.addEventListener('click', () => {
+      const payload = Array.from(weightPresets.entries()).map(([name, weights]) => ({ name, weights }));
+      if (!payload.length) {
+        pushLog({ type: 'system', level: 'system', message: '暂无可导出的预设' });
+        return;
+      }
+      const json = JSON.stringify(payload, null, 2);
+      navigator.clipboard
+        .writeText(json)
+        .then(() => {
+          pushLog({ type: 'system', level: 'system', message: '权重预设已复制到剪贴板' });
+        })
+        .catch(() => {
+          pushLog({ type: 'system', level: 'stderr', message: '复制失败，请手动复制' });
+        });
+    });
+  }
+  if (importWeightPresetBtn) {
+    importWeightPresetBtn.addEventListener('click', () => {
+      const raw = prompt('粘贴预设 JSON：');
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          throw new Error('格式错误');
+        }
+        parsed.forEach((item) => {
+          if (!item?.name || !item?.weights) return;
+          weightPresets.set(item.name, item.weights);
+        });
+        saveWeightPresets();
+        updateWeightPresetSelect();
+        pushLog({ type: 'system', level: 'system', message: '已导入权重预设' });
+      } catch (error) {
+        pushLog({ type: 'system', level: 'stderr', message: '预设 JSON 解析失败' });
+      }
+    });
+  }
 }
 
 function updateStatusDisplay(status) {
@@ -353,6 +395,7 @@ function syncTogglesFromEnv(text) {
 function renderLogs() {
   const filter = logFilter.value;
   const category = failureCategoryFilter?.value || 'all';
+  const keyword = (logKeyword?.value || '').trim().toLowerCase();
   logOutput.innerHTML = '';
   const fragment = document.createDocumentFragment();
 
@@ -362,6 +405,9 @@ function renderLogs() {
   }).filter((entry) => {
     if (category === 'all') return true;
     return entry.category === category;
+  }).filter((entry) => {
+    if (!keyword) return true;
+    return (entry.message || '').toLowerCase().includes(keyword);
   });
 
   for (const entry of view) {
@@ -807,6 +853,24 @@ function applySelectedFixes() {
   const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
   let text = envEditor.value || '';
   let applied = 0;
+  const diffs = [];
+  checkboxes.forEach((cb) => {
+    if (!cb.checked) return;
+    const key = cb.dataset.key;
+    const value = cb.dataset.value;
+    if (!key || value === undefined) return;
+    const current = parseEnv(text).get(key);
+    diffs.push(`${key}: ${current ?? '未设置'} → ${value}`);
+  });
+  if (diffs.length === 0) {
+    pushLog({ type: 'system', level: 'system', message: '没有选中任何修复建议' });
+    return;
+  }
+  const confirmed = confirm(`即将应用以下修改：\n${diffs.join('\n')}\n\n确认应用吗？`);
+  if (!confirmed) {
+    pushLog({ type: 'system', level: 'system', message: '已取消修复建议应用' });
+    return;
+  }
   checkboxes.forEach((cb) => {
     if (!cb.checked) return;
     const key = cb.dataset.key;
@@ -1362,6 +1426,7 @@ window.predictBot.onStatus((payload) => {
 
 logFilter.addEventListener('change', renderLogs);
 failureCategoryFilter.addEventListener('change', renderLogs);
+logKeyword.addEventListener('input', renderLogs);
 
 document.getElementById('clearLog').addEventListener('click', () => {
   logs.length = 0;

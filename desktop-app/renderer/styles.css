@@ -470,6 +470,15 @@ select {
   border-radius: 10px;
 }
 
+input#logKeyword {
+  background: #0f1328;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  padding: 6px 10px;
+  border-radius: 10px;
+  min-width: 180px;
+}
+
 .config-card textarea {
   flex: 1;
   min-height: 420px;
