@@ -259,6 +259,10 @@ export function loadConfig(): Config {
     crossPlatformCircuitCooldownMs: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS || '60000'),
     crossPlatformRetrySizeFactor: parseFloat(process.env.CROSS_PLATFORM_RETRY_SIZE_FACTOR || '0.6'),
     crossPlatformRetryAggressiveBps: parseInt(process.env.CROSS_PLATFORM_RETRY_AGGRESSIVE_BPS || '0'),
+    crossPlatformRetryFactorMin: parseFloat(process.env.CROSS_PLATFORM_RETRY_FACTOR_MIN || '0.4'),
+    crossPlatformRetryFactorMax: parseFloat(process.env.CROSS_PLATFORM_RETRY_FACTOR_MAX || '1'),
+    crossPlatformRetryFactorUp: parseFloat(process.env.CROSS_PLATFORM_RETRY_FACTOR_UP || '0.02'),
+    crossPlatformRetryFactorDown: parseFloat(process.env.CROSS_PLATFORM_RETRY_FACTOR_DOWN || '0.08'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformRequireWs: process.env.CROSS_PLATFORM_REQUIRE_WS === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
@@ -450,6 +454,23 @@ export function loadConfig(): Config {
   if ((config.crossPlatformAbortPostTradeDriftBps ?? 0) < 0) {
     config.crossPlatformAbortPostTradeDriftBps = 0;
   }
+  if ((config.crossPlatformRetryFactorMin ?? 0) <= 0 || (config.crossPlatformRetryFactorMin ?? 0) > 1) {
+    config.crossPlatformRetryFactorMin = 0.4;
+  }
+  if ((config.crossPlatformRetryFactorMax ?? 0) <= 0 || (config.crossPlatformRetryFactorMax ?? 0) > 1) {
+    config.crossPlatformRetryFactorMax = 1;
+  }
+  if ((config.crossPlatformRetryFactorMax ?? 1) < (config.crossPlatformRetryFactorMin ?? 0.4)) {
+    const temp = config.crossPlatformRetryFactorMax;
+    config.crossPlatformRetryFactorMax = config.crossPlatformRetryFactorMin;
+    config.crossPlatformRetryFactorMin = temp;
+  }
+  if ((config.crossPlatformRetryFactorUp ?? 0) < 0) {
+    config.crossPlatformRetryFactorUp = 0.02;
+  }
+  if ((config.crossPlatformRetryFactorDown ?? 0) < 0) {
+    config.crossPlatformRetryFactorDown = 0.08;
+  }
 
   if ((config.mmDepthEmaAlpha ?? 0) <= 0 || (config.mmDepthEmaAlpha ?? 0) >= 1) {
     config.mmDepthEmaAlpha = 0.2;
@@ -593,6 +614,9 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Retry Size Factor: ${config.crossPlatformRetrySizeFactor}`);
   console.log(`Cross-Platform Retry Aggressive Bps: ${config.crossPlatformRetryAggressiveBps}`);
   console.log(`Cross-Platform Abort Drift Bps: ${config.crossPlatformAbortPostTradeDriftBps}`);
+  console.log(
+    `Cross-Platform Retry Factor: ${config.crossPlatformRetryFactorMin}-${config.crossPlatformRetryFactorMax} up=${config.crossPlatformRetryFactorUp} down=${config.crossPlatformRetryFactorDown}`
+  );
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
   console.log(`Dependency Arb: ${config.dependencyEnabled ? '✅' : '❌'}`);

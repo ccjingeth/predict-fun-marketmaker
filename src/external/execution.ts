@@ -605,6 +605,7 @@ export class CrossPlatformExecutionRouter {
   private chunkDelayMs = 0;
   private lastMetricsFlush = 0;
   private lastStateFlush = 0;
+  private retryFactor = 1;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -630,6 +631,9 @@ export class CrossPlatformExecutionRouter {
     this.allowlistPlatforms = this.buildSet(config.crossPlatformAllowlistPlatforms);
     this.blocklistPlatforms = this.buildSet(config.crossPlatformBlocklistPlatforms);
     this.chunkDelayMs = Math.max(0, config.crossPlatformChunkDelayMs || 0);
+    const minRetry = Math.max(0.1, config.crossPlatformRetryFactorMin || 0.4);
+    const maxRetry = Math.max(minRetry, config.crossPlatformRetryFactorMax || 1);
+    this.retryFactor = maxRetry;
     this.restoreState().catch((error) => {
       console.warn('Cross-platform state restore failed:', error);
     });
@@ -691,6 +695,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustPlatformScores(preparedLegs, this.config.crossPlatformPlatformScoreOnSuccess || 1);
         this.adjustTokenScores(preparedLegs, this.config.crossPlatformTokenScoreOnSuccess || 2);
         this.adjustChunkFactor(true);
+        this.adjustRetryFactor(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -743,6 +748,7 @@ export class CrossPlatformExecutionRouter {
         this.maybeAutoBlock(preparedLegs.length ? preparedLegs : plannedLegs);
         this.updateQualityScore(false);
         this.adjustChunkFactor(false);
+        this.adjustRetryFactor(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.recordMetrics({
@@ -961,7 +967,7 @@ export class CrossPlatformExecutionRouter {
 
     return legs
       .map((leg) => {
-        const scaledShares = leg.shares * Math.pow(factor, attempt);
+        const scaledShares = leg.shares * Math.pow(factor, attempt) * this.retryFactor;
         if (scaledShares <= 0.0001) {
           return null;
         }
@@ -978,6 +984,18 @@ export class CrossPlatformExecutionRouter {
         };
       })
       .filter((leg): leg is PlatformLeg => Boolean(leg));
+  }
+
+  private adjustRetryFactor(success: boolean): void {
+    const minFactor = Math.max(0.1, this.config.crossPlatformRetryFactorMin || 0.4);
+    const maxFactor = Math.max(minFactor, this.config.crossPlatformRetryFactorMax || 1);
+    const up = Math.max(0, this.config.crossPlatformRetryFactorUp || 0.02);
+    const down = Math.max(0, this.config.crossPlatformRetryFactorDown || 0.08);
+    if (success) {
+      this.retryFactor = Math.min(maxFactor, this.retryFactor + up);
+    } else {
+      this.retryFactor = Math.max(minFactor, this.retryFactor - down);
+    }
   }
 
   private assertCircuitHealthy(): void {

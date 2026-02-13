@@ -234,6 +234,10 @@ export interface Config {
   crossPlatformCircuitCooldownMs?: number;
   crossPlatformRetrySizeFactor?: number;
   crossPlatformRetryAggressiveBps?: number;
+  crossPlatformRetryFactorMin?: number;
+  crossPlatformRetryFactorMax?: number;
+  crossPlatformRetryFactorUp?: number;
+  crossPlatformRetryFactorDown?: number;
   autoConfirmAll?: boolean;
   crossPlatformRequireWs?: boolean;
   crossPlatformMappingPath?: string;
