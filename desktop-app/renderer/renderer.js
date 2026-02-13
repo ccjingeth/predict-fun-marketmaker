@@ -5,6 +5,9 @@ const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
 const failureCategoryFilter = document.getElementById('failureCategoryFilter');
 const logKeyword = document.getElementById('logKeyword');
+const saveLogFilterBtn = document.getElementById('saveLogFilter');
+const logFilterPreset = document.getElementById('logFilterPreset');
+const deleteLogFilterBtn = document.getElementById('deleteLogFilter');
 const globalStatus = document.getElementById('globalStatus');
 const tradingMode = document.getElementById('tradingMode');
 const statusMM = document.getElementById('statusMM');
@@ -83,6 +86,7 @@ const riskWeights = {
   stale: 1,
 };
 const weightPresets = new Map();
+const logFilterPresets = new Map();
 
 function setGlobalStatus(text, active) {
   globalStatus.textContent = text;
@@ -200,6 +204,65 @@ function loadWeightPresets() {
   } catch {
     // ignore
   }
+}
+
+function saveLogFilterPresets() {
+  try {
+    const payload = Array.from(logFilterPresets.entries()).map(([name, filter]) => ({
+      name,
+      filter,
+    }));
+    localStorage.setItem('logFilterPresets', JSON.stringify(payload));
+  } catch {
+    // ignore
+  }
+}
+
+function loadLogFilterPresets() {
+  logFilterPresets.clear();
+  try {
+    const raw = localStorage.getItem('logFilterPresets');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((item) => {
+      if (!item?.name || !item?.filter) return;
+      logFilterPresets.set(item.name, item.filter);
+    });
+  } catch {
+    // ignore
+  }
+}
+
+function updateLogFilterPresetSelect() {
+  if (!logFilterPreset) return;
+  logFilterPreset.innerHTML = '';
+  const defaultOption = document.createElement('option');
+  defaultOption.value = 'default';
+  defaultOption.textContent = '默认筛选';
+  logFilterPreset.appendChild(defaultOption);
+  for (const name of logFilterPresets.keys()) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    logFilterPreset.appendChild(option);
+  }
+}
+
+function applyLogFilterPreset(name) {
+  if (!name || name === 'default') {
+    logFilter.value = 'all';
+    failureCategoryFilter.value = 'all';
+    logKeyword.value = '';
+    renderLogs();
+    return;
+  }
+  const preset = logFilterPresets.get(name);
+  if (!preset) return;
+  logFilter.value = preset.type || 'all';
+  failureCategoryFilter.value = preset.category || 'all';
+  logKeyword.value = preset.keyword || '';
+  renderLogs();
 }
 
 function updateWeightPresetSelect() {
@@ -336,6 +399,41 @@ function bindRiskWeightInputs() {
       } catch (error) {
         pushLog({ type: 'system', level: 'stderr', message: '预设 JSON 解析失败' });
       }
+    });
+  }
+}
+
+function bindLogFilterPresets() {
+  if (saveLogFilterBtn) {
+    saveLogFilterBtn.addEventListener('click', () => {
+      const name = prompt('给这套日志筛选起个名字：');
+      if (!name) return;
+      logFilterPresets.set(name, {
+        type: logFilter.value,
+        category: failureCategoryFilter.value,
+        keyword: logKeyword.value,
+      });
+      saveLogFilterPresets();
+      updateLogFilterPresetSelect();
+      logFilterPreset.value = name;
+      pushLog({ type: 'system', level: 'system', message: `已保存日志筛选：${name}` });
+    });
+  }
+  if (logFilterPreset) {
+    logFilterPreset.addEventListener('change', () => {
+      applyLogFilterPreset(logFilterPreset.value);
+    });
+  }
+  if (deleteLogFilterBtn) {
+    deleteLogFilterBtn.addEventListener('click', () => {
+      const name = logFilterPreset?.value;
+      if (!name || name === 'default') return;
+      logFilterPresets.delete(name);
+      saveLogFilterPresets();
+      updateLogFilterPresetSelect();
+      logFilterPreset.value = 'default';
+      applyLogFilterPreset('default');
+      pushLog({ type: 'system', level: 'system', message: `已删除日志筛选：${name}` });
     });
   }
 }
@@ -1406,9 +1504,12 @@ async function init() {
   setGlobalStatus('已连接', false);
   loadRiskWeights();
   loadWeightPresets();
+  loadLogFilterPresets();
   updateRiskWeightsUI();
   updateWeightPresetSelect();
   bindRiskWeightInputs();
+  updateLogFilterPresetSelect();
+  bindLogFilterPresets();
   await loadMetrics();
   await runDiagnostics();
 }
