@@ -22,6 +22,11 @@ interface QuotePrices {
   inventoryBias: number;
   valueBias?: number;
   valueConfidence?: number;
+  depth?: number;
+  depthTrend?: number;
+  imbalance?: number;
+  profile?: 'CALM' | 'NORMAL' | 'VOLATILE';
+  volatility?: number;
 }
 
 interface OrderSizeResult {
@@ -40,9 +45,15 @@ export class MarketMaker {
   private positions: Map<string, Position> = new Map();
   private lastPrices: Map<string, number> = new Map();
   private lastPriceAt: Map<string, number> = new Map();
+  private lastBestBid: Map<string, number> = new Map();
+  private lastBestAsk: Map<string, number> = new Map();
+  private lastBestAt: Map<string, number> = new Map();
   private volatilityEma: Map<string, number> = new Map();
   private depthEma: Map<string, number> = new Map();
+  private totalDepthEma: Map<string, number> = new Map();
+  private depthTrend: Map<string, number> = new Map();
   private lastDepth: Map<string, number> = new Map();
+  private lastImbalance: Map<string, number> = new Map();
   private lastActionAt: Map<string, number> = new Map();
   private cooldownUntil: Map<string, number> = new Map();
   private pauseUntil: Map<string, number> = new Map();
@@ -191,16 +202,22 @@ export class MarketMaker {
 
   private getAdaptiveMinInterval(tokenId: string): number {
     const base = this.config.minOrderIntervalMs ?? 3000;
-    if (this.config.mmAdaptiveParams === false) {
-      return base;
+    let multiplier = 1;
+    const profile = this.lastProfile.get(tokenId);
+    if (profile === 'VOLATILE') {
+      multiplier *= this.config.mmIntervalProfileVolatileMultiplier ?? 1.3;
+    } else if (profile === 'CALM') {
+      multiplier *= this.config.mmIntervalProfileCalmMultiplier ?? 0.8;
     }
-    const vol = this.volatilityEma.get(tokenId) ?? 0;
-    const threshold = this.config.mmIntervalVolatilityBps ?? 0.01;
-    const mult = this.config.mmIntervalVolMultiplier ?? 1.6;
-    if (vol >= threshold) {
-      return Math.round(base * mult);
+    if (this.config.mmAdaptiveParams !== false) {
+      const vol = this.volatilityEma.get(tokenId) ?? 0;
+      const threshold = this.config.mmIntervalVolatilityBps ?? 0.01;
+      const mult = this.config.mmIntervalVolMultiplier ?? 1.6;
+      if (vol >= threshold) {
+        multiplier *= mult;
+      }
     }
-    return base;
+    return Math.max(500, Math.round(base * multiplier));
   }
 
   private canSendAction(tokenId: string): boolean {
@@ -236,6 +253,57 @@ export class MarketMaker {
 
     const shares = Number(entry.shares);
     return Number.isFinite(shares) && shares > 0 ? shares : 0;
+  }
+
+  private sumDepthLevels(entries: OrderbookEntry[] | undefined, levels: number): number {
+    if (!entries || entries.length === 0) {
+      return 0;
+    }
+    const capped = levels > 0 ? entries.slice(0, levels) : entries;
+    return capped.reduce((sum, entry) => sum + this.parseShares(entry), 0);
+  }
+
+  private updateDepthMetrics(tokenId: string, orderbook: Orderbook): {
+    totalDepth: number;
+    bidDepth: number;
+    askDepth: number;
+    imbalance: number;
+    depthTrend: number;
+  } {
+    const levels = this.config.mmDepthLevels ?? 3;
+    const bidDepth = this.sumDepthLevels(orderbook.bids, levels);
+    const askDepth = this.sumDepthLevels(orderbook.asks, levels);
+    const totalDepth = bidDepth + askDepth;
+
+    const alpha = this.config.mmDepthEmaAlpha ?? 0.2;
+    const prevEma = this.totalDepthEma.get(tokenId) ?? totalDepth;
+    const ema = prevEma + alpha * (totalDepth - prevEma);
+    this.totalDepthEma.set(tokenId, ema);
+
+    const depthTrend = ema > 0 ? (totalDepth - ema) / ema : 0;
+    this.depthTrend.set(tokenId, depthTrend);
+
+    const denom = bidDepth + askDepth;
+    const imbalance = denom > 0 ? (bidDepth - askDepth) / denom : 0;
+    this.lastImbalance.set(tokenId, this.clamp(imbalance, -1, 1));
+
+    return {
+      totalDepth,
+      bidDepth,
+      askDepth,
+      imbalance,
+      depthTrend,
+    };
+  }
+
+  private updateBestPrices(tokenId: string, orderbook: Orderbook): void {
+    if (orderbook.best_bid !== undefined && orderbook.best_bid > 0) {
+      this.lastBestBid.set(tokenId, orderbook.best_bid);
+    }
+    if (orderbook.best_ask !== undefined && orderbook.best_ask > 0) {
+      this.lastBestAsk.set(tokenId, orderbook.best_ask);
+    }
+    this.lastBestAt.set(tokenId, Date.now());
   }
 
   private calculateMicroPrice(orderbook: Orderbook): number | null {
@@ -330,6 +398,20 @@ export class MarketMaker {
     const antiMult = this.getVolatilityMultiplier(order.token_id, this.config.mmAntiFillVolMultiplier ?? 1.5);
     const nearTouch = nearTouchBase * nearMult;
     const antiFill = antiFillBase * antiMult;
+    const aggressiveMove = this.config.mmAggressiveMoveBps ?? 0.002;
+    const aggressiveWindow = this.config.mmAggressiveMoveWindowMs ?? 1500;
+
+    const lastAt = this.lastBestAt.get(order.token_id) || 0;
+    if (Date.now() - lastAt <= aggressiveWindow) {
+      const lastBid = this.lastBestBid.get(order.token_id);
+      const lastAsk = this.lastBestAsk.get(order.token_id);
+      if (order.side === 'BUY' && lastAsk && bestAsk < lastAsk * (1 - aggressiveMove)) {
+        return { cancel: true, panic: true, reason: 'aggressive-move' };
+      }
+      if (order.side === 'SELL' && lastBid && bestBid > lastBid * (1 + aggressiveMove)) {
+        return { cancel: true, panic: true, reason: 'aggressive-move' };
+      }
+    }
 
     if (order.side === 'BUY') {
       const distance = (bestAsk - price) / price;
@@ -647,6 +729,13 @@ export class MarketMaker {
       return null;
     }
 
+    this.updateBestPrices(market.token_id, orderbook);
+    const depthMetrics = this.updateDepthMetrics(market.token_id, orderbook);
+    const minDepth = this.config.mmDepthMinShares ?? 0;
+    if (minDepth > 0 && depthMetrics.totalDepth < minDepth) {
+      return null;
+    }
+
     const microPrice = this.calculateMicroPrice(orderbook);
     if (!microPrice || microPrice <= 0 || microPrice >= 1) {
       return null;
@@ -660,6 +749,12 @@ export class MarketMaker {
     const volatilityComponent =
       lastMid && lastMid > 0 ? Math.abs(microPrice - lastMid) / lastMid : 0;
 
+    const depthMetrics = this.updateDepthMetrics(market.token_id, orderbook);
+    const minDepth = this.config.mmDepthMinShares ?? 0;
+    if (minDepth > 0 && depthMetrics.totalDepth < minDepth) {
+      return null;
+    }
+
     const volEma = this.volatilityEma.get(market.token_id) ?? volatilityComponent;
     const depthRef = this.config.mmDepthRefShares ?? 200;
     const depthEma = this.depthEma.get(market.token_id) ?? 0;
@@ -669,7 +764,8 @@ export class MarketMaker {
       depthRef > 0 && depthEma > 0 ? this.clamp(depthEma / depthRef, 0.2, 3) : 1;
     const liquidityPenalty = depthFactor < 1 ? 1 / depthFactor - 1 : 0;
 
-    const profile = this.resolveAdaptiveProfile(volEma, depthEma, depthTrend);
+    const rawProfile = this.resolveAdaptiveProfile(volEma, depthEma, depthTrend);
+    const profile = this.stabilizeProfile(market.token_id, rawProfile);
     if (this.config.mmAdaptiveParams !== false) {
       if (profile === 'CALM') {
         minSpread = this.config.mmProfileSpreadMinCalm ?? minSpread;
@@ -689,6 +785,23 @@ export class MarketMaker {
         ? baseSpread + bookSpread * 0.35 + volatilityComponent * 0.5
         : baseSpread * (1 + volEma * volWeight + liquidityPenalty * liqWeight) +
           bookSpread * bookWeight;
+
+    const depthTarget = this.config.mmDepthTargetShares ?? 0;
+    if (depthTarget > 0) {
+      const depthRatio = this.clamp(depthMetrics.totalDepth / depthTarget, 0, 1);
+      const depthPenaltyWeight = this.config.mmDepthPenaltyWeight ?? 0.6;
+      adaptiveSpread += (1 - depthRatio) * baseSpread * depthPenaltyWeight;
+    }
+
+    if (depthMetrics.depthTrend < 0) {
+      adaptiveSpread += Math.abs(depthMetrics.depthTrend) * baseSpread * 0.4;
+    }
+
+    if (profile === 'VOLATILE') {
+      adaptiveSpread *= 1.1;
+    } else if (profile === 'CALM') {
+      adaptiveSpread *= 0.95;
+    }
 
     if (market.liquidity_activation?.max_spread) {
       adaptiveSpread = Math.min(adaptiveSpread, market.liquidity_activation.max_spread * 0.95);
@@ -739,9 +852,23 @@ export class MarketMaker {
       Math.abs(inventoryBias) * inventorySpreadWeight +
       Math.abs(imbalance) * imbalanceSpreadWeight;
     const half = (adaptiveSpread * spreadBoost) / 2;
+    const invWeight = this.config.mmAsymSpreadInventoryWeight ?? 0.4;
+    const imbWeight = this.config.mmAsymSpreadImbalanceWeight ?? 0.35;
+    const minFactor = this.config.mmAsymSpreadMinFactor ?? 0.6;
+    const maxFactor = this.config.mmAsymSpreadMaxFactor ?? 1.8;
+    const depthImbalance = depthMetrics.imbalance;
 
-    let bid = fairPrice * (1 - half);
-    let ask = fairPrice * (1 + half);
+    const bidFactor = this.clamp(1 + inventoryBias * invWeight - depthImbalance * imbWeight, minFactor, maxFactor);
+    const askFactor = this.clamp(1 - inventoryBias * invWeight + depthImbalance * imbWeight, minFactor, maxFactor);
+    let quoteOffset = Math.max(0, this.config.mmQuoteOffsetBps ?? 0) / 10000;
+    if (market.liquidity_activation?.max_spread) {
+      const maxAllowed = market.liquidity_activation.max_spread * 0.95;
+      const remaining = Math.max(0, maxAllowed - adaptiveSpread);
+      quoteOffset = Math.min(quoteOffset, remaining / 2);
+    }
+
+    let bid = fairPrice * (1 - half * bidFactor - quoteOffset);
+    let ask = fairPrice * (1 + half * askFactor + quoteOffset);
 
     // Keep maker-friendly but never cross top of book
     bid = Math.max(bid, bestBid + MarketMaker.MIN_TICK);
@@ -762,10 +889,20 @@ export class MarketMaker {
       inventoryBias,
       valueBias,
       valueConfidence,
+      depth: depthMetrics.totalDepth,
+      depthTrend: depthMetrics.depthTrend,
+      imbalance: depthImbalance,
+      profile,
+      volatility: volatilityComponent,
     };
   }
 
-  calculateOrderSize(market: Market, price: number): OrderSizeResult {
+  calculateOrderSize(
+    market: Market,
+    orderbook: Orderbook,
+    side: 'BUY' | 'SELL',
+    price: number
+  ): OrderSizeResult {
     if (!Number.isFinite(price) || price <= 0) {
       return { shares: 0, usdt: 0 };
     }
@@ -794,13 +931,32 @@ export class MarketMaker {
       shares = Math.min(shares, cap);
     }
 
+    const depthFactor = this.config.mmDepthShareFactor ?? 0;
+    let depthCap = 0;
+    if (depthFactor > 0) {
+      const levels = this.config.mmDepthLevels ?? 3;
+      const sideLevels = side === 'BUY' ? orderbook.bids : orderbook.asks;
+      depthCap = Math.floor(this.sumDepthLevels(sideLevels, levels) * depthFactor);
+    }
+
     const minShares = market.liquidity_activation?.min_shares || 0;
     if (minShares > 0 && shares < minShares) {
       const minOrderValue = minShares * price;
       const hardCap = this.config.maxSingleOrderValue ?? Number.POSITIVE_INFINITY;
       if (minOrderValue <= hardCap && minOrderValue <= remainingRiskBudget) {
-        shares = minShares;
+        if (!depthCap || minShares <= depthCap) {
+          shares = minShares;
+        }
       }
+    }
+
+    if (depthCap > 0) {
+      shares = Math.min(shares, depthCap);
+    }
+
+    const maxShares = this.config.mmMaxSharesPerOrder ?? 0;
+    if (maxShares > 0) {
+      shares = Math.min(shares, Math.floor(maxShares));
     }
 
     if (shares <= 0) {
@@ -914,6 +1070,7 @@ export class MarketMaker {
     }
 
     const tokenId = market.token_id;
+    this.updateBestPrices(tokenId, orderbook);
 
     if (this.isPaused(tokenId)) {
       return;
@@ -1002,8 +1159,8 @@ export class MarketMaker {
     let hasBid = refreshedOrders.some((o) => o.side === 'BUY');
     let hasAsk = refreshedOrders.some((o) => o.side === 'SELL');
 
-    const bidOrderSize = this.calculateOrderSize(market, prices.bidPrice);
-    const askOrderSize = this.calculateOrderSize(market, prices.askPrice);
+    const bidOrderSize = this.calculateOrderSize(market, orderbook, 'BUY', prices.bidPrice);
+    const askOrderSize = this.calculateOrderSize(market, orderbook, 'SELL', prices.askPrice);
 
     const profileScale = profile === 'CALM' ? 1.0 : profile === 'VOLATILE' ? 0.6 : 0.85;
     const canIceberg = this.config.mmIcebergEnabled && this.canRequoteIceberg(tokenId, metrics.depthTrend);
@@ -1019,10 +1176,11 @@ export class MarketMaker {
         ? ` valueBias=${prices.valueBias?.toFixed(4)} conf=${(prices.valueConfidence * 100).toFixed(0)}%`
         : '';
 
-    const imbalance = this.calculateOrderbookImbalance(orderbook);
+    const imbalance = prices.imbalance ?? this.calculateOrderbookImbalance(orderbook);
+    const depthInfo = prices.depth && prices.depth > 0 ? ` depth=${prices.depth.toFixed(0)}` : '';
     console.log(
       `   bid=${prices.bidPrice.toFixed(4)} ask=${prices.askPrice.toFixed(4)} spread=${(prices.spread * 100).toFixed(2)}% ` +
-        `bias=${prices.inventoryBias.toFixed(2)} imb=${imbalance.toFixed(2)}${valueInfo} ${qualifiesForPoints ? '✨' : ''} profile=${profile}`
+        `bias=${prices.inventoryBias.toFixed(2)} imb=${imbalance.toFixed(2)}${depthInfo}${valueInfo} ${qualifiesForPoints ? '✨' : ''} profile=${profile}`
     );
 
     const suppressBuy = prices.inventoryBias > 0.85;

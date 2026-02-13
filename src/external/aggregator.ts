@@ -17,6 +17,7 @@ export class CrossPlatformAggregator {
 
   constructor(config: Config) {
     this.config = config;
+    const requireWs = config.crossPlatformRequireWs === true;
 
     if (config.polymarketGammaUrl && config.polymarketClobUrl) {
       if (config.polymarketWsEnabled) {
@@ -33,6 +34,10 @@ export class CrossPlatformAggregator {
         this.polymarketWs.start();
       }
 
+      if (requireWs && !config.polymarketWsEnabled) {
+        console.warn('CROSS_PLATFORM_REQUIRE_WS=true but POLYMARKET_WS_ENABLED=false, Polymarket data will be skipped.');
+      }
+
         this.polymarket = new PolymarketDataProvider({
           gammaUrl: config.polymarketGammaUrl,
           clobUrl: config.polymarketClobUrl,
@@ -44,6 +49,7 @@ export class CrossPlatformAggregator {
           feeCurveExponent: config.polymarketFeeCurveExponent,
           depthLevels: config.crossPlatformDepthLevels,
           useWebSocket: config.polymarketWsEnabled,
+          requireWebSocket: requireWs,
           cacheTtlMs: config.polymarketCacheTtlMs || 60000,
           wsMaxAgeMs: config.arbWsMaxAgeMs || 10000,
         }, this.polymarketWs);
@@ -63,6 +69,10 @@ export class CrossPlatformAggregator {
         this.opinionWs.start();
       }
 
+      if (requireWs && !config.opinionWsEnabled) {
+        console.warn('CROSS_PLATFORM_REQUIRE_WS=true but OPINION_WS_ENABLED=false, Opinion data will be skipped.');
+      }
+
       this.opinion = new OpinionDataProvider({
         openApiUrl: config.opinionOpenApiUrl,
         apiKey: config.opinionApiKey,
@@ -70,6 +80,7 @@ export class CrossPlatformAggregator {
         feeBps: config.opinionFeeBps || 0,
         depthLevels: config.crossPlatformDepthLevels,
         useWebSocket: config.opinionWsEnabled,
+        requireWebSocket: requireWs,
         wsMaxAgeMs: config.arbWsMaxAgeMs || 10000,
       }, this.opinionWs);
     }

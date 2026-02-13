@@ -13,6 +13,7 @@ interface PolymarketConfig {
   feeCurveExponent?: number;
   depthLevels?: number;
   useWebSocket?: boolean;
+  requireWebSocket?: boolean;
   cacheTtlMs?: number;
   wsMaxAgeMs?: number;
 }
@@ -158,6 +159,13 @@ export class PolymarketDataProvider implements PlatformProvider {
 
       const needsDepth = (this.config.depthLevels || 0) > 0;
       const hasDepth = Boolean(yesBook?.bids?.length && yesBook?.asks?.length && noBook?.bids?.length && noBook?.asks?.length);
+
+      if (this.config.requireWebSocket) {
+        const hasTop = Boolean(yesTop?.bestBid && yesTop?.bestAsk && noTop?.bestBid && noTop?.bestAsk);
+        if (!hasTop || (needsDepth && !hasDepth)) {
+          return;
+        }
+      }
 
       if (!yesTop || !yesTop.bestBid || !yesTop.bestAsk || !noTop || !noTop.bestBid || !noTop.bestAsk || (needsDepth && !hasDepth)) {
         const [yesBook, noBook] = await Promise.all([

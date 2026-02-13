@@ -58,6 +58,98 @@ export class CrossPlatformArbitrageDetector {
     return levels.reduce((sum, level) => sum + (Number.isFinite(level.shares) ? level.shares : 0), 0);
   }
 
+  private refineBuyCandidate(
+    yesLevels: OrderbookEntry[],
+    noLevels: OrderbookEntry[],
+    feeYes: number,
+    feeNo: number,
+    feeCurveYes: number | undefined,
+    feeCurveNo: number | undefined,
+    feeExpYes: number | undefined,
+    feeExpNo: number | undefined,
+    startSize: number
+  ): {
+    size: number;
+    edge: number;
+    costPerShare: number;
+    yes: NonNullable<ReturnType<typeof estimateBuy>>;
+    no: NonNullable<ReturnType<typeof estimateBuy>>;
+  } | null {
+    if (startSize <= 0) {
+      return null;
+    }
+    let size = startSize;
+    let best: {
+      size: number;
+      edge: number;
+      costPerShare: number;
+      yes: NonNullable<ReturnType<typeof estimateBuy>>;
+      no: NonNullable<ReturnType<typeof estimateBuy>>;
+    } | null = null;
+    for (let i = 0; i < 4 && size >= 1; i += 1) {
+      const yes = estimateBuy(yesLevels, size, feeYes, feeCurveYes, feeExpYes, this.slippageBps);
+      const no = estimateBuy(noLevels, size, feeNo, feeCurveNo, feeExpNo, this.slippageBps);
+      if (yes && no) {
+        const costPerShare = (yes.totalAllIn + no.totalAllIn) / size;
+        const edge = 1 - costPerShare - this.estimatedTransferCost;
+        if (!best || edge > best.edge) {
+          best = { size, edge, costPerShare, yes, no };
+        }
+        if (edge >= this.minProfitThreshold) {
+          return { size, edge, costPerShare, yes, no };
+        }
+      }
+      size = Math.max(1, Math.floor(size * 0.6));
+    }
+    return best && best.edge >= this.minProfitThreshold ? best : null;
+  }
+
+  private refineSellCandidate(
+    yesLevels: OrderbookEntry[],
+    noLevels: OrderbookEntry[],
+    feeYes: number,
+    feeNo: number,
+    feeCurveYes: number | undefined,
+    feeCurveNo: number | undefined,
+    feeExpYes: number | undefined,
+    feeExpNo: number | undefined,
+    startSize: number
+  ): {
+    size: number;
+    edge: number;
+    proceedsPerShare: number;
+    yes: NonNullable<ReturnType<typeof estimateSell>>;
+    no: NonNullable<ReturnType<typeof estimateSell>>;
+  } | null {
+    if (startSize <= 0) {
+      return null;
+    }
+    let size = startSize;
+    let best: {
+      size: number;
+      edge: number;
+      proceedsPerShare: number;
+      yes: NonNullable<ReturnType<typeof estimateSell>>;
+      no: NonNullable<ReturnType<typeof estimateSell>>;
+    } | null = null;
+    for (let i = 0; i < 4 && size >= 1; i += 1) {
+      const yes = estimateSell(yesLevels, size, feeYes, feeCurveYes, feeExpYes, this.slippageBps);
+      const no = estimateSell(noLevels, size, feeNo, feeCurveNo, feeExpNo, this.slippageBps);
+      if (yes && no) {
+        const proceedsPerShare = (yes.totalAllIn + no.totalAllIn) / size;
+        const edge = proceedsPerShare - 1 - this.estimatedTransferCost;
+        if (!best || edge > best.edge) {
+          best = { size, edge, proceedsPerShare, yes, no };
+        }
+        if (edge >= this.minProfitThreshold) {
+          return { size, edge, proceedsPerShare, yes, no };
+        }
+      }
+      size = Math.max(1, Math.floor(size * 0.6));
+    }
+    return best && best.edge >= this.minProfitThreshold ? best : null;
+  }
+
   /**
    * 检测跨平台套利机会
    */
@@ -117,31 +209,70 @@ export class CrossPlatformArbitrageDetector {
       ? estimateBuy(noAskLevelsA, buySizeBA, feeA, feeCurveA, feeExpA, this.slippageBps)
       : null;
 
+    const buyCandidateAB = yesAskLevelsA.length && noAskLevelsB.length
+      ? this.refineBuyCandidate(
+          yesAskLevelsA,
+          noAskLevelsB,
+          feeA,
+          feeB,
+          feeCurveA,
+          feeCurveB,
+          feeExpA,
+          feeExpB,
+          buySizeAB
+        )
+      : null;
+    const buyCandidateBA = yesAskLevelsB.length && noAskLevelsA.length
+      ? this.refineBuyCandidate(
+          yesAskLevelsB,
+          noAskLevelsA,
+          feeB,
+          feeA,
+          feeCurveB,
+          feeCurveA,
+          feeExpB,
+          feeExpA,
+          buySizeBA
+        )
+      : null;
+
     let buyNetAB = -Infinity;
     let buyNetBA = -Infinity;
     let buyCostAB = 0;
     let buyCostBA = 0;
+    const resolvedBuySizeAB = buyCandidateAB?.size ?? buySizeAB;
+    const resolvedBuySizeBA = buyCandidateBA?.size ?? buySizeBA;
 
     if (buySizeAB > 0) {
-      buyCostAB = buyYesA && buyNoB
-        ? (buyYesA.totalAllIn + buyNoB.totalAllIn) / buySizeAB
-        : yesAskA + noAskB;
-      const buyFeeAB = buyYesA && buyNoB
-        ? 0
-        : calcFeeCost(yesAskA, feeA, feeCurveA, feeExpA) +
-          calcFeeCost(noAskB, feeB, feeCurveB, feeExpB);
-      buyNetAB = 1 - buyCostAB - buyFeeAB - this.estimatedTransferCost;
+      if (buyCandidateAB) {
+        buyCostAB = buyCandidateAB.costPerShare;
+        buyNetAB = buyCandidateAB.edge;
+      } else {
+        buyCostAB = buyYesA && buyNoB
+          ? (buyYesA.totalAllIn + buyNoB.totalAllIn) / buySizeAB
+          : yesAskA + noAskB;
+        const buyFeeAB = buyYesA && buyNoB
+          ? 0
+          : calcFeeCost(yesAskA, feeA, feeCurveA, feeExpA) +
+            calcFeeCost(noAskB, feeB, feeCurveB, feeExpB);
+        buyNetAB = 1 - buyCostAB - buyFeeAB - this.estimatedTransferCost;
+      }
     }
 
     if (buySizeBA > 0) {
-      buyCostBA = buyYesB && buyNoA
-        ? (buyYesB.totalAllIn + buyNoA.totalAllIn) / buySizeBA
-        : yesAskB + noAskA;
-      const buyFeeBA = buyYesB && buyNoA
-        ? 0
-        : calcFeeCost(yesAskB, feeB, feeCurveB, feeExpB) +
-          calcFeeCost(noAskA, feeA, feeCurveA, feeExpA);
-      buyNetBA = 1 - buyCostBA - buyFeeBA - this.estimatedTransferCost;
+      if (buyCandidateBA) {
+        buyCostBA = buyCandidateBA.costPerShare;
+        buyNetBA = buyCandidateBA.edge;
+      } else {
+        buyCostBA = buyYesB && buyNoA
+          ? (buyYesB.totalAllIn + buyNoA.totalAllIn) / buySizeBA
+          : yesAskB + noAskA;
+        const buyFeeBA = buyYesB && buyNoA
+          ? 0
+          : calcFeeCost(yesAskB, feeB, feeCurveB, feeExpB) +
+            calcFeeCost(noAskA, feeA, feeCurveA, feeExpA);
+        buyNetBA = 1 - buyCostBA - buyFeeBA - this.estimatedTransferCost;
+      }
     }
 
     let action: 'BUY_BOTH' | 'SELL_BOTH' = 'BUY_BOTH';
@@ -154,13 +285,13 @@ export class CrossPlatformArbitrageDetector {
       minCost = buyCostAB;
       profitPct = buyNetAB * 100;
       action = 'BUY_BOTH';
-      depthShares = buySizeAB;
+      depthShares = resolvedBuySizeAB;
       legs = [
         {
           platform: marketA.platform,
           tokenId: marketA.yesTokenId || '',
           side: 'BUY',
-          price: buyYesA?.avgPrice ?? yesAskA,
+          price: buyCandidateAB?.yes.avgPrice ?? buyYesA?.avgPrice ?? yesAskA,
           shares: depthShares,
           outcome: 'YES',
         },
@@ -168,7 +299,7 @@ export class CrossPlatformArbitrageDetector {
           platform: marketB.platform,
           tokenId: marketB.noTokenId || '',
           side: 'BUY',
-          price: buyNoB?.avgPrice ?? noAskB,
+          price: buyCandidateAB?.no.avgPrice ?? buyNoB?.avgPrice ?? noAskB,
           shares: depthShares,
           outcome: 'NO',
         },
@@ -177,13 +308,13 @@ export class CrossPlatformArbitrageDetector {
       minCost = buyCostBA;
       profitPct = buyNetBA * 100;
       action = 'BUY_BOTH';
-      depthShares = buySizeBA;
+      depthShares = resolvedBuySizeBA;
       legs = [
         {
           platform: marketB.platform,
           tokenId: marketB.yesTokenId || '',
           side: 'BUY',
-          price: buyYesB?.avgPrice ?? yesAskB,
+          price: buyCandidateBA?.yes.avgPrice ?? buyYesB?.avgPrice ?? yesAskB,
           shares: depthShares,
           outcome: 'YES',
         },
@@ -191,7 +322,7 @@ export class CrossPlatformArbitrageDetector {
           platform: marketA.platform,
           tokenId: marketA.noTokenId || '',
           side: 'BUY',
-          price: buyNoA?.avgPrice ?? noAskA,
+          price: buyCandidateBA?.no.avgPrice ?? buyNoA?.avgPrice ?? noAskA,
           shares: depthShares,
           outcome: 'NO',
         },
@@ -225,42 +356,79 @@ export class CrossPlatformArbitrageDetector {
         ? estimateSell(noBidLevelsA, sellSizeBA, feeA, feeCurveA, feeExpA, this.slippageBps)
         : null;
 
+      const sellCandidateAB = yesBidLevelsA.length && noBidLevelsB.length
+        ? this.refineSellCandidate(
+            yesBidLevelsA,
+            noBidLevelsB,
+            feeA,
+            feeB,
+            feeCurveA,
+            feeCurveB,
+            feeExpA,
+            feeExpB,
+            sellSizeAB
+          )
+        : null;
+      const sellCandidateBA = yesBidLevelsB.length && noBidLevelsA.length
+        ? this.refineSellCandidate(
+            yesBidLevelsB,
+            noBidLevelsA,
+            feeB,
+            feeA,
+            feeCurveB,
+            feeCurveA,
+            feeExpB,
+            feeExpA,
+            sellSizeBA
+          )
+        : null;
+
       let sellNetAB = -Infinity;
       let sellNetBA = -Infinity;
+      const resolvedSellSizeAB = sellCandidateAB?.size ?? sellSizeAB;
+      const resolvedSellSizeBA = sellCandidateBA?.size ?? sellSizeBA;
 
       if (sellSizeAB > 0) {
-        const sellProceedsAB = sellYesA && sellNoB
-          ? (sellYesA.totalAllIn + sellNoB.totalAllIn) / sellSizeAB
-          : yesBidA + noBidB;
-        const sellFeeAB = sellYesA && sellNoB
-          ? 0
-          : calcFeeCost(yesBidA, feeA, feeCurveA, feeExpA) +
-            calcFeeCost(noBidB, feeB, feeCurveB, feeExpB);
-        sellNetAB = sellProceedsAB - 1 - sellFeeAB - this.estimatedTransferCost;
+        if (sellCandidateAB) {
+          sellNetAB = sellCandidateAB.edge;
+        } else {
+          const sellProceedsAB = sellYesA && sellNoB
+            ? (sellYesA.totalAllIn + sellNoB.totalAllIn) / sellSizeAB
+            : yesBidA + noBidB;
+          const sellFeeAB = sellYesA && sellNoB
+            ? 0
+            : calcFeeCost(yesBidA, feeA, feeCurveA, feeExpA) +
+              calcFeeCost(noBidB, feeB, feeCurveB, feeExpB);
+          sellNetAB = sellProceedsAB - 1 - sellFeeAB - this.estimatedTransferCost;
+        }
       }
 
       if (sellSizeBA > 0) {
-        const sellProceedsBA = sellYesB && sellNoA
-          ? (sellYesB.totalAllIn + sellNoA.totalAllIn) / sellSizeBA
-          : yesBidB + noBidA;
-        const sellFeeBA = sellYesB && sellNoA
-          ? 0
-          : calcFeeCost(yesBidB, feeB, feeCurveB, feeExpB) +
-            calcFeeCost(noBidA, feeA, feeCurveA, feeExpA);
-        sellNetBA = sellProceedsBA - 1 - sellFeeBA - this.estimatedTransferCost;
+        if (sellCandidateBA) {
+          sellNetBA = sellCandidateBA.edge;
+        } else {
+          const sellProceedsBA = sellYesB && sellNoA
+            ? (sellYesB.totalAllIn + sellNoA.totalAllIn) / sellSizeBA
+            : yesBidB + noBidA;
+          const sellFeeBA = sellYesB && sellNoA
+            ? 0
+            : calcFeeCost(yesBidB, feeB, feeCurveB, feeExpB) +
+              calcFeeCost(noBidA, feeA, feeCurveA, feeExpA);
+          sellNetBA = sellProceedsBA - 1 - sellFeeBA - this.estimatedTransferCost;
+        }
       }
 
       if (sellNetAB >= sellNetBA && sellNetAB >= this.minProfitThreshold) {
         minCost = 1;
         profitPct = sellNetAB * 100;
         action = 'SELL_BOTH';
-        depthShares = sellSizeAB;
+        depthShares = resolvedSellSizeAB;
         legs = [
           {
             platform: marketA.platform,
             tokenId: marketA.yesTokenId || '',
             side: 'SELL',
-            price: sellYesA?.avgPrice ?? yesBidA,
+            price: sellCandidateAB?.yes.avgPrice ?? sellYesA?.avgPrice ?? yesBidA,
             shares: depthShares,
             outcome: 'YES',
           },
@@ -268,7 +436,7 @@ export class CrossPlatformArbitrageDetector {
             platform: marketB.platform,
             tokenId: marketB.noTokenId || '',
             side: 'SELL',
-            price: sellNoB?.avgPrice ?? noBidB,
+            price: sellCandidateAB?.no.avgPrice ?? sellNoB?.avgPrice ?? noBidB,
             shares: depthShares,
             outcome: 'NO',
           },
@@ -277,13 +445,13 @@ export class CrossPlatformArbitrageDetector {
         minCost = 1;
         profitPct = sellNetBA * 100;
         action = 'SELL_BOTH';
-        depthShares = sellSizeBA;
+        depthShares = resolvedSellSizeBA;
         legs = [
           {
             platform: marketB.platform,
             tokenId: marketB.yesTokenId || '',
             side: 'SELL',
-            price: sellYesB?.avgPrice ?? yesBidB,
+            price: sellCandidateBA?.yes.avgPrice ?? sellYesB?.avgPrice ?? yesBidB,
             shares: depthShares,
             outcome: 'YES',
           },
@@ -291,7 +459,7 @@ export class CrossPlatformArbitrageDetector {
             platform: marketA.platform,
             tokenId: marketA.noTokenId || '',
             side: 'SELL',
-            price: sellNoA?.avgPrice ?? noBidA,
+            price: sellCandidateBA?.no.avgPrice ?? sellNoA?.avgPrice ?? noBidA,
             shares: depthShares,
             outcome: 'NO',
           },

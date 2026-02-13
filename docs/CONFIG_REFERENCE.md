@@ -26,6 +26,22 @@
 - `MIN_ORDER_INTERVAL_MS`：同市场下单最小间隔。
 - `MAX_ORDERS_PER_MARKET`：单市场最大挂单数。
 - `MAX_DAILY_LOSS`：日内亏损熔断。
+- `MM_DEPTH_MIN_SHARES`：深度不足时跳过做市。
+- `MM_DEPTH_TARGET_SHARES`：深度目标，用于动态收缩价差。
+- `MM_DEPTH_PENALTY_WEIGHT`：深度惩罚强度（越大越保守）。
+- `MM_DEPTH_SHARE_FACTOR`：挂单份额不超过深度的比例（0.2=20%）。
+- `MM_ASYM_SPREAD_INVENTORY_WEIGHT`：库存方向对价差非对称影响权重。
+- `MM_ASYM_SPREAD_IMBALANCE_WEIGHT`：订单簿不平衡对价差非对称影响权重。
+- `MM_ASYM_SPREAD_MIN_FACTOR`：非对称价差最小因子（<1 收紧）。
+- `MM_ASYM_SPREAD_MAX_FACTOR`：非对称价差最大因子（>1 放宽）。
+- `MM_QUOTE_OFFSET_BPS`：额外偏离做市中间价的 bps 偏移。
+- `MM_AGGRESSIVE_MOVE_BPS`：盘口快速逼近时的撤单阈值。
+- `MM_AGGRESSIVE_MOVE_WINDOW_MS`：快速逼近检测窗口。
+- `MM_VOLATILITY_HIGH_BPS`：高波动阈值（触发“波动档”）。
+- `MM_VOLATILITY_LOW_BPS`：低波动阈值（触发“平稳档”）。
+- `MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER`：波动档下单间隔倍率。
+- `MM_INTERVAL_PROFILE_CALM_MULTIPLIER`：平稳档下单间隔倍率。
+- `MM_MAX_SHARES_PER_ORDER`：单笔挂单最大份额上限（0=不限制）。
 
 ### 做市自适应参数（新增）
 
@@ -101,6 +117,7 @@
 
 - `ENABLE_TRADING`：是否实盘下单。
 - `AUTO_CONFIRM`：无人值守自动确认。
+- `CROSS_PLATFORM_REQUIRE_WS`：跨平台仅使用 WS 数据（不回落 REST）。
 - `ARB_AUTO_EXECUTE`：开启自动执行套利。
 - `ARB_AUTO_EXECUTE_VALUE`：价值错配自动执行（慎重）。
 - `ARB_EXECUTE_TOP_N`：每轮执行 Top N 机会。
@@ -110,6 +127,7 @@
 - `ARB_ORDERBOOK_CONCURRENCY`：并发拉取 orderbook。
 - `ARB_MARKETS_CACHE_MS`：市场列表缓存。
 - `ARB_WS_MAX_AGE_MS`：WS 数据最大允许延迟。
+- `ARB_REQUIRE_WS`：仅使用 WS 数据（不回落 REST）。
 
 ## 5. 自动执行熔断
 

@@ -78,6 +78,22 @@ export interface Config {
   minOrderIntervalMs?: number;
   maxOrdersPerMarket?: number;
   maxDailyLoss?: number;
+  mmDepthMinShares?: number;
+  mmDepthTargetShares?: number;
+  mmDepthPenaltyWeight?: number;
+  mmDepthShareFactor?: number;
+  mmAsymSpreadInventoryWeight?: number;
+  mmAsymSpreadImbalanceWeight?: number;
+  mmAsymSpreadMinFactor?: number;
+  mmAsymSpreadMaxFactor?: number;
+  mmQuoteOffsetBps?: number;
+  mmAggressiveMoveBps?: number;
+  mmAggressiveMoveWindowMs?: number;
+  mmVolatilityHighBps?: number;
+  mmVolatilityLowBps?: number;
+  mmIntervalProfileVolatileMultiplier?: number;
+  mmIntervalProfileCalmMultiplier?: number;
+  mmMaxSharesPerOrder?: number;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;
@@ -182,6 +198,7 @@ export interface Config {
   crossPlatformRetrySizeFactor?: number;
   crossPlatformRetryAggressiveBps?: number;
   autoConfirmAll?: boolean;
+  crossPlatformRequireWs?: boolean;
   crossPlatformMappingPath?: string;
   crossPlatformUseMapping?: boolean;
   alertWebhookUrl?: string;
@@ -214,6 +231,7 @@ export interface Config {
   arbOrderbookConcurrency?: number;
   arbMarketsCacheMs?: number;
   arbWsMaxAgeMs?: number;
+  arbRequireWs?: boolean;
   arbMaxErrors?: number;
   arbErrorWindowMs?: number;
   arbPauseOnErrorMs?: number;

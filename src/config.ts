@@ -103,6 +103,22 @@ export function loadConfig(): Config {
     minOrderIntervalMs: parseInt(process.env.MIN_ORDER_INTERVAL_MS || '3000'),
     maxOrdersPerMarket: parseInt(process.env.MAX_ORDERS_PER_MARKET || '2'),
     maxDailyLoss: parseFloat(process.env.MAX_DAILY_LOSS || '200'),
+    mmDepthMinShares: parseFloat(process.env.MM_DEPTH_MIN_SHARES || '50'),
+    mmDepthTargetShares: parseFloat(process.env.MM_DEPTH_TARGET_SHARES || '400'),
+    mmDepthPenaltyWeight: parseFloat(process.env.MM_DEPTH_PENALTY_WEIGHT || '0.6'),
+    mmDepthShareFactor: parseFloat(process.env.MM_DEPTH_SHARE_FACTOR || '0.2'),
+    mmAsymSpreadInventoryWeight: parseFloat(process.env.MM_ASYM_SPREAD_INVENTORY_WEIGHT || '0.4'),
+    mmAsymSpreadImbalanceWeight: parseFloat(process.env.MM_ASYM_SPREAD_IMBALANCE_WEIGHT || '0.35'),
+    mmAsymSpreadMinFactor: parseFloat(process.env.MM_ASYM_SPREAD_MIN_FACTOR || '0.6'),
+    mmAsymSpreadMaxFactor: parseFloat(process.env.MM_ASYM_SPREAD_MAX_FACTOR || '1.8'),
+    mmQuoteOffsetBps: parseFloat(process.env.MM_QUOTE_OFFSET_BPS || '0'),
+    mmAggressiveMoveBps: parseFloat(process.env.MM_AGGRESSIVE_MOVE_BPS || '0.002'),
+    mmAggressiveMoveWindowMs: parseInt(process.env.MM_AGGRESSIVE_MOVE_WINDOW_MS || '1500'),
+    mmVolatilityHighBps: parseFloat(process.env.MM_VOLATILITY_HIGH_BPS || '0.006'),
+    mmVolatilityLowBps: parseFloat(process.env.MM_VOLATILITY_LOW_BPS || '0.002'),
+    mmIntervalProfileVolatileMultiplier: parseFloat(process.env.MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER || '1.3'),
+    mmIntervalProfileCalmMultiplier: parseFloat(process.env.MM_INTERVAL_PROFILE_CALM_MULTIPLIER || '0.8'),
+    mmMaxSharesPerOrder: parseFloat(process.env.MM_MAX_SHARES_PER_ORDER || '0'),
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -207,6 +223,7 @@ export function loadConfig(): Config {
     crossPlatformRetrySizeFactor: parseFloat(process.env.CROSS_PLATFORM_RETRY_SIZE_FACTOR || '0.6'),
     crossPlatformRetryAggressiveBps: parseInt(process.env.CROSS_PLATFORM_RETRY_AGGRESSIVE_BPS || '0'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
+    crossPlatformRequireWs: process.env.CROSS_PLATFORM_REQUIRE_WS === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
     crossPlatformUseMapping: process.env.CROSS_PLATFORM_USE_MAPPING !== 'false',
     alertWebhookUrl: process.env.ALERT_WEBHOOK_URL,
@@ -239,6 +256,7 @@ export function loadConfig(): Config {
     arbOrderbookConcurrency: parseInt(process.env.ARB_ORDERBOOK_CONCURRENCY || '8'),
     arbMarketsCacheMs: parseInt(process.env.ARB_MARKETS_CACHE_MS || '10000'),
     arbWsMaxAgeMs: parseInt(process.env.ARB_WS_MAX_AGE_MS || '10000'),
+    arbRequireWs: process.env.ARB_REQUIRE_WS === 'true',
     arbMaxErrors: parseInt(process.env.ARB_MAX_ERRORS || '5'),
     arbErrorWindowMs: parseInt(process.env.ARB_ERROR_WINDOW_MS || '60000'),
     arbPauseOnErrorMs: parseInt(process.env.ARB_PAUSE_ON_ERROR_MS || '60000'),
@@ -360,6 +378,42 @@ export function loadConfig(): Config {
     config.crossPlatformMetricsLogMs = 0;
   }
 
+  if ((config.mmDepthEmaAlpha ?? 0) <= 0 || (config.mmDepthEmaAlpha ?? 0) >= 1) {
+    config.mmDepthEmaAlpha = 0.2;
+  }
+
+  if ((config.mmAsymSpreadMinFactor ?? 0) <= 0) {
+    config.mmAsymSpreadMinFactor = 0.6;
+  }
+
+  if ((config.mmAsymSpreadMaxFactor ?? 0) < (config.mmAsymSpreadMinFactor ?? 0.6)) {
+    config.mmAsymSpreadMaxFactor = config.mmAsymSpreadMinFactor ?? 0.6;
+  }
+
+  if ((config.mmIntervalProfileVolatileMultiplier ?? 0) <= 0) {
+    config.mmIntervalProfileVolatileMultiplier = 1.2;
+  }
+
+  if ((config.mmIntervalProfileCalmMultiplier ?? 0) <= 0) {
+    config.mmIntervalProfileCalmMultiplier = 0.9;
+  }
+
+  if ((config.mmDepthMinShares ?? 0) < 0) {
+    config.mmDepthMinShares = 0;
+  }
+
+  if ((config.mmDepthTargetShares ?? 0) < 0) {
+    config.mmDepthTargetShares = 0;
+  }
+
+  if ((config.mmDepthShareFactor ?? 0) < 0) {
+    config.mmDepthShareFactor = 0;
+  }
+
+  if ((config.mmMaxSharesPerOrder ?? 0) < 0) {
+    config.mmMaxSharesPerOrder = 0;
+  }
+
   return config;
 }
 
@@ -387,6 +441,12 @@ export function printConfig(config: Config): void {
   console.log(`Min Order Interval: ${config.minOrderIntervalMs}ms`);
   console.log(`Max Orders/Market: ${config.maxOrdersPerMarket}`);
   console.log(`Max Daily Loss: $${config.maxDailyLoss}`);
+  console.log(
+    `MM Depth: levels=${config.mmDepthLevels} min=${config.mmDepthMinShares} target=${config.mmDepthTargetShares}`
+  );
+  console.log(
+    `MM Asym Weights: inv=${config.mmAsymSpreadInventoryWeight} imb=${config.mmAsymSpreadImbalanceWeight}`
+  );
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);
   console.log(`Hedge On Fill: ${config.hedgeOnFill ? '✅' : '❌'}`);
@@ -418,6 +478,8 @@ export function printConfig(config: Config): void {
   console.log(`Polymarket WS: ${config.polymarketWsEnabled ? '✅' : '❌'}`);
   console.log(`Predict WS: ${config.predictWsEnabled ? '✅' : '❌'}`);
   console.log(`Opinion WS: ${config.opinionWsEnabled ? '✅' : '❌'}`);
+  console.log(`Arb Require WS: ${config.arbRequireWs ? '✅' : '❌'}`);
+  console.log(`Cross Require WS: ${config.crossPlatformRequireWs ? '✅' : '❌'}`);
   console.log(`Arb Scan Interval: ${config.arbScanIntervalMs}ms`);
   console.log(`Arb Max Markets: ${config.arbMaxMarkets}`);
   console.log(`Arb WS Max Age: ${config.arbWsMaxAgeMs}ms`);

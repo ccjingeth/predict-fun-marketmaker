@@ -96,6 +96,7 @@
 
 并可设置：
 - `ARB_WS_HEALTH_LOG_MS=5000`（日志监控）
+- 如需强制只用 WS 数据：`ARB_REQUIRE_WS=true`，`CROSS_PLATFORM_REQUIRE_WS=true`
 
 ## 9. 执行指标看板（桌面端推荐）
 
@@ -164,25 +165,36 @@
 - `SMOKE_LIVE=true`
 - 建议设置 `SMOKE_SHARES=1`、`SMOKE_PRICE_BUFFER_BPS=50`
 
-## 13. 深度与 VWAP（已默认启用）
+## 13. 做市自适应强化（推荐）
+
+建议小白从这些默认值开始：
+- `MM_DEPTH_MIN_SHARES=50`（薄市场跳过做市）
+- `MM_DEPTH_TARGET_SHARES=400`（深度越高价差越收紧）
+- `MM_ASYM_SPREAD_IMBALANCE_WEIGHT=0.35`（盘口不平衡时更保守）
+- `MM_AGGRESSIVE_MOVE_BPS=0.002`（盘口快速逼近时撤单）
+- `MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER=1.3`（波动时放慢节奏）
+
+这些参数会让挂单更“稳”，更符合“赚积分优先、避免成交”。
+
+## 14. 深度与 VWAP（已默认启用）
 
 脚本会基于订单簿深度计算 VWAP，确保“总成本 < $1”的判断更接近真实成交。
 
-## 14. 失败熔断（防止连亏）
+## 15. 失败熔断（防止连亏）
 
 建议开启：
 - `ARB_MAX_ERRORS=5`
 - `ARB_ERROR_WINDOW_MS=60000`
 - `ARB_PAUSE_ON_ERROR_MS=60000`
 
-## 15. 手续费提示（重要）
+## 16. 手续费提示（重要）
 
 - Polymarket 的部分市场存在**曲线型手续费**，不是简单的线性比例。
 - 脚本默认使用 `POLYMARKET_FEE_RATE_URL` 获取费率，并用 `POLYMARKET_FEE_CURVE_*` 估算费用。
 - 如果你在非收费市场或费用变化频繁，建议：
   - 将 `POLYMARKET_FEE_BPS=0` 或关闭曲线（`POLYMARKET_FEE_CURVE_RATE=0`）。
 
-## 16. 常见问题
+## 17. 常见问题
 
 1. 没有数据？检查 API Key / WS 开关 / 网络。
 2. 自动执行失败？看日志，检查 JWT / 余额 / Approvals。

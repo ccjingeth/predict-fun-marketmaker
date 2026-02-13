@@ -103,6 +103,10 @@ class ArbitrageBot {
       throw new Error('Failed to connect to Predict.fun API');
     }
 
+    if (this.config.arbRequireWs && !this.config.predictWsEnabled) {
+      throw new Error('ARB_REQUIRE_WS=true requires PREDICT_WS_ENABLED=true');
+    }
+
     if (this.config.enableTrading) {
       if (!this.config.jwtToken) {
         throw new Error('ENABLE_TRADING=true requires JWT_TOKEN in .env');
@@ -339,6 +343,16 @@ class ArbitrageBot {
     const worker = async () => {
       while (index < markets.length) {
         const market = markets[index++];
+        if (this.config.arbRequireWs) {
+          if (!this.predictWs) {
+            continue;
+          }
+          const cached = this.predictWs.getOrderbook(market.token_id, wsMaxAgeMs);
+          if (cached) {
+            orderbooks.set(market.token_id, cached);
+          }
+          continue;
+        }
         if (this.predictWs) {
           const cached = this.predictWs.getOrderbook(market.token_id, wsMaxAgeMs);
           if (cached) {

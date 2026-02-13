@@ -78,31 +78,25 @@ export class InPlatformArbitrageDetector {
 
     const buySize = Math.floor(Math.min(buyDepth, this.maxRecommendedShares));
     const sellSize = Math.floor(Math.min(sellDepth, this.maxRecommendedShares));
+    const buyCandidate = this.findBestBuySize(
+      yesBook,
+      noBook,
+      yesFeeBps,
+      noFeeBps,
+      slippageBps,
+      buySize
+    );
+    const sellCandidate = this.findBestSellSize(
+      yesBook,
+      noBook,
+      yesFeeBps,
+      noFeeBps,
+      slippageBps,
+      sellSize
+    );
 
-    let buyNetEdge = -Infinity;
-    let sellNetEdge = -Infinity;
-    let buyYes = null;
-    let buyNo = null;
-    let sellYes = null;
-    let sellNo = null;
-
-    if (buySize > 0) {
-      buyYes = estimateBuy(yesBook.asks, buySize, yesFeeBps, undefined, undefined, slippageBps);
-      buyNo = estimateBuy(noBook.asks, buySize, noFeeBps, undefined, undefined, slippageBps);
-      if (buyYes && buyNo) {
-        const buyCostPerShare = (buyYes.totalAllIn + buyNo.totalAllIn) / buySize;
-        buyNetEdge = 1 - buyCostPerShare;
-      }
-    }
-
-    if (sellSize > 0) {
-      sellYes = estimateSell(yesBook.bids, sellSize, yesFeeBps, undefined, undefined, slippageBps);
-      sellNo = estimateSell(noBook.bids, sellSize, noFeeBps, undefined, undefined, slippageBps);
-      if (sellYes && sellNo) {
-        const sellRevenuePerShare = (sellYes.totalAllIn + sellNo.totalAllIn) / sellSize;
-        sellNetEdge = sellRevenuePerShare - 1;
-      }
-    }
+    const buyNetEdge = buyCandidate?.edge ?? -Infinity;
+    const sellNetEdge = sellCandidate?.edge ?? -Infinity;
 
     const canBuy = buyNetEdge >= this.minProfitThreshold;
     const canSell = this.allowShorting && sellNetEdge >= this.minProfitThreshold;
@@ -113,8 +107,8 @@ export class InPlatformArbitrageDetector {
 
     const useSell = canSell && sellNetEdge > buyNetEdge;
 
-    if (useSell && sellYes && sellNo) {
-      const recommendedSize = Math.max(1, sellSize);
+    if (useSell && sellCandidate) {
+      const { yes: sellYes, no: sellNo, size: recommendedSize } = sellCandidate;
       return {
         marketId: yesMarket.condition_id || yesMarket.event_id || yesMarket.token_id,
         yesTokenId: yesMarket.token_id,
@@ -131,18 +125,18 @@ export class InPlatformArbitrageDetector {
         arbitrageType: 'OVER_ONE',
         profitPercentage: Math.max(0, sellNetEdge * 100),
         maxProfit: Math.max(0, sellNetEdge * 100),
-        depthShares: sellSize,
+        depthShares: recommendedSize,
         action: 'SELL_BOTH',
-        recommendedSize,
+        recommendedSize: Math.max(1, recommendedSize),
         breakEvenFee: Math.abs(sellYes.avgAllIn + sellNo.avgAllIn - 1) * 100,
       };
     }
 
-    if (!buyYes || !buyNo) {
+    if (!buyCandidate) {
       return null;
     }
 
-    const recommendedSize = Math.max(1, buySize);
+    const { yes: buyYes, no: buyNo, size: recommendedSize } = buyCandidate;
     return {
       marketId: yesMarket.condition_id || yesMarket.event_id || yesMarket.token_id,
       yesTokenId: yesMarket.token_id,
@@ -159,11 +153,73 @@ export class InPlatformArbitrageDetector {
       arbitrageType: 'UNDER_ONE',
       profitPercentage: Math.max(0, buyNetEdge * 100),
       maxProfit: Math.max(0, buyNetEdge * 100),
-      depthShares: buySize,
+      depthShares: recommendedSize,
       action: 'BUY_BOTH',
-      recommendedSize,
+      recommendedSize: Math.max(1, recommendedSize),
       breakEvenFee: Math.abs(buyYes.avgAllIn + buyNo.avgAllIn - 1) * 100,
     };
+  }
+
+  private findBestBuySize(
+    yesBook: Orderbook,
+    noBook: Orderbook,
+    yesFeeBps: number,
+    noFeeBps: number,
+    slippageBps: number,
+    startSize: number
+  ): { size: number; edge: number; yes: NonNullable<ReturnType<typeof estimateBuy>>; no: NonNullable<ReturnType<typeof estimateBuy>> } | null {
+    if (startSize <= 0) {
+      return null;
+    }
+    let size = startSize;
+    let best: { size: number; edge: number; yes: NonNullable<ReturnType<typeof estimateBuy>>; no: NonNullable<ReturnType<typeof estimateBuy>> } | null = null;
+    for (let i = 0; i < 4 && size >= 1; i += 1) {
+      const yes = estimateBuy(yesBook.asks, size, yesFeeBps, undefined, undefined, slippageBps);
+      const no = estimateBuy(noBook.asks, size, noFeeBps, undefined, undefined, slippageBps);
+      if (yes && no) {
+        const costPerShare = (yes.totalAllIn + no.totalAllIn) / size;
+        const edge = 1 - costPerShare;
+        if (!best || edge > best.edge) {
+          best = { size, edge, yes, no };
+        }
+        if (edge >= this.minProfitThreshold) {
+          return { size, edge, yes, no };
+        }
+      }
+      size = Math.max(1, Math.floor(size * 0.6));
+    }
+    return best && best.edge >= this.minProfitThreshold ? best : null;
+  }
+
+  private findBestSellSize(
+    yesBook: Orderbook,
+    noBook: Orderbook,
+    yesFeeBps: number,
+    noFeeBps: number,
+    slippageBps: number,
+    startSize: number
+  ): { size: number; edge: number; yes: NonNullable<ReturnType<typeof estimateSell>>; no: NonNullable<ReturnType<typeof estimateSell>> } | null {
+    if (startSize <= 0) {
+      return null;
+    }
+    let size = startSize;
+    let best: { size: number; edge: number; yes: NonNullable<ReturnType<typeof estimateSell>>; no: NonNullable<ReturnType<typeof estimateSell>> } | null = null;
+    for (let i = 0; i < 4 && size >= 1; i += 1) {
+      const yes = estimateSell(yesBook.bids, size, yesFeeBps, undefined, undefined, slippageBps);
+      const no = estimateSell(noBook.bids, size, noFeeBps, undefined, undefined, slippageBps);
+      if (yes && no) {
+        const revenuePerShare = (yes.totalAllIn + no.totalAllIn) / size;
+        const edge = revenuePerShare - 1;
+        if (!best || edge > best.edge) {
+          best = { size, edge, yes, no };
+        }
+        if (edge >= this.minProfitThreshold) {
+          return { size, edge, yes, no };
+        }
+      }
+      size = Math.max(1, Math.floor(size * 0.6));
+    }
+    return best && best.edge >= this.minProfitThreshold ? best : null;
   }
 
   scanMarkets(markets: Market[], orderbooks: Map<string, Orderbook>): InPlatformArbitrage[] {
