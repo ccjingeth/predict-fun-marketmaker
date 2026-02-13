@@ -71,6 +71,10 @@
 - `MM_AUTO_SIZE_ON_FILL`：成交后自动缩小挂单份额。
 - `MM_AUTO_SIZE_ON_FILL_DECAY_MS`：自动缩小恢复时间（毫秒）。
 - `MM_AUTO_SIZE_MIN_FACTOR`：自动缩小最小倍率（防止缩得过小）。
+- `MM_DYNAMIC_CANCEL_ON_FILL`：成交后动态提高撤单敏感度。
+- `MM_DYNAMIC_CANCEL_BOOST`：撤单敏感度提升幅度。
+- `MM_DYNAMIC_CANCEL_DECAY_MS`：动态撤单敏感度恢复时间。
+- `MM_DYNAMIC_CANCEL_MAX_BOOST`：动态撤单最大提升倍率。
 
 ### 做市自适应参数（新增）
 

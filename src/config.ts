@@ -148,6 +148,10 @@ export function loadConfig(): Config {
     mmAutoSizeOnFill: process.env.MM_AUTO_SIZE_ON_FILL !== 'false',
     mmAutoSizeOnFillDecayMs: parseInt(process.env.MM_AUTO_SIZE_ON_FILL_DECAY_MS || '90000'),
     mmAutoSizeMinFactor: parseFloat(process.env.MM_AUTO_SIZE_MIN_FACTOR || '0.4'),
+    mmDynamicCancelOnFill: process.env.MM_DYNAMIC_CANCEL_ON_FILL === 'true',
+    mmDynamicCancelBoost: parseFloat(process.env.MM_DYNAMIC_CANCEL_BOOST || '0.4'),
+    mmDynamicCancelDecayMs: parseInt(process.env.MM_DYNAMIC_CANCEL_DECAY_MS || '60000'),
+    mmDynamicCancelMaxBoost: parseFloat(process.env.MM_DYNAMIC_CANCEL_MAX_BOOST || '2'),
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -463,6 +467,14 @@ export function loadConfig(): Config {
     config.mmAutoSizeMinFactor = 0.4;
   }
 
+  if ((config.mmDynamicCancelBoost ?? 0) < 0) {
+    config.mmDynamicCancelBoost = 0;
+  }
+
+  if ((config.mmDynamicCancelMaxBoost ?? 0) < 1) {
+    config.mmDynamicCancelMaxBoost = 1;
+  }
+
   return config;
 }
 
@@ -510,6 +522,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `MM Auto Size: onFill=${config.mmAutoSizeOnFill ? '✅' : '❌'} min=${config.mmAutoSizeMinFactor}`
+  );
+  console.log(
+    `MM Dynamic Cancel: onFill=${config.mmDynamicCancelOnFill ? '✅' : '❌'} boost=${config.mmDynamicCancelBoost} max=${config.mmDynamicCancelMaxBoost}`
   );
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);

@@ -69,6 +69,7 @@ export class MarketMaker {
   private sizePenalty: Map<string, { value: number; ts: number; auto?: boolean }> = new Map();
   private recheckCooldownUntil: Map<string, number> = new Map();
   private fillPressure: Map<string, { score: number; ts: number }> = new Map();
+  private cancelBoost: Map<string, { value: number; ts: number }> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -189,7 +190,8 @@ export class MarketMaker {
     const priceChange = Math.abs(orderbook.mid_price - lastPrice) / lastPrice;
     const base = this.config.cancelThreshold;
     const mult = this.getVolatilityMultiplier(tokenId, this.config.mmCancelVolMultiplier ?? 2);
-    const threshold = base / mult;
+    const boost = this.getCancelBoost(tokenId);
+    const threshold = base / mult / boost;
     const buffer = Math.max(0, this.config.mmCancelBufferBps ?? 0);
     const hard = threshold * (1 + buffer);
     if (priceChange > hard) {
@@ -745,6 +747,34 @@ export class MarketMaker {
     }
     score += shares / threshold;
     this.fillPressure.set(tokenId, { score, ts: now });
+  }
+
+  private bumpCancelBoost(tokenId: string, intensity: number): void {
+    if (this.config.mmDynamicCancelOnFill !== true) {
+      return;
+    }
+    const now = Date.now();
+    const current = this.cancelBoost.get(tokenId);
+    let value = current?.value ?? 1;
+    const boost = Math.max(0, this.config.mmDynamicCancelBoost ?? 0.4);
+    value = value + boost * intensity;
+    const maxBoost = Math.max(1, this.config.mmDynamicCancelMaxBoost ?? 2);
+    this.cancelBoost.set(tokenId, { value: Math.min(maxBoost, value), ts: now });
+  }
+
+  private getCancelBoost(tokenId: string): number {
+    if (this.config.mmDynamicCancelOnFill !== true) {
+      return 1;
+    }
+    const entry = this.cancelBoost.get(tokenId);
+    if (!entry) {
+      return 1;
+    }
+    const decayMs = Math.max(1, this.config.mmDynamicCancelDecayMs ?? 60000);
+    const elapsed = Date.now() - entry.ts;
+    const decay = Math.exp(-elapsed / decayMs);
+    const value = 1 + (entry.value - 1) * decay;
+    return Math.max(1, value);
   }
 
   private getFillSlowdownMultiplier(tokenId: string): number {
@@ -1561,6 +1591,10 @@ export class MarketMaker {
         this.updateFillPressure(tokenId, absDelta);
       }
       const partialThreshold = this.config.mmPartialFillShares ?? 5;
+      if (absDelta > 0 && this.config.mmDynamicCancelOnFill) {
+        const intensity = this.clamp(absDelta / Math.max(1, partialThreshold), 0.2, 2);
+        this.bumpCancelBoost(tokenId, intensity);
+      }
       if (absDelta >= partialThreshold) {
         const penalty = this.config.mmPartialFillPenalty ?? 0.6;
         this.applySizePenalty(tokenId, penalty);

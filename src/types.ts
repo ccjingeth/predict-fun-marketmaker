@@ -123,6 +123,10 @@ export interface Config {
   mmAutoSizeOnFill?: boolean;
   mmAutoSizeOnFillDecayMs?: number;
   mmAutoSizeMinFactor?: number;
+  mmDynamicCancelOnFill?: boolean;
+  mmDynamicCancelBoost?: number;
+  mmDynamicCancelDecayMs?: number;
+  mmDynamicCancelMaxBoost?: number;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;
