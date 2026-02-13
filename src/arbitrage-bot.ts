@@ -36,6 +36,7 @@ class ArbitrageBot {
   private arbErrorCount = 0;
   private arbPausedUntil = 0;
   private wsHealthTimer?: NodeJS.Timeout;
+  private oppStability: Map<string, { count: number; lastSeen: number }> = new Map();
 
   constructor() {
     this.config = loadConfig();
@@ -202,6 +203,9 @@ class ArbitrageBot {
       const key = `${opp.type}-${opp.marketId}`;
       const last = this.lastExecution.get(key) || 0;
       if (now - last < cooldown) {
+        return;
+      }
+      if (!this.isStableOpportunity(opp, now)) {
         return;
       }
       if (this.config.arbPreflightEnabled !== false) {
@@ -467,6 +471,33 @@ class ArbitrageBot {
     }
     const minProfitPct = minProfit * 100;
     return (refreshed[0].expectedReturn || 0) >= minProfitPct;
+  }
+
+  private isStableOpportunity(opp: any, now: number): boolean {
+    if (this.config.arbStabilityRequired === false) {
+      return true;
+    }
+    const minCount = Math.max(1, this.config.arbStabilityMinCount || 2);
+    const windowMs = Math.max(0, this.config.arbStabilityWindowMs || 2000);
+    const key = `${opp.type}-${opp.marketId}`;
+    const entry = this.oppStability.get(key);
+
+    if (!entry || (windowMs > 0 && now - entry.lastSeen > windowMs)) {
+      this.oppStability.set(key, { count: 1, lastSeen: now });
+      return minCount <= 1;
+    }
+
+    const nextCount = entry.count + 1;
+    this.oppStability.set(key, { count: nextCount, lastSeen: now });
+    if (windowMs > 0 && this.oppStability.size > 2000) {
+      const cutoff = now - windowMs * 3;
+      for (const [k, v] of this.oppStability.entries()) {
+        if (v.lastSeen < cutoff) {
+          this.oppStability.delete(k);
+        }
+      }
+    }
+    return nextCount >= minCount;
   }
 
   private async getMarketsCached(): Promise<Market[]> {

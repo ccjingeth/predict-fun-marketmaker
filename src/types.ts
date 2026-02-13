@@ -276,6 +276,9 @@ export interface Config {
   arbDepthUsage?: number;
   arbMinNotionalUsd?: number;
   arbMinProfitUsd?: number;
+  arbStabilityRequired?: boolean;
+  arbStabilityMinCount?: number;
+  arbStabilityWindowMs?: number;
   predictFeeBps?: number;
   polymarketGammaUrl?: string;
   polymarketClobUrl?: string;

@@ -13,6 +13,7 @@ import {
   maxBuySharesForLimit,
   maxSellSharesForLimit,
 } from '../arbitrage/orderbook-vwap.js';
+import { calcFeeCost } from '../arbitrage/fee-utils.js';
 import type { OrderbookEntry } from '../types.js';
 
 interface ExecutionResult {
@@ -676,6 +677,7 @@ export class CrossPlatformExecutionRouter {
         const preflightStart = Date.now();
         preparedLegs = await this.prepareLegs(plannedLegs);
         preflightMs = Date.now() - preflightStart;
+        this.assertMinNotionalAndProfit(preparedLegs);
 
         const execStart = Date.now();
         const chunkResult = await this.executeChunks(preparedLegs);
@@ -1852,6 +1854,63 @@ export class CrossPlatformExecutionRouter {
     await this.sleep(recheckMs);
     const freshCache = new Map<string, Promise<OrderbookSnapshot | null>>();
     await this.preflightVwapWithCache(legs, freshCache);
+  }
+
+  private assertMinNotionalAndProfit(legs: PlatformLeg[]): void {
+    const minNotional = Math.max(0, this.config.crossPlatformMinNotionalUsd || 0);
+    const minProfit = Math.max(0, this.config.crossPlatformMinProfitUsd || 0);
+    if (!minNotional && !minProfit) {
+      return;
+    }
+    if (!legs.length) {
+      return;
+    }
+    const shares = Math.min(...legs.map((leg) => leg.shares));
+    if (!Number.isFinite(shares) || shares <= 0) {
+      return;
+    }
+
+    const slippage = (this.config.crossPlatformSlippageBps || 0) / 10000;
+    let totalCostPerShare = 0;
+    let totalProceedsPerShare = 0;
+    let hasBuy = false;
+    let hasSell = false;
+
+    for (const leg of legs) {
+      const feeBps = this.getFeeBps(leg.platform);
+      const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
+      const fee = calcFeeCost(leg.price, feeBps, curveRate, curveExponent);
+      if (leg.side === 'BUY') {
+        hasBuy = true;
+        totalCostPerShare += leg.price + fee + leg.price * slippage;
+      } else {
+        hasSell = true;
+        totalProceedsPerShare += leg.price - fee - leg.price * slippage;
+      }
+    }
+
+    const transfer = Math.max(0, this.config.crossPlatformTransferCost || 0);
+    let notional = 0;
+    let profit = 0;
+
+    if (hasBuy && !hasSell) {
+      notional = totalCostPerShare * shares;
+      profit = (1 - totalCostPerShare - transfer) * shares;
+    } else if (hasSell && !hasBuy) {
+      notional = totalProceedsPerShare * shares;
+      profit = (totalProceedsPerShare - 1 - transfer) * shares;
+    } else {
+      // Mixed legs: conservative net calculation
+      notional = Math.max(totalCostPerShare, totalProceedsPerShare) * shares;
+      profit = (totalProceedsPerShare - totalCostPerShare - transfer) * shares;
+    }
+
+    if (minNotional > 0 && notional < minNotional) {
+      throw new Error(`Preflight failed: notional $${notional.toFixed(2)} < min ${minNotional}`);
+    }
+    if (minProfit > 0 && profit < minProfit) {
+      throw new Error(`Preflight failed: profit $${profit.toFixed(2)} < min ${minProfit}`);
+    }
   }
 
   private async postTradeCheck(legs: PlatformLeg[]): Promise<{

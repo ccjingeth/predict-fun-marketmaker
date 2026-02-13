@@ -173,6 +173,9 @@
 - `ARB_DEPTH_USAGE`：套利计算使用的深度比例（降低吃深度滑点）。
 - `ARB_MIN_NOTIONAL_USD`：套利最小成交金额过滤。
 - `ARB_MIN_PROFIT_USD`：套利最小收益金额过滤。
+- `ARB_STABILITY_REQUIRED`：自动执行前是否要求机会连续出现。
+- `ARB_STABILITY_MIN_COUNT`：连续出现次数阈值。
+- `ARB_STABILITY_WINDOW_MS`：连续出现的时间窗口（毫秒）。
 
 ## 6. 站内套利
 

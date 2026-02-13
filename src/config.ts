@@ -301,6 +301,9 @@ export function loadConfig(): Config {
     arbDepthUsage: parseFloat(process.env.ARB_DEPTH_USAGE || '0.6'),
     arbMinNotionalUsd: parseFloat(process.env.ARB_MIN_NOTIONAL_USD || '0'),
     arbMinProfitUsd: parseFloat(process.env.ARB_MIN_PROFIT_USD || '0'),
+    arbStabilityRequired: process.env.ARB_STABILITY_REQUIRED !== 'false',
+    arbStabilityMinCount: parseInt(process.env.ARB_STABILITY_MIN_COUNT || '2'),
+    arbStabilityWindowMs: parseInt(process.env.ARB_STABILITY_WINDOW_MS || '2000'),
     predictFeeBps: parseFloat(process.env.PREDICT_FEE_BPS || '100'),
     polymarketGammaUrl: process.env.POLYMARKET_GAMMA_URL || 'https://gamma-api.polymarket.com',
     polymarketClobUrl: process.env.POLYMARKET_CLOB_URL || 'https://clob.polymarket.com',
@@ -387,6 +390,12 @@ export function loadConfig(): Config {
   }
   if ((config.arbMinProfitUsd ?? 0) < 0) {
     config.arbMinProfitUsd = 0;
+  }
+  if ((config.arbStabilityMinCount ?? 1) < 1) {
+    config.arbStabilityMinCount = 1;
+  }
+  if ((config.arbStabilityWindowMs ?? 0) < 0) {
+    config.arbStabilityWindowMs = 0;
   }
 
   if (
@@ -595,6 +604,9 @@ export function printConfig(config: Config): void {
   console.log(`Arb Preflight: ${config.arbPreflightEnabled ? '✅' : '❌'} maxAge=${config.arbPreflightMaxAgeMs}ms`);
   console.log(
     `Arb Depth Usage: ${config.arbDepthUsage} minNotional=$${config.arbMinNotionalUsd} minProfit=$${config.arbMinProfitUsd}`
+  );
+  console.log(
+    `Arb Stability: ${config.arbStabilityRequired ? '✅' : '❌'} count=${config.arbStabilityMinCount} window=${config.arbStabilityWindowMs}ms`
   );
   console.log(`Refresh Interval: ${config.refreshInterval}ms`);
   console.log(`Trading Enabled: ${config.enableTrading ? '✅' : '❌ (Dry Run)'}`);
