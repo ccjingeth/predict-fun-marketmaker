@@ -521,9 +521,17 @@ function exportDiagnosticsBundle() {
   const metricsPath = resolveMetricsPath();
   const statePath = resolveStatePath();
 
+  const now = Date.now();
+  const cutoff = now - 24 * 60 * 60 * 1000;
+  const keyLogs = logBuffer.filter((entry) => {
+    if (!entry.ts || entry.ts < cutoff) return false;
+    if (entry.level === 'stderr' || entry.level === 'system') return true;
+    return /error|failed|失败|异常/i.test(entry.message || '');
+  });
+
   const report = {
     version: 1,
-    ts: Date.now(),
+    ts: now,
     envPath,
     mappingPath,
     dependencyPath,
@@ -531,10 +539,15 @@ function exportDiagnosticsBundle() {
     statePath,
     diagnostics: buildDiagnostics().items,
     failuresTop: summarizeFailures(),
+    logStats: {
+      total: logBuffer.length,
+      keyLogs: keyLogs.length,
+      cutoff,
+    },
   };
 
   fs.writeFileSync(path.join(outputDir, 'diagnostics.json'), JSON.stringify(report, null, 2), 'utf8');
-  fs.writeFileSync(path.join(outputDir, 'bot-logs.json'), JSON.stringify(logBuffer, null, 2), 'utf8');
+  fs.writeFileSync(path.join(outputDir, 'bot-logs.json'), JSON.stringify(keyLogs, null, 2), 'utf8');
   fs.writeFileSync(path.join(outputDir, 'env-suggestions.txt'), buildEnvSuggestions(parseEnv(envText)), 'utf8');
 
   const copies = [

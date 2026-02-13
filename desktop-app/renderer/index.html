@@ -151,6 +151,14 @@
               <span class="metric-hint">动态 ms</span>
             </div>
             <div class="metric">
+              <span class="metric-label">风险评分</span>
+              <span class="metric-value" id="metricRiskScore">--</span>
+              <div class="risk-bar">
+                <div class="risk-fill" id="metricRiskBar"></div>
+              </div>
+              <span class="metric-hint">0-100（越高越危险）</span>
+            </div>
+            <div class="metric">
               <span class="metric-label">告警次数</span>
               <span class="metric-value" id="metricAlerts">--</span>
               <span class="metric-hint">post-trade 触发</span>
@@ -198,6 +206,10 @@
                 <div class="chart-block">
                   <div class="chart-title">Post-trade Drift</div>
                   <canvas id="chartDrift" width="320" height="80"></canvas>
+                </div>
+                <div class="chart-block">
+                  <div class="chart-title">风险分</div>
+                  <canvas id="chartRisk" width="320" height="80"></canvas>
                 </div>
               </div>
             </div>

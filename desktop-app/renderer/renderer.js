@@ -32,8 +32,11 @@ const metricUpdatedAt = document.getElementById('metricUpdatedAt');
 const refreshMetrics = document.getElementById('refreshMetrics');
 const riskLevel = document.getElementById('riskLevel');
 const downgradeProfileBtn = document.getElementById('downgradeProfile');
+const metricRiskScore = document.getElementById('metricRiskScore');
+const metricRiskBar = document.getElementById('metricRiskBar');
 const chartSuccess = document.getElementById('chartSuccess');
 const chartDrift = document.getElementById('chartDrift');
+const chartRisk = document.getElementById('chartRisk');
 const metricAlertsList = document.getElementById('metricAlertsList');
 const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
@@ -232,8 +235,13 @@ function renderFailureTopN() {
     const hint = document.createElement('div');
     hint.className = 'health-hint';
     hint.textContent = line;
+    const button = document.createElement('button');
+    button.className = 'btn ghost';
+    button.textContent = '修复建议';
+    button.addEventListener('click', () => copyFailureAdvice(line));
     row.appendChild(label);
     row.appendChild(hint);
+    row.appendChild(button);
     healthFailureList.appendChild(row);
   });
 }
@@ -252,6 +260,51 @@ async function copyFailures() {
   try {
     await navigator.clipboard.writeText(text);
     if (healthExportHint) healthExportHint.textContent = '失败原因已复制到剪贴板。';
+  } catch {
+    if (healthExportHint) healthExportHint.textContent = '复制失败，请手动选择。';
+  }
+}
+
+function getFailureAdvice(line) {
+  const hints = [];
+  if (/insufficient depth|insufficient/i.test(line)) {
+    hints.push('降低下单量或调低 CROSS_PLATFORM_DEPTH_USAGE');
+    hints.push('开启 CROSS_PLATFORM_ADAPTIVE_SIZE=true');
+  }
+  if (/VWAP deviates|vwap/i.test(line)) {
+    hints.push('增加 CROSS_PLATFORM_SLIPPAGE_BPS 或缩小下单量');
+  }
+  if (/price drift|drift/i.test(line)) {
+    hints.push('降低 CROSS_PLATFORM_PRICE_DRIFT_BPS 或开启 RECHECK');
+  }
+  if (/volatility/i.test(line)) {
+    hints.push('提高 CROSS_PLATFORM_VOLATILITY_BPS 或降低执行频率');
+  }
+  if (/Open orders remain/i.test(line)) {
+    hints.push('开启 CROSS_PLATFORM_POST_FILL_CHECK=true');
+    hints.push('使用 FOK 或减少分块规模');
+  }
+  if (/circuit breaker/i.test(line)) {
+    hints.push('检查失败频次，提升重试窗口或降低执行强度');
+  }
+  if (/credentials missing|API credentials/i.test(line)) {
+    hints.push('补齐 Polymarket / Opinion API Key 与私钥');
+  }
+  if (/Token score too low/i.test(line)) {
+    hints.push('降低 CROSS_PLATFORM_TOKEN_MIN_SCORE 或清理历史失败');
+  }
+  if (!hints.length) {
+    hints.push('开启一键降级后再观察一次执行表现');
+  }
+  return hints;
+}
+
+async function copyFailureAdvice(line) {
+  const hints = getFailureAdvice(line);
+  const text = `失败原因: ${line}\n建议:\n- ${hints.join('\n- ')}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    if (healthExportHint) healthExportHint.textContent = '修复建议已复制到剪贴板。';
   } catch {
     if (healthExportHint) healthExportHint.textContent = '复制失败，请手动选择。';
   }
@@ -544,8 +597,10 @@ function drawSparkline(canvas, values, color) {
 function updateCharts() {
   const successSeries = metricsHistory.map((item) => item.successRate);
   const driftSeries = metricsHistory.map((item) => item.postTradeDriftBps);
+  const riskSeries = metricsHistory.map((item) => item.riskScore);
   drawSparkline(chartSuccess, successSeries, '#6aa3ff');
   drawSparkline(chartDrift, driftSeries, '#f7c46c');
+  drawSparkline(chartRisk, riskSeries, '#ff6b6b');
 }
 
 function updateAlerts({ successRate, postTradeDriftBps, qualityScore, cooldownUntil, metricsAgeMs }) {
@@ -598,10 +653,11 @@ function computeRiskLevel({ successRate, postTradeDriftBps, qualityScore, metric
   else if (postTradeDriftBps > 50) score += 10;
   if (qualityScore < 0.6) score += 30;
   else if (qualityScore < 0.8) score += 15;
+  score = Math.max(0, Math.min(100, score));
 
-  if (score >= 70) return { level: '高风险', tone: 'error' };
-  if (score >= 40) return { level: '中风险', tone: 'warn' };
-  return { level: '低风险', tone: 'ok' };
+  if (score >= 70) return { level: '高风险', tone: 'error', score };
+  if (score >= 40) return { level: '中风险', tone: 'warn', score };
+  return { level: '低风险', tone: 'ok', score };
 }
 
 async function loadMetrics() {
@@ -610,6 +666,8 @@ async function loadMetrics() {
     if (!raw) {
       setMetricsStatus('无数据', false);
       setRiskLevel('风险未知', 'warn');
+      if (metricRiskScore) metricRiskScore.textContent = '--';
+      if (metricRiskBar) metricRiskBar.style.width = '0%';
       return;
     }
     let data;
@@ -657,6 +715,7 @@ async function loadMetrics() {
           ts: updatedAt,
           successRate,
           postTradeDriftBps,
+          riskScore: 0,
         });
         if (metricsHistory.length > METRICS_HISTORY_MAX) {
           metricsHistory.shift();
@@ -678,6 +737,13 @@ async function loadMetrics() {
     renderAdvice(null, metricsSnapshot);
     const risk = computeRiskLevel(metricsSnapshot);
     setRiskLevel(risk.level, risk.tone);
+    if (metricRiskScore) metricRiskScore.textContent = `${Math.round(risk.score)}`;
+    if (metricRiskBar) metricRiskBar.style.width = `${Math.min(100, Math.max(0, risk.score))}%`;
+    const last = metricsHistory[metricsHistory.length - 1];
+    if (last && last.ts === updatedAt) {
+      last.riskScore = risk.score;
+    }
+    updateCharts();
 
     const flushMs = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_METRICS_FLUSH_MS') || 30000);
     if (metricsAgeMs > flushMs * 2) {
@@ -688,6 +754,8 @@ async function loadMetrics() {
   } catch (error) {
     setMetricsStatus('读取失败', false);
     setRiskLevel('风险未知', 'warn');
+    if (metricRiskScore) metricRiskScore.textContent = '--';
+    if (metricRiskBar) metricRiskBar.style.width = '0%';
   }
 }
 
