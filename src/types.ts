@@ -42,6 +42,10 @@ export interface Config {
   mmAdaptiveProfile?: 'AUTO' | 'CALM' | 'NORMAL' | 'VOLATILE';
   mmVolatilityCalmBps?: number;
   mmVolatilityVolatileBps?: number;
+  mmIntervalVolatilityBps?: number;
+  mmIntervalVolMultiplier?: number;
+  mmProfileLiquidityLow?: number;
+  mmProfileLiquidityHigh?: number;
   inventorySkewFactor?: number;
   cancelThreshold: number;
   repriceThreshold?: number;

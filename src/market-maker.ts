@@ -178,9 +178,23 @@ export class MarketMaker {
     return false;
   }
 
+  private getAdaptiveMinInterval(tokenId: string): number {
+    const base = this.config.minOrderIntervalMs ?? 3000;
+    if (this.config.mmAdaptiveParams === false) {
+      return base;
+    }
+    const vol = this.volatilityEma.get(tokenId) ?? 0;
+    const threshold = this.config.mmIntervalVolatilityBps ?? 0.01;
+    const mult = this.config.mmIntervalVolMultiplier ?? 1.6;
+    if (vol >= threshold) {
+      return Math.round(base * mult);
+    }
+    return base;
+  }
+
   private canSendAction(tokenId: string): boolean {
     const now = Date.now();
-    const minInterval = this.config.minOrderIntervalMs ?? 3000;
+    const minInterval = this.getAdaptiveMinInterval(tokenId);
     const lastAt = this.lastActionAt.get(tokenId) || 0;
     const cooldownUntil = this.cooldownUntil.get(tokenId) || 0;
     return now - lastAt >= minInterval && now >= cooldownUntil;
@@ -393,15 +407,20 @@ export class MarketMaker {
     };
   }
 
-  private resolveAdaptiveProfile(volEma: number): 'CALM' | 'NORMAL' | 'VOLATILE' {
+  private resolveAdaptiveProfile(volEma: number, depthEma: number): 'CALM' | 'NORMAL' | 'VOLATILE' {
     const configured = (this.config.mmAdaptiveProfile || 'AUTO').toUpperCase();
     if (configured === 'CALM' || configured === 'NORMAL' || configured === 'VOLATILE') {
       return configured;
     }
     const calm = this.config.mmVolatilityCalmBps ?? 0.004;
     const volatile = this.config.mmVolatilityVolatileBps ?? 0.02;
-    if (volEma <= calm) return 'CALM';
+    const depthRef = this.config.mmDepthRefShares ?? 200;
+    const depthRatio = depthRef > 0 ? depthEma / depthRef : 1;
+    const low = this.config.mmProfileLiquidityLow ?? 0.5;
+    const high = this.config.mmProfileLiquidityHigh ?? 1.2;
+    if (depthRatio <= low) return 'VOLATILE';
     if (volEma >= volatile) return 'VOLATILE';
+    if (volEma <= calm && depthRatio >= high) return 'CALM';
     return 'NORMAL';
   }
 
@@ -686,11 +705,11 @@ export class MarketMaker {
       return;
     }
 
+    const metrics = this.updateMarketMetrics(tokenId, orderbook);
+
     if (!this.canSendAction(tokenId)) {
       return;
     }
-
-    const metrics = this.updateMarketMetrics(tokenId, orderbook);
     if (this.isLiquidityThin(metrics)) {
       console.log(`⚠️ Low liquidity for ${tokenId}, skipping quotes...`);
       await this.cancelOrdersForMarket(tokenId);
@@ -721,7 +740,7 @@ export class MarketMaker {
       return;
     }
 
-    const profile = this.resolveAdaptiveProfile(metrics.volEma);
+    const profile = this.resolveAdaptiveProfile(metrics.volEma, metrics.depthEma);
 
     let existingOrders = Array.from(this.openOrders.values()).filter(
       (o) => o.token_id === tokenId && o.status === 'OPEN'
