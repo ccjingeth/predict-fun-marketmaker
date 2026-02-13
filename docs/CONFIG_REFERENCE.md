@@ -27,6 +27,27 @@
 - `MAX_ORDERS_PER_MARKET`：单市场最大挂单数。
 - `MAX_DAILY_LOSS`：日内亏损熔断。
 
+### 做市自适应参数（新增）
+
+- `MM_ACCOUNT_EQUITY_USD`：账户净资产估算（用于动态风控）。
+- `MM_MAX_POSITION_PCT`：单市场最大持仓占净资产比例（如 0.05=5%）。
+- `MM_ORDER_SIZE_PCT`：单笔挂单金额占净资产比例。
+- `MM_MAX_SINGLE_ORDER_PCT`：单笔上限占净资产比例。
+- `MM_MAX_DAILY_LOSS_PCT`：日内亏损熔断占净资产比例。
+- `MM_ADAPTIVE_PARAMS`：开启自适应参数（默认 true）。
+- `MM_SPREAD_VOL_WEIGHT`：波动对价差放大的权重。
+- `MM_SPREAD_LIQ_WEIGHT`：流动性不足对价差放大的权重。
+- `MM_BOOK_SPREAD_WEIGHT`：盘口原生价差权重。
+- `MM_VOL_EMA_ALPHA`：波动 EMA 系数。
+- `MM_DEPTH_EMA_ALPHA`：深度 EMA 系数。
+- `MM_DEPTH_LEVELS`：深度统计层数。
+- `MM_MIN_TOP_DEPTH_SHARES`：最小顶层深度份额。
+- `MM_MIN_TOP_DEPTH_USD`：最小顶层深度金额。
+- `MM_DEPTH_DROP_RATIO`：顶层深度快速下滑阈值（如 0.5 表示下降 50% 触发）。
+- `MM_DEPTH_REF_SHARES`：深度参考值，用于流动性惩罚。
+- `MM_INVENTORY_SKEW_VOL_WEIGHT`：波动对库存偏置的权重。
+- `MM_INVENTORY_SKEW_DEPTH_WEIGHT`：流动性对库存偏置的权重。
+
 ## 3. 做市商防吃单/对冲
 
 - `ANTI_FILL_BPS`：靠近吃单时撤单阈值。

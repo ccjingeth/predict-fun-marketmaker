@@ -38,6 +38,9 @@ export class MarketMaker {
   private positions: Map<string, Position> = new Map();
   private lastPrices: Map<string, number> = new Map();
   private lastPriceAt: Map<string, number> = new Map();
+  private volatilityEma: Map<string, number> = new Map();
+  private depthEma: Map<string, number> = new Map();
+  private lastDepth: Map<string, number> = new Map();
   private lastActionAt: Map<string, number> = new Map();
   private cooldownUntil: Map<string, number> = new Map();
   private pauseUntil: Map<string, number> = new Map();
@@ -132,7 +135,7 @@ export class MarketMaker {
 
       this.sessionPnL = Array.from(this.positions.values()).reduce((sum, p) => sum + p.pnl, 0);
 
-      const maxDailyLoss = this.config.maxDailyLoss ?? 200;
+      const maxDailyLoss = this.getEffectiveMaxDailyLoss();
       if (this.sessionPnL <= -Math.abs(maxDailyLoss)) {
         if (!this.tradingHalted) {
           console.log(`🛑 Trading halted: session PnL ${this.sessionPnL.toFixed(2)} <= -${Math.abs(maxDailyLoss)}`);
@@ -159,7 +162,20 @@ export class MarketMaker {
     }
 
     const priceChange = Math.abs(orderbook.mid_price - lastPrice) / lastPrice;
-    return priceChange > this.config.cancelThreshold;
+    if (priceChange > this.config.cancelThreshold) {
+      return true;
+    }
+
+    const depthDropRatio = this.config.mmDepthDropRatio ?? 0;
+    if (depthDropRatio > 0) {
+      const currentDepth = this.getTopDepth(orderbook).shares;
+      const lastDepth = this.lastDepth.get(tokenId);
+      if (lastDepth && lastDepth > 0 && currentDepth / lastDepth < 1 - depthDropRatio) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private canSendAction(tokenId: string): boolean {
@@ -279,6 +295,116 @@ export class MarketMaker {
     return Math.max(min, Math.min(max, value));
   }
 
+  private getAccountEquityUsd(): number {
+    const equity = this.config.mmAccountEquityUsd ?? 0;
+    if (equity > 0) {
+      return equity;
+    }
+    const positionsValue = Array.from(this.positions.values()).reduce((sum, p) => sum + (p.total_value || 0), 0);
+    return Math.max(0, positionsValue);
+  }
+
+  private getEffectiveMaxPosition(): number {
+    const pct = this.config.mmMaxPositionPct ?? 0;
+    const equity = this.getAccountEquityUsd();
+    if (pct > 0 && equity > 0) {
+      return Math.max(1, equity * pct);
+    }
+    return Math.max(1, this.config.maxPosition);
+  }
+
+  private getEffectiveOrderSize(): number {
+    const pct = this.config.mmOrderSizePct ?? 0;
+    const equity = this.getAccountEquityUsd();
+    if (pct > 0 && equity > 0) {
+      return Math.max(1, equity * pct);
+    }
+    return this.config.orderSize;
+  }
+
+  private getEffectiveMaxSingleOrderValue(): number {
+    const pct = this.config.mmMaxSingleOrderPct ?? 0;
+    const equity = this.getAccountEquityUsd();
+    if (pct > 0 && equity > 0) {
+      return Math.max(1, equity * pct);
+    }
+    return this.config.maxSingleOrderValue ?? Number.POSITIVE_INFINITY;
+  }
+
+  private getEffectiveMaxDailyLoss(): number {
+    const pct = this.config.mmMaxDailyLossPct ?? 0;
+    const equity = this.getAccountEquityUsd();
+    if (pct > 0 && equity > 0) {
+      return Math.max(1, equity * pct);
+    }
+    return this.config.maxDailyLoss ?? 200;
+  }
+
+  private getTopDepth(orderbook: Orderbook): { shares: number; usd: number } {
+    const levels = Math.max(1, this.config.mmDepthLevels ?? 1);
+    const bids = orderbook.bids.slice(0, levels);
+    const asks = orderbook.asks.slice(0, levels);
+    let shares = 0;
+    let usd = 0;
+    for (const entry of bids) {
+      const s = this.parseShares(entry);
+      const p = Number(entry.price);
+      if (s > 0 && Number.isFinite(p)) {
+        shares += s;
+        usd += s * p;
+      }
+    }
+    for (const entry of asks) {
+      const s = this.parseShares(entry);
+      const p = Number(entry.price);
+      if (s > 0 && Number.isFinite(p)) {
+        shares += s;
+        usd += s * p;
+      }
+    }
+    return { shares, usd };
+  }
+
+  private updateMarketMetrics(tokenId: string, orderbook: Orderbook): { volEma: number; depthEma: number; topDepth: number; topDepthUsd: number } {
+    const micro = this.calculateMicroPrice(orderbook);
+    if (micro && micro > 0) {
+      const lastMid = this.lastPrices.get(tokenId);
+      const alpha = this.config.mmVolEmaAlpha ?? 0.2;
+      if (lastMid && lastMid > 0) {
+        const ret = Math.abs(micro - lastMid) / lastMid;
+        const prev = this.volatilityEma.get(tokenId) ?? 0;
+        const next = prev === 0 ? ret : prev * (1 - alpha) + ret * alpha;
+        this.volatilityEma.set(tokenId, next);
+      }
+    }
+
+    const depth = this.getTopDepth(orderbook);
+    const depthAlpha = this.config.mmDepthEmaAlpha ?? 0.2;
+    const prevDepth = this.depthEma.get(tokenId) ?? 0;
+    const nextDepth = prevDepth === 0 ? depth.shares : prevDepth * (1 - depthAlpha) + depth.shares * depthAlpha;
+    this.depthEma.set(tokenId, nextDepth);
+    this.lastDepth.set(tokenId, depth.shares);
+
+    return {
+      volEma: this.volatilityEma.get(tokenId) ?? 0,
+      depthEma: nextDepth,
+      topDepth: depth.shares,
+      topDepthUsd: depth.usd,
+    };
+  }
+
+  private isLiquidityThin(metrics: { topDepth: number; topDepthUsd: number }): boolean {
+    const minShares = this.config.mmMinTopDepthShares ?? 0;
+    const minUsd = this.config.mmMinTopDepthUsd ?? 0;
+    if (minShares > 0 && metrics.topDepth < minShares) {
+      return true;
+    }
+    if (minUsd > 0 && metrics.topDepthUsd < minUsd) {
+      return true;
+    }
+    return false;
+  }
+
   private calculateInventoryBias(tokenId: string): number {
     const position = this.positions.get(tokenId);
     if (!position) {
@@ -286,7 +412,7 @@ export class MarketMaker {
     }
 
     const netShares = position.yes_amount - position.no_amount;
-    const maxPosition = Math.max(this.config.maxPosition, 1);
+    const maxPosition = this.getEffectiveMaxPosition();
     const normalized = netShares / maxPosition;
 
     return this.clamp(normalized, -1, 1);
@@ -322,7 +448,22 @@ export class MarketMaker {
     const volatilityComponent =
       lastMid && lastMid > 0 ? Math.abs(microPrice - lastMid) / lastMid : 0;
 
-    let adaptiveSpread = baseSpread + bookSpread * 0.35 + volatilityComponent * 0.5;
+    const volEma = this.volatilityEma.get(market.token_id) ?? volatilityComponent;
+    const depthRef = this.config.mmDepthRefShares ?? 200;
+    const depthEma = this.depthEma.get(market.token_id) ?? 0;
+    const depthFactor =
+      depthRef > 0 && depthEma > 0 ? this.clamp(depthEma / depthRef, 0.2, 3) : 1;
+    const liquidityPenalty = depthFactor < 1 ? 1 / depthFactor - 1 : 0;
+
+    const bookWeight = this.config.mmBookSpreadWeight ?? 0.35;
+    const volWeight = this.config.mmSpreadVolWeight ?? 1.2;
+    const liqWeight = this.config.mmSpreadLiquidityWeight ?? 0.5;
+
+    let adaptiveSpread =
+      this.config.mmAdaptiveParams === false
+        ? baseSpread + bookSpread * 0.35 + volatilityComponent * 0.5
+        : baseSpread * (1 + volEma * volWeight + liquidityPenalty * liqWeight) +
+          bookSpread * bookWeight;
 
     if (market.liquidity_activation?.max_spread) {
       adaptiveSpread = Math.min(adaptiveSpread, market.liquidity_activation.max_spread * 0.95);
@@ -331,7 +472,13 @@ export class MarketMaker {
     adaptiveSpread = this.clamp(adaptiveSpread, minSpread, maxSpread);
 
     const inventoryBias = this.calculateInventoryBias(market.token_id);
-    const inventorySkewFactor = this.config.inventorySkewFactor ?? 0.15;
+    let inventorySkewFactor = this.config.inventorySkewFactor ?? 0.15;
+    if (this.config.mmAdaptiveParams !== false) {
+      const volSkewWeight = this.config.mmInventorySkewVolWeight ?? 1.0;
+      const liqSkewWeight = this.config.mmInventorySkewDepthWeight ?? 0.4;
+      inventorySkewFactor =
+        inventorySkewFactor * (1 + volEma * volSkewWeight + liquidityPenalty * liqSkewWeight);
+    }
 
     let fairPrice = microPrice * (1 - inventoryBias * inventorySkewFactor * adaptiveSpread);
     let valueBias = 0;
@@ -386,17 +533,16 @@ export class MarketMaker {
     }
 
     const positionValue = this.positions.get(market.token_id)?.total_value || 0;
-    const remainingRiskBudget = Math.max(0, this.config.maxPosition - positionValue);
+    const effectiveMaxPosition = this.getEffectiveMaxPosition();
+    const remainingRiskBudget = Math.max(0, effectiveMaxPosition - positionValue);
 
     if (remainingRiskBudget <= 0) {
       return { shares: 0, usdt: 0 };
     }
 
-    const targetOrderValue = Math.min(
-      this.config.orderSize,
-      this.config.maxSingleOrderValue ?? this.config.orderSize,
-      remainingRiskBudget
-    );
+    const effectiveOrderSize = this.getEffectiveOrderSize();
+    const effectiveMaxSingle = this.getEffectiveMaxSingleOrderValue();
+    const targetOrderValue = Math.min(effectiveOrderSize, effectiveMaxSingle, remainingRiskBudget);
 
     if (targetOrderValue <= 0) {
       return { shares: 0, usdt: 0 };
@@ -418,7 +564,7 @@ export class MarketMaker {
     }
 
     const usdt = shares * price;
-    const maxSingleOrderValue = this.config.maxSingleOrderValue ?? Number.POSITIVE_INFINITY;
+    const maxSingleOrderValue = effectiveMaxSingle;
 
     if (usdt > maxSingleOrderValue) {
       const cappedShares = Math.max(0, Math.floor(maxSingleOrderValue / price));
@@ -519,6 +665,15 @@ export class MarketMaker {
     }
 
     if (!this.canSendAction(tokenId)) {
+      return;
+    }
+
+    const metrics = this.updateMarketMetrics(tokenId, orderbook);
+    if (this.isLiquidityThin(metrics)) {
+      console.log(`⚠️ Low liquidity for ${tokenId}, skipping quotes...`);
+      await this.cancelOrdersForMarket(tokenId);
+      this.markCooldown(tokenId, this.config.cooldownAfterCancelMs ?? 4000);
+      this.markAction(tokenId);
       return;
     }
 
