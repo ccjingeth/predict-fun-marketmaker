@@ -145,6 +145,9 @@ export function loadConfig(): Config {
     mmFillSlowdownWindowMs: parseInt(process.env.MM_FILL_SLOWDOWN_WINDOW_MS || '60000'),
     mmFillSlowdownFactor: parseFloat(process.env.MM_FILL_SLOWDOWN_FACTOR || '0.15'),
     mmFillSlowdownMaxMultiplier: parseFloat(process.env.MM_FILL_SLOWDOWN_MAX_MULTIPLIER || '2'),
+    mmAutoSizeOnFill: process.env.MM_AUTO_SIZE_ON_FILL !== 'false',
+    mmAutoSizeOnFillDecayMs: parseInt(process.env.MM_AUTO_SIZE_ON_FILL_DECAY_MS || '90000'),
+    mmAutoSizeMinFactor: parseFloat(process.env.MM_AUTO_SIZE_MIN_FACTOR || '0.4'),
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -456,6 +459,10 @@ export function loadConfig(): Config {
     config.mmPartialFillPenaltyDecayMs = 0;
   }
 
+  if ((config.mmAutoSizeMinFactor ?? 0) <= 0) {
+    config.mmAutoSizeMinFactor = 0.4;
+  }
+
   return config;
 }
 
@@ -500,6 +507,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `MM Recheck: cancel=${config.mmCancelRecheckMs}ms reprice=${config.mmRepriceRecheckMs}ms cooldown=${config.mmRecheckCooldownMs}ms`
+  );
+  console.log(
+    `MM Auto Size: onFill=${config.mmAutoSizeOnFill ? '✅' : '❌'} min=${config.mmAutoSizeMinFactor}`
   );
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);

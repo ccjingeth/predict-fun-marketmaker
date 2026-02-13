@@ -68,6 +68,9 @@
 - `MM_FILL_SLOWDOWN_WINDOW_MS`：成交减速统计窗口。
 - `MM_FILL_SLOWDOWN_FACTOR`：成交减速强度。
 - `MM_FILL_SLOWDOWN_MAX_MULTIPLIER`：成交减速最大倍率。
+- `MM_AUTO_SIZE_ON_FILL`：成交后自动缩小挂单份额。
+- `MM_AUTO_SIZE_ON_FILL_DECAY_MS`：自动缩小恢复时间（毫秒）。
+- `MM_AUTO_SIZE_MIN_FACTOR`：自动缩小最小倍率（防止缩得过小）。
 
 ### 做市自适应参数（新增）
 

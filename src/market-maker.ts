@@ -66,7 +66,7 @@ export class MarketMaker {
   private nearTouchHoldUntil: Map<string, number> = new Map();
   private repriceHoldUntil: Map<string, number> = new Map();
   private cancelHoldUntil: Map<string, number> = new Map();
-  private sizePenalty: Map<string, { value: number; ts: number }> = new Map();
+  private sizePenalty: Map<string, { value: number; ts: number; auto?: boolean }> = new Map();
   private recheckCooldownUntil: Map<string, number> = new Map();
   private fillPressure: Map<string, { score: number; ts: number }> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
@@ -686,15 +686,15 @@ export class MarketMaker {
     this.icebergPenalty.set('global', { value: this.clamp(penalty, 0.2, 1), ts: Date.now() });
   }
 
-  private applySizePenalty(tokenId: string, penalty: number): void {
+  private applySizePenalty(tokenId: string, penalty: number, auto: boolean = false): void {
     const value = this.clamp(penalty, 0.2, 1);
     const current = this.sizePenalty.get(tokenId);
     if (!current) {
-      this.sizePenalty.set(tokenId, { value, ts: Date.now() });
+      this.sizePenalty.set(tokenId, { value, ts: Date.now(), auto });
       return;
     }
     const next = Math.min(current.value, value);
-    this.sizePenalty.set(tokenId, { value: next, ts: Date.now() });
+    this.sizePenalty.set(tokenId, { value: next, ts: Date.now(), auto: current.auto || auto });
   }
 
   private getSizePenalty(tokenId: string): number {
@@ -702,7 +702,9 @@ export class MarketMaker {
     if (!entry) {
       return 1;
     }
-    const decayMs = this.config.mmPartialFillPenaltyDecayMs ?? 60000;
+    const decayMs = entry.auto
+      ? this.config.mmAutoSizeOnFillDecayMs ?? 90000
+      : this.config.mmPartialFillPenaltyDecayMs ?? 60000;
     if (!decayMs || decayMs <= 0) {
       return entry.value;
     }
@@ -1562,6 +1564,11 @@ export class MarketMaker {
       if (absDelta >= partialThreshold) {
         const penalty = this.config.mmPartialFillPenalty ?? 0.6;
         this.applySizePenalty(tokenId, penalty);
+      }
+      if (absDelta > 0 && this.config.mmAutoSizeOnFill !== false) {
+        const minFactor = this.config.mmAutoSizeMinFactor ?? 0.4;
+        const factor = this.clamp(1 - absDelta / (partialThreshold * 5), minFactor, 1);
+        this.applySizePenalty(tokenId, factor, true);
       }
       if (absDelta >= triggerShares) {
         this.applyIcebergPenalty(tokenId);

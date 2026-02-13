@@ -120,6 +120,9 @@ export interface Config {
   mmFillSlowdownWindowMs?: number;
   mmFillSlowdownFactor?: number;
   mmFillSlowdownMaxMultiplier?: number;
+  mmAutoSizeOnFill?: boolean;
+  mmAutoSizeOnFillDecayMs?: number;
+  mmAutoSizeMinFactor?: number;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;
