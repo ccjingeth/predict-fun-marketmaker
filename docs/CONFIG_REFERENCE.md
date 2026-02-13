@@ -47,6 +47,12 @@
 - `MM_DEPTH_REF_SHARES`：深度参考值，用于流动性惩罚。
 - `MM_INVENTORY_SKEW_VOL_WEIGHT`：波动对库存偏置的权重。
 - `MM_INVENTORY_SKEW_DEPTH_WEIGHT`：流动性对库存偏置的权重。
+- `MM_ICEBERG_ENABLED`：启用冰山挂单模式（分块下单）。
+- `MM_ICEBERG_RATIO`：每次下单使用目标份额的比例。
+- `MM_ICEBERG_MAX_CHUNK_SHARES`：冰山单最大份额。
+- `MM_ADAPTIVE_PROFILE`：自适应档位（AUTO / CALM / NORMAL / VOLATILE）。
+- `MM_VOLATILITY_CALM_BPS`：低波动阈值（bps）。
+- `MM_VOLATILITY_VOLATILE_BPS`：高波动阈值（bps）。
 
 ## 3. 做市商防吃单/对冲
 

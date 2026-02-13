@@ -393,6 +393,28 @@ export class MarketMaker {
     };
   }
 
+  private resolveAdaptiveProfile(volEma: number): 'CALM' | 'NORMAL' | 'VOLATILE' {
+    const configured = (this.config.mmAdaptiveProfile || 'AUTO').toUpperCase();
+    if (configured === 'CALM' || configured === 'NORMAL' || configured === 'VOLATILE') {
+      return configured;
+    }
+    const calm = this.config.mmVolatilityCalmBps ?? 0.004;
+    const volatile = this.config.mmVolatilityVolatileBps ?? 0.02;
+    if (volEma <= calm) return 'CALM';
+    if (volEma >= volatile) return 'VOLATILE';
+    return 'NORMAL';
+  }
+
+  private applyIceberg(shares: number): number {
+    if (!this.config.mmIcebergEnabled) {
+      return shares;
+    }
+    const ratio = this.config.mmIcebergRatio ?? 0.3;
+    const chunkMax = this.config.mmIcebergMaxChunkShares ?? 15;
+    const next = Math.max(1, Math.floor(shares * Math.max(0.05, ratio)));
+    return Math.min(next, chunkMax);
+  }
+
   private isLiquidityThin(metrics: { topDepth: number; topDepthUsd: number }): boolean {
     const minShares = this.config.mmMinTopDepthShares ?? 0;
     const minUsd = this.config.mmMinTopDepthUsd ?? 0;
@@ -699,6 +721,8 @@ export class MarketMaker {
       return;
     }
 
+    const profile = this.resolveAdaptiveProfile(metrics.volEma);
+
     let existingOrders = Array.from(this.openOrders.values()).filter(
       (o) => o.token_id === tokenId && o.status === 'OPEN'
     );
@@ -745,6 +769,8 @@ export class MarketMaker {
     const bidOrderSize = this.calculateOrderSize(market, prices.bidPrice);
     const askOrderSize = this.calculateOrderSize(market, prices.askPrice);
 
+    const profileScale = profile === 'CALM' ? 1.0 : profile === 'VOLATILE' ? 0.6 : 0.85;
+
     console.log(`📝 Market ${market.question.substring(0, 40)}...`);
     const valueInfo =
       prices.valueConfidence && Math.abs(prices.valueBias ?? 0) > 0
@@ -752,7 +778,7 @@ export class MarketMaker {
         : '';
 
     console.log(
-      `   bid=${prices.bidPrice.toFixed(4)} ask=${prices.askPrice.toFixed(4)} spread=${(prices.spread * 100).toFixed(2)}% bias=${prices.inventoryBias.toFixed(2)}${valueInfo} ${qualifiesForPoints ? '✨' : ''}`
+      `   bid=${prices.bidPrice.toFixed(4)} ask=${prices.askPrice.toFixed(4)} spread=${(prices.spread * 100).toFixed(2)}% bias=${prices.inventoryBias.toFixed(2)}${valueInfo} ${qualifiesForPoints ? '✨' : ''} profile=${profile}`
     );
 
     const suppressBuy = prices.inventoryBias > 0.85;
@@ -760,12 +786,16 @@ export class MarketMaker {
 
     let placed = false;
     if (!hasBid && !suppressBuy && bidOrderSize.shares > 0) {
-      await this.placeLimitOrder(market, 'BUY', prices.bidPrice, bidOrderSize.shares);
+      const targetShares = Math.max(1, Math.floor(bidOrderSize.shares * profileScale));
+      const shares = this.applyIceberg(targetShares);
+      await this.placeLimitOrder(market, 'BUY', prices.bidPrice, shares);
       placed = true;
     }
 
     if (!hasAsk && !suppressSell && askOrderSize.shares > 0) {
-      await this.placeLimitOrder(market, 'SELL', prices.askPrice, askOrderSize.shares);
+      const targetShares = Math.max(1, Math.floor(askOrderSize.shares * profileScale));
+      const shares = this.applyIceberg(targetShares);
+      await this.placeLimitOrder(market, 'SELL', prices.askPrice, shares);
       placed = true;
     }
 

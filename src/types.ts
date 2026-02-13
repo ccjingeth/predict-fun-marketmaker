@@ -36,6 +36,12 @@ export interface Config {
   mmDepthRefShares?: number;
   mmInventorySkewVolWeight?: number;
   mmInventorySkewDepthWeight?: number;
+  mmIcebergEnabled?: boolean;
+  mmIcebergRatio?: number;
+  mmIcebergMaxChunkShares?: number;
+  mmAdaptiveProfile?: 'AUTO' | 'CALM' | 'NORMAL' | 'VOLATILE';
+  mmVolatilityCalmBps?: number;
+  mmVolatilityVolatileBps?: number;
   inventorySkewFactor?: number;
   cancelThreshold: number;
   repriceThreshold?: number;
