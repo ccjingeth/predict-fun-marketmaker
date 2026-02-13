@@ -66,6 +66,10 @@ export interface Config {
   mmDepthTrendDropRatio?: number;
   mmIcebergRequoteVolMultiplier?: number;
   mmIcebergRequoteDepthMultiplier?: number;
+  mmProfileHoldMs?: number;
+  mmProfileVolHysteresisBps?: number;
+  mmIcebergFillPenalty?: number;
+  mmIcebergPenaltyDecayMs?: number;
   inventorySkewFactor?: number;
   cancelThreshold: number;
   repriceThreshold?: number;

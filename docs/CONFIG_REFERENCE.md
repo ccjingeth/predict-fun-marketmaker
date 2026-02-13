@@ -77,6 +77,10 @@
 - `MM_DEPTH_TREND_DROP_RATIO`：深度趋势快速下滑阈值（相对 EMA）。
 - `MM_ICEBERG_REQUOTE_VOL_MULTIPLIER`：波动越大，冰山重挂间隔越长。
 - `MM_ICEBERG_REQUOTE_DEPTH_MULTIPLIER`：深度下降时，冰山重挂间隔越长。
+- `MM_PROFILE_HOLD_MS`：做市档位最小保持时间，避免频繁抖动。
+- `MM_PROFILE_VOL_HYSTERESIS_BPS`：波动阈值回切缓冲（防止频繁切换）。
+- `MM_ICEBERG_FILL_PENALTY`：被动成交后冰山缩小比例。
+- `MM_ICEBERG_PENALTY_DECAY_MS`：冰山惩罚恢复时间（毫秒）。
 
 ## 3. 做市商防吃单/对冲
 

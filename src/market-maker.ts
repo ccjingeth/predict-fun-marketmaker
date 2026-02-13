@@ -47,6 +47,9 @@ export class MarketMaker {
   private lastNetShares: Map<string, number> = new Map();
   private lastHedgeAt: Map<string, number> = new Map();
   private lastIcebergAt: Map<string, number> = new Map();
+  private lastProfile: Map<string, 'CALM' | 'NORMAL' | 'VOLATILE'> = new Map();
+  private lastProfileAt: Map<string, number> = new Map();
+  private icebergPenalty: Map<string, { value: number; ts: number }> = new Map();
   private valueDetector?: ValueMismatchDetector;
   private crossAggregator?: CrossPlatformAggregator;
   private crossExecutionRouter?: CrossPlatformExecutionRouter;
@@ -460,6 +463,7 @@ export class MarketMaker {
     }
     const calm = this.config.mmVolatilityCalmBps ?? 0.004;
     const volatile = this.config.mmVolatilityVolatileBps ?? 0.02;
+    const hysteresis = this.config.mmProfileVolHysteresisBps ?? 0.002;
     const depthRef = this.config.mmDepthRefShares ?? 200;
     const depthRatio = depthRef > 0 ? depthEma / depthRef : 1;
     const low = this.config.mmProfileLiquidityLow ?? 0.5;
@@ -467,9 +471,29 @@ export class MarketMaker {
     const trendDrop = this.config.mmDepthTrendDropRatio ?? 0.4;
     if (depthTrend < 1 - trendDrop) return 'VOLATILE';
     if (depthRatio <= low) return 'VOLATILE';
-    if (volEma >= volatile) return 'VOLATILE';
-    if (volEma <= calm && depthRatio >= high) return 'CALM';
+    if (volEma >= volatile + hysteresis) return 'VOLATILE';
+    if (volEma <= calm - hysteresis && depthRatio >= high) return 'CALM';
     return 'NORMAL';
+  }
+
+  private stabilizeProfile(tokenId: string, desired: 'CALM' | 'NORMAL' | 'VOLATILE'): 'CALM' | 'NORMAL' | 'VOLATILE' {
+    const current = this.lastProfile.get(tokenId);
+    if (!current) {
+      this.lastProfile.set(tokenId, desired);
+      this.lastProfileAt.set(tokenId, Date.now());
+      return desired;
+    }
+    if (current === desired) {
+      return current;
+    }
+    const holdMs = this.config.mmProfileHoldMs ?? 15000;
+    const lastAt = this.lastProfileAt.get(tokenId) || 0;
+    if (Date.now() - lastAt < holdMs) {
+      return current;
+    }
+    this.lastProfile.set(tokenId, desired);
+    this.lastProfileAt.set(tokenId, Date.now());
+    return desired;
   }
 
   private applyIceberg(shares: number): number {
@@ -478,8 +502,31 @@ export class MarketMaker {
     }
     const ratio = this.config.mmIcebergRatio ?? 0.3;
     const chunkMax = this.config.mmIcebergMaxChunkShares ?? 15;
-    const next = Math.max(1, Math.floor(shares * Math.max(0.05, ratio)));
+    const penalty = this.getIcebergPenalty(this.config.mmIcebergFillPenalty ?? 0.6);
+    const next = Math.max(1, Math.floor(shares * Math.max(0.05, ratio) * penalty));
     return Math.min(next, chunkMax);
+  }
+
+  private getIcebergPenalty(defaultPenalty: number): number {
+    const entry = this.icebergPenalty.get('global');
+    if (!entry) {
+      return 1;
+    }
+    const decayMs = this.config.mmIcebergPenaltyDecayMs ?? 60000;
+    const elapsed = Date.now() - entry.ts;
+    if (elapsed <= 0) {
+      return entry.value;
+    }
+    const recovered = entry.value + (1 - entry.value) * Math.min(1, elapsed / decayMs);
+    return this.clamp(recovered, entry.value, 1);
+  }
+
+  private applyIcebergPenalty(tokenId: string): void {
+    if (!this.config.mmIcebergEnabled) {
+      return;
+    }
+    const penalty = this.config.mmIcebergFillPenalty ?? 0.6;
+    this.icebergPenalty.set('global', { value: this.clamp(penalty, 0.2, 1), ts: Date.now() });
   }
 
   private canRequoteIceberg(tokenId: string, depthTrend: number): boolean {
@@ -844,7 +891,8 @@ export class MarketMaker {
       return;
     }
 
-    const profile = this.resolveAdaptiveProfile(metrics.volEma, metrics.depthEma, metrics.depthTrend);
+    const rawProfile = this.resolveAdaptiveProfile(metrics.volEma, metrics.depthEma, metrics.depthTrend);
+    const profile = this.stabilizeProfile(tokenId, rawProfile);
 
     let existingOrders = Array.from(this.openOrders.values()).filter(
       (o) => o.token_id === tokenId && o.status === 'OPEN'
@@ -1042,6 +1090,7 @@ export class MarketMaker {
       const prev = this.lastNetShares.get(tokenId) ?? 0;
       const delta = net - prev;
       if (Math.abs(delta) >= triggerShares) {
+        this.applyIcebergPenalty(tokenId);
         await this.handleFillHedge(tokenId, delta, position.question);
       }
       this.lastNetShares.set(tokenId, net);
