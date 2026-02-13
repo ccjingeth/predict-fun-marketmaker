@@ -51,6 +51,7 @@ function ensureUserDataAssets() {
   const dependencyPath = path.join(userRoot, 'dependency-constraints.json');
   const statePath = path.join(userRoot, 'cross-platform-state.json');
   const metricsPath = path.join(userRoot, 'cross-platform-metrics.json');
+  const mmMetricsPath = path.join(userRoot, 'mm-metrics.json');
 
   if (!fs.existsSync(envPath)) {
     const templatePath = path.join(getProjectRoot(), '.env.example');
@@ -84,6 +85,11 @@ function ensureUserDataAssets() {
     } else {
       template = template.replace(/CROSS_PLATFORM_METRICS_PATH=.*/g, `CROSS_PLATFORM_METRICS_PATH=${metricsPath}`);
     }
+    if (!template.includes('MM_METRICS_PATH')) {
+      template = `${template.trim()}\nMM_METRICS_PATH=${mmMetricsPath}\n`;
+    } else {
+      template = template.replace(/MM_METRICS_PATH=.*/g, `MM_METRICS_PATH=${mmMetricsPath}`);
+    }
     fs.writeFileSync(envPath, template.endsWith('\n') ? template : `${template}\n`, 'utf8');
   }
 
@@ -111,6 +117,10 @@ function ensureUserDataAssets() {
 
   if (!fs.existsSync(metricsPath)) {
     fs.writeFileSync(metricsPath, '{\"version\":1,\"ts\":0,\"metrics\":{}}\n', 'utf8');
+  }
+
+  if (!fs.existsSync(mmMetricsPath)) {
+    fs.writeFileSync(mmMetricsPath, '{\"version\":1,\"ts\":0,\"markets\":[]}\n', 'utf8');
   }
 }
 
@@ -251,6 +261,13 @@ function resolveMetricsPath() {
   const env = parseEnv(envText);
   const fallback = path.join(getUserDataRoot(), 'cross-platform-metrics.json');
   return resolveConfigPath(env.get('CROSS_PLATFORM_METRICS_PATH'), fallback);
+}
+
+function resolveMmMetricsPath() {
+  const envText = readEnvFile();
+  const env = parseEnv(envText);
+  const fallback = path.join(getUserDataRoot(), 'mm-metrics.json');
+  return resolveConfigPath(env.get('MM_METRICS_PATH'), fallback);
 }
 
 function readTextFile(filePath, fallback = '') {
@@ -635,6 +652,7 @@ ipcMain.handle('write-dependency', (_, text) => {
   return { ok: true };
 });
 ipcMain.handle('read-metrics', () => readTextFile(resolveMetricsPath(), '{\"version\":1,\"ts\":0,\"metrics\":{}}'));
+ipcMain.handle('read-mm-metrics', () => readTextFile(resolveMmMetricsPath(), '{\"version\":1,\"ts\":0,\"markets\":[]}'));
 ipcMain.handle('run-diagnostics', () => {
   try {
     const result = buildDiagnostics();

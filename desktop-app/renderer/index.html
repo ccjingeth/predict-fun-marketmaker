@@ -286,6 +286,44 @@
           </div>
         </section>
 
+        <section class="card metrics-card">
+          <div class="card-header">
+            <h2>做市指标</h2>
+            <div class="filters">
+              <span class="badge" id="mmStatus">未加载</span>
+              <button class="btn ghost" id="refreshMmMetrics">刷新</button>
+            </div>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric">
+              <span class="metric-label">做市状态</span>
+              <span class="metric-value" id="mmTradingStatus">--</span>
+              <span class="metric-hint">是否熔断</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">PnL</span>
+              <span class="metric-value" id="mmPnL">--</span>
+              <span class="metric-hint">会话累计</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">挂单数</span>
+              <span class="metric-value" id="mmOpenOrders">--</span>
+              <span class="metric-hint">当前 OPEN</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">持仓数</span>
+              <span class="metric-value" id="mmPositions">--</span>
+              <span class="metric-hint">当前市场数</span>
+            </div>
+            <div class="metric full">
+              <span class="metric-label">Top Markets</span>
+              <div class="health-list" id="mmMarketsList">
+                <div class="health-item ok">暂无数据。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="card health-card">
           <div class="card-header">
             <h2>系统体检</h2>

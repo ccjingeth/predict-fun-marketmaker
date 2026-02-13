@@ -95,6 +95,8 @@ export function loadConfig(): Config {
     mmProfileVolHysteresisBps: parseFloat(process.env.MM_PROFILE_VOL_HYSTERESIS_BPS || '0.002'),
     mmIcebergFillPenalty: parseFloat(process.env.MM_ICEBERG_FILL_PENALTY || '0.6'),
     mmIcebergPenaltyDecayMs: parseInt(process.env.MM_ICEBERG_PENALTY_DECAY_MS || '60000'),
+    mmMetricsPath: process.env.MM_METRICS_PATH || 'data/mm-metrics.json',
+    mmMetricsFlushMs: parseInt(process.env.MM_METRICS_FLUSH_MS || '5000'),
     inventorySkewFactor: parseFloat(process.env.INVENTORY_SKEW_FACTOR || '0.15'),
     cancelThreshold: parseFloat(process.env.CANCEL_THRESHOLD || '0.05'),
     repriceThreshold: parseFloat(process.env.REPRICE_THRESHOLD || '0.003'),

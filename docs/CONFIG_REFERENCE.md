@@ -81,6 +81,8 @@
 - `MM_PROFILE_VOL_HYSTERESIS_BPS`：波动阈值回切缓冲（防止频繁切换）。
 - `MM_ICEBERG_FILL_PENALTY`：被动成交后冰山缩小比例。
 - `MM_ICEBERG_PENALTY_DECAY_MS`：冰山惩罚恢复时间（毫秒）。
+- `MM_METRICS_PATH`：做市指标输出路径（JSON）。
+- `MM_METRICS_FLUSH_MS`：做市指标刷新间隔（毫秒）。
 
 ## 3. 做市商防吃单/对冲
 

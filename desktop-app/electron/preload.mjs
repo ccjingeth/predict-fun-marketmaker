@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('predictBot', {
   readDependency: () => ipcRenderer.invoke('read-dependency'),
   writeDependency: (text) => ipcRenderer.invoke('write-dependency', text),
   readMetrics: () => ipcRenderer.invoke('read-metrics'),
+  readMmMetrics: () => ipcRenderer.invoke('read-mm-metrics'),
   runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
   exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
   startBot: (type) => ipcRenderer.invoke('start-bot', type),

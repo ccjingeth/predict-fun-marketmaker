@@ -72,6 +72,13 @@ const healthExportHint = document.getElementById('healthExportHint');
 const runDiagnosticsBtn = document.getElementById('runDiagnostics');
 const exportDiagnosticsBtn = document.getElementById('exportDiagnostics');
 const copyFailuresBtn = document.getElementById('copyFailures');
+const mmStatus = document.getElementById('mmStatus');
+const mmTradingStatus = document.getElementById('mmTradingStatus');
+const mmPnL = document.getElementById('mmPnL');
+const mmOpenOrders = document.getElementById('mmOpenOrders');
+const mmPositions = document.getElementById('mmPositions');
+const mmMarketsList = document.getElementById('mmMarketsList');
+const refreshMmMetrics = document.getElementById('refreshMmMetrics');
 
 const logs = [];
 const MAX_LOGS = 800;
@@ -1108,6 +1115,14 @@ function setMetricText(el, text) {
   el.textContent = text;
 }
 
+function setMmStatus(text, active) {
+  if (!mmStatus) return;
+  mmStatus.textContent = text;
+  mmStatus.style.background = active ? 'rgba(81, 209, 182, 0.2)' : 'rgba(247, 196, 108, 0.15)';
+  mmStatus.style.color = active ? '#51d1b6' : '#f7c46c';
+  mmStatus.style.borderColor = active ? 'rgba(81, 209, 182, 0.45)' : 'rgba(247, 196, 108, 0.35)';
+}
+
 function renderHealthItems(items) {
   if (!healthList) return;
   healthList.innerHTML = '';
@@ -1467,6 +1482,55 @@ async function loadMetrics() {
   }
 }
 
+async function loadMmMetrics() {
+  if (!window.predictBot.readMmMetrics) return;
+  try {
+    const raw = await window.predictBot.readMmMetrics();
+    if (!raw) {
+      setMmStatus('无数据', false);
+      return;
+    }
+    const data = JSON.parse(raw);
+    setMmStatus('已更新', true);
+    const halted = data.tradingHalted ? '已熔断' : '运行中';
+    setMetricText(mmTradingStatus, halted);
+    setMetricText(mmPnL, data.sessionPnL !== undefined ? data.sessionPnL.toFixed(2) : '--');
+    setMetricText(mmOpenOrders, `${data.openOrders ?? '--'}`);
+    setMetricText(mmPositions, `${data.positions ?? '--'}`);
+
+    if (mmMarketsList) {
+      mmMarketsList.innerHTML = '';
+      const markets = Array.isArray(data.markets) ? data.markets : [];
+      const top = markets.slice(0, 8);
+      if (top.length === 0) {
+        const item = document.createElement('div');
+        item.className = 'health-item ok';
+        item.textContent = '暂无数据。';
+        mmMarketsList.appendChild(item);
+      } else {
+        top.forEach((m) => {
+          const row = document.createElement('div');
+          row.className = 'health-item warn';
+          const label = document.createElement('div');
+          label.className = 'health-label';
+          label.textContent = `${m.question || m.tokenId || 'Unknown'} | ${m.profile}`;
+          const hint = document.createElement('div');
+          hint.className = 'health-hint';
+          const spreadPct = m.spread ? (m.spread * 100).toFixed(2) : '--';
+          const vol = m.volEma ? (m.volEma * 100).toFixed(2) : '--';
+          const depth = m.depthEma ? m.depthEma.toFixed(0) : '--';
+          hint.textContent = `spread=${spreadPct}% vol=${vol} depth=${depth}`;
+          row.appendChild(label);
+          row.appendChild(hint);
+          mmMarketsList.appendChild(row);
+        });
+      }
+    }
+  } catch (error) {
+    setMmStatus('读取失败', false);
+  }
+}
+
 function activateTab(name) {
   tabButtons.forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === name);
@@ -1511,6 +1575,7 @@ async function init() {
   updateLogFilterPresetSelect();
   bindLogFilterPresets();
   await loadMetrics();
+  await loadMmMetrics();
   await runDiagnostics();
 }
 
@@ -1581,6 +1646,7 @@ downgradeProfileBtn.addEventListener('click', () => applyDowngradeProfile('safe'
 downgradeSafeBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
 downgradeUltraBtn.addEventListener('click', () => applyDowngradeProfile('ultra'));
 applyFixTemplateBtn.addEventListener('click', applyFixTemplate);
+refreshMmMetrics.addEventListener('click', loadMmMetrics);
 
 init().catch((err) => {
   pushLog({ type: 'system', level: 'stderr', message: err?.message || '初始化失败' });
@@ -1588,4 +1654,5 @@ init().catch((err) => {
 
 setInterval(() => {
   loadMetrics().catch(() => {});
+  loadMmMetrics().catch(() => {});
 }, 5000);

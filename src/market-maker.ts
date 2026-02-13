@@ -11,6 +11,8 @@ import { CrossPlatformAggregator } from './external/aggregator.js';
 import { CrossPlatformExecutionRouter } from './external/execution.js';
 import { findBestMatch } from './external/match.js';
 import type { PlatformLeg, PlatformMarket } from './external/types.js';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
 
 interface QuotePrices {
   bidPrice: number;
@@ -50,6 +52,8 @@ export class MarketMaker {
   private lastProfile: Map<string, 'CALM' | 'NORMAL' | 'VOLATILE'> = new Map();
   private lastProfileAt: Map<string, number> = new Map();
   private icebergPenalty: Map<string, { value: number; ts: number }> = new Map();
+  private mmMetrics: Map<string, Record<string, unknown>> = new Map();
+  private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
   private crossAggregator?: CrossPlatformAggregator;
   private crossExecutionRouter?: CrossPlatformExecutionRouter;
@@ -529,6 +533,65 @@ export class MarketMaker {
     this.icebergPenalty.set('global', { value: this.clamp(penalty, 0.2, 1), ts: Date.now() });
   }
 
+  private async flushMmMetrics(): Promise<void> {
+    const target = this.config.mmMetricsPath;
+    const interval = this.config.mmMetricsFlushMs ?? 0;
+    if (!target || !interval) {
+      return;
+    }
+    const now = Date.now();
+    if (now - this.mmLastFlushAt < interval) {
+      return;
+    }
+    this.mmLastFlushAt = now;
+    try {
+      const payload = {
+        version: 1,
+        ts: now,
+        tradingHalted: this.tradingHalted,
+        sessionPnL: this.sessionPnL,
+        openOrders: this.openOrders.size,
+        positions: this.positions.size,
+        markets: Array.from(this.mmMetrics.values()),
+      };
+      const resolved = path.isAbsolute(target) ? target : path.resolve(process.cwd(), target);
+      await fs.mkdir(path.dirname(resolved), { recursive: true });
+      const tmp = `${resolved}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify(payload, null, 2), 'utf8');
+      await fs.rename(tmp, resolved);
+    } catch (error) {
+      console.warn('MM metrics flush failed:', error);
+    }
+  }
+
+  private recordMmMetrics(
+    market: Market,
+    orderbook: Orderbook,
+    prices: QuotePrices,
+    profile: 'CALM' | 'NORMAL' | 'VOLATILE',
+    metrics: { volEma: number; depthEma: number; topDepth: number; topDepthUsd: number; depthTrend: number }
+  ): void {
+    const imbalance = this.calculateOrderbookImbalance(orderbook);
+    const entry = {
+      tokenId: market.token_id,
+      question: market.question?.slice(0, 80),
+      profile,
+      spread: prices.spread,
+      bid: prices.bidPrice,
+      ask: prices.askPrice,
+      volEma: metrics.volEma,
+      depthEma: metrics.depthEma,
+      depthTrend: metrics.depthTrend,
+      topDepth: metrics.topDepth,
+      topDepthUsd: metrics.topDepthUsd,
+      imbalance,
+      inventoryBias: prices.inventoryBias,
+      updatedAt: Date.now(),
+    };
+    this.mmMetrics.set(market.token_id, entry);
+    void this.flushMmMetrics();
+  }
+
   private canRequoteIceberg(tokenId: string, depthTrend: number): boolean {
     const base = this.config.mmIcebergRequoteMs ?? 4000;
     const volMult = this.getVolatilityMultiplier(tokenId, this.config.mmIcebergRequoteVolMultiplier ?? 1.2);
@@ -893,6 +956,8 @@ export class MarketMaker {
 
     const rawProfile = this.resolveAdaptiveProfile(metrics.volEma, metrics.depthEma, metrics.depthTrend);
     const profile = this.stabilizeProfile(tokenId, rawProfile);
+
+    this.recordMmMetrics(market, orderbook, prices, profile, metrics);
 
     let existingOrders = Array.from(this.openOrders.values()).filter(
       (o) => o.token_id === tokenId && o.status === 'OPEN'

@@ -70,6 +70,8 @@ export interface Config {
   mmProfileVolHysteresisBps?: number;
   mmIcebergFillPenalty?: number;
   mmIcebergPenaltyDecayMs?: number;
+  mmMetricsPath?: string;
+  mmMetricsFlushMs?: number;
   inventorySkewFactor?: number;
   cancelThreshold: number;
   repriceThreshold?: number;
