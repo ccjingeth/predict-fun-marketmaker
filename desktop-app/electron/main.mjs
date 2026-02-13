@@ -153,6 +153,72 @@ function parseEnv(text) {
   return map;
 }
 
+function normalizeFailureLine(text) {
+  if (!text) return '';
+  const noisePatterns = [
+    /heartbeat/i,
+    /connected/i,
+    /subscribed/i,
+    /snapshot/i,
+    /ticker/i,
+    /pong/i,
+    /ping/i,
+    /status/i,
+  ];
+  if (noisePatterns.some((pattern) => pattern.test(text))) {
+    return '';
+  }
+  return text.replace(/\s+/g, ' ').replace(/\d+(\.\d+)?/g, '#').slice(0, 160);
+}
+
+function summarizeFailures() {
+  const counts = new Map();
+  logBuffer.forEach((entry) => {
+    if (entry.level !== 'stderr') return;
+    const line = normalizeFailureLine(entry.message || '');
+    if (!line) return;
+    counts.set(line, (counts.get(line) || 0) + 1);
+  });
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([message, count]) => ({ message, count }));
+}
+
+function buildEnvSuggestions(env) {
+  const lines = [];
+  lines.push('# 安全降级建议（需要手动合并到 .env）');
+  lines.push('AUTO_CONFIRM=false');
+  lines.push('ARB_AUTO_EXECUTE=false');
+  lines.push('CROSS_PLATFORM_AUTO_EXECUTE=false');
+  lines.push('CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true');
+  lines.push('CROSS_PLATFORM_ADAPTIVE_SIZE=true');
+  lines.push('CROSS_PLATFORM_DEPTH_USAGE=0.3');
+  lines.push('CROSS_PLATFORM_RECHECK_MS=300');
+  lines.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
+  lines.push('CROSS_PLATFORM_STABILITY_INTERVAL_MS=120');
+  lines.push('CROSS_PLATFORM_CHUNK_MAX_SHARES=10');
+  lines.push('CROSS_PLATFORM_CHUNK_DELAY_MIN_MS=200');
+  lines.push('CROSS_PLATFORM_CHUNK_DELAY_MAX_MS=1200');
+  lines.push('CROSS_PLATFORM_VOLATILITY_BPS=60');
+  lines.push('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS=60');
+  lines.push('CROSS_PLATFORM_AUTO_TUNE=true');
+  lines.push('CROSS_PLATFORM_CHUNK_AUTO_TUNE=true');
+  lines.push('CROSS_PLATFORM_USE_FOK=true');
+  lines.push('CROSS_PLATFORM_PARALLEL_SUBMIT=true');
+  lines.push('');
+  if (!env.get('API_KEY')) {
+    lines.push('# 缺少 API_KEY：请补全 Predict.fun API Key');
+  }
+  if (!env.get('PRIVATE_KEY')) {
+    lines.push('# 缺少 PRIVATE_KEY：请补全钱包私钥');
+  }
+  if ((env.get('ENABLE_TRADING') || '').toLowerCase() === 'true' && !env.get('JWT_TOKEN')) {
+    lines.push('# 实盘模式未设置 JWT_TOKEN');
+  }
+  return lines.join('\n');
+}
+
 function resolveConfigPath(value, fallbackPath) {
   if (!value) return fallbackPath;
   if (path.isAbsolute(value)) return value;
@@ -449,6 +515,7 @@ function exportDiagnosticsBundle() {
   fs.mkdirSync(outputDir, { recursive: true });
 
   const envPath = getEnvPath();
+  const envText = readEnvFile();
   const mappingPath = resolveMappingPath();
   const dependencyPath = resolveDependencyPath();
   const metricsPath = resolveMetricsPath();
@@ -463,10 +530,12 @@ function exportDiagnosticsBundle() {
     metricsPath,
     statePath,
     diagnostics: buildDiagnostics().items,
+    failuresTop: summarizeFailures(),
   };
 
   fs.writeFileSync(path.join(outputDir, 'diagnostics.json'), JSON.stringify(report, null, 2), 'utf8');
   fs.writeFileSync(path.join(outputDir, 'bot-logs.json'), JSON.stringify(logBuffer, null, 2), 'utf8');
+  fs.writeFileSync(path.join(outputDir, 'env-suggestions.txt'), buildEnvSuggestions(parseEnv(envText)), 'utf8');
 
   const copies = [
     { src: envPath, name: 'env.txt' },

@@ -98,8 +98,10 @@
           <div class="card-header">
             <h2>执行指标</h2>
             <div class="filters">
+              <span class="badge" id="riskLevel">风险未知</span>
               <span class="badge" id="metricsStatus">未加载</span>
               <button class="btn ghost" id="refreshMetrics">刷新</button>
+              <button class="btn ghost" id="downgradeProfile">一键降级</button>
             </div>
           </div>
           <div class="metrics-grid">
@@ -215,6 +217,7 @@
               <span class="badge" id="healthStatus">待检查</span>
               <button class="btn ghost" id="runDiagnostics">一键体检</button>
               <button class="btn ghost" id="exportDiagnostics">导出诊断包</button>
+              <button class="btn ghost" id="copyFailures">复制失败原因</button>
             </div>
           </div>
           <div class="health-list" id="healthList">

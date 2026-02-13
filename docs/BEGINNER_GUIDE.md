@@ -127,12 +127,19 @@
 
 点击“导出诊断包”会生成包含 `.env`、映射、依赖、metrics/state 的诊断包，方便排查问题。
 诊断包还会包含最近日志（`bot-logs.json`），以及体检报告（`diagnostics.json`）。
+新增 `env-suggestions.txt`：自动给出的“安全降级”建议参数，可直接复制进 `.env`。
+
+## 11. 风险等级与一键降级（桌面端推荐）
+
+- 风险等级会根据成功率、漂移、质量分、指标时效自动评估为“低/中/高”。  
+- “一键降级”会写入更保守的执行参数（只修改编辑区，需要手动保存）。  
+- “复制失败原因”可以快速粘贴给技术支持或用于排查。
 
 指标文件可在 `.env` 里设置：
 - `CROSS_PLATFORM_METRICS_PATH`
 - `CROSS_PLATFORM_STATE_PATH`
 
-## 11. 小额实盘演练（推荐）
+## 12. 小额实盘演练（推荐）
 
 脚本内置一键烟雾测试（下单后自动撤单）：
 
@@ -143,25 +150,25 @@
 - `SMOKE_LIVE=true`
 - 建议设置 `SMOKE_SHARES=1`、`SMOKE_PRICE_BUFFER_BPS=50`
 
-## 12. 深度与 VWAP（已默认启用）
+## 13. 深度与 VWAP（已默认启用）
 
 脚本会基于订单簿深度计算 VWAP，确保“总成本 < $1”的判断更接近真实成交。
 
-## 13. 失败熔断（防止连亏）
+## 14. 失败熔断（防止连亏）
 
 建议开启：
 - `ARB_MAX_ERRORS=5`
 - `ARB_ERROR_WINDOW_MS=60000`
 - `ARB_PAUSE_ON_ERROR_MS=60000`
 
-## 14. 手续费提示（重要）
+## 15. 手续费提示（重要）
 
 - Polymarket 的部分市场存在**曲线型手续费**，不是简单的线性比例。
 - 脚本默认使用 `POLYMARKET_FEE_RATE_URL` 获取费率，并用 `POLYMARKET_FEE_CURVE_*` 估算费用。
 - 如果你在非收费市场或费用变化频繁，建议：
   - 将 `POLYMARKET_FEE_BPS=0` 或关闭曲线（`POLYMARKET_FEE_CURVE_RATE=0`）。
 
-## 15. 常见问题
+## 16. 常见问题
 
 1. 没有数据？检查 API Key / WS 开关 / 网络。
 2. 自动执行失败？看日志，检查 JWT / 余额 / Approvals。

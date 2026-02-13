@@ -30,6 +30,8 @@ const metricMetricsPath = document.getElementById('metricMetricsPath');
 const metricStatePath = document.getElementById('metricStatePath');
 const metricUpdatedAt = document.getElementById('metricUpdatedAt');
 const refreshMetrics = document.getElementById('refreshMetrics');
+const riskLevel = document.getElementById('riskLevel');
+const downgradeProfileBtn = document.getElementById('downgradeProfile');
 const chartSuccess = document.getElementById('chartSuccess');
 const chartDrift = document.getElementById('chartDrift');
 const metricAlertsList = document.getElementById('metricAlertsList');
@@ -40,6 +42,7 @@ const healthFailureList = document.getElementById('healthFailureList');
 const healthExportHint = document.getElementById('healthExportHint');
 const runDiagnosticsBtn = document.getElementById('runDiagnostics');
 const exportDiagnosticsBtn = document.getElementById('exportDiagnostics');
+const copyFailuresBtn = document.getElementById('copyFailures');
 
 const logs = [];
 const MAX_LOGS = 800;
@@ -82,6 +85,26 @@ function setHealthStatus(text, tone) {
   healthStatus.style.background = 'rgba(81, 209, 182, 0.2)';
   healthStatus.style.color = '#51d1b6';
   healthStatus.style.borderColor = 'rgba(81, 209, 182, 0.45)';
+}
+
+function setRiskLevel(level, tone) {
+  if (!riskLevel) return;
+  riskLevel.textContent = level;
+  if (tone === 'error') {
+    riskLevel.style.background = 'rgba(255, 107, 107, 0.2)';
+    riskLevel.style.color = '#ff6b6b';
+    riskLevel.style.borderColor = 'rgba(255, 107, 107, 0.4)';
+    return;
+  }
+  if (tone === 'warn') {
+    riskLevel.style.background = 'rgba(247, 196, 108, 0.15)';
+    riskLevel.style.color = '#f7c46c';
+    riskLevel.style.borderColor = 'rgba(247, 196, 108, 0.35)';
+    return;
+  }
+  riskLevel.style.background = 'rgba(81, 209, 182, 0.2)';
+  riskLevel.style.color = '#51d1b6';
+  riskLevel.style.borderColor = 'rgba(81, 209, 182, 0.45)';
 }
 
 function updateStatusDisplay(status) {
@@ -159,6 +182,21 @@ function renderLogs() {
 
 function normalizeFailureLine(text) {
   if (!text) return '';
+  const noisePatterns = [
+    /heartbeat/i,
+    /connected/i,
+    /subscribed/i,
+    /snapshot/i,
+    /ticker/i,
+    /pong/i,
+    /ping/i,
+    /status/i,
+    /启动进程/i,
+    /进程退出/i,
+  ];
+  if (noisePatterns.some((pattern) => pattern.test(text))) {
+    return '';
+  }
   return text
     .replace(/\s+/g, ' ')
     .replace(/\d+(\.\d+)?/g, '#')
@@ -198,6 +236,25 @@ function renderFailureTopN() {
     row.appendChild(hint);
     healthFailureList.appendChild(row);
   });
+}
+
+async function copyFailures() {
+  const entries = Array.from(failureCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10);
+  const text = entries
+    .map(([line, count], idx) => `${idx + 1}. ${count} 次 - ${line}`)
+    .join('\n');
+  if (!text) {
+    if (healthExportHint) healthExportHint.textContent = '暂无失败原因可复制。';
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    if (healthExportHint) healthExportHint.textContent = '失败原因已复制到剪贴板。';
+  } catch {
+    if (healthExportHint) healthExportHint.textContent = '复制失败，请手动选择。';
+  }
 }
 
 function pushLog(entry) {
@@ -277,6 +334,38 @@ function applyToggles() {
   envEditor.value = text;
   detectTradingMode(text);
   updateMetricsPaths();
+}
+
+function applyDowngradeProfile() {
+  let text = envEditor.value || '';
+  const updates = {
+    AUTO_CONFIRM: 'false',
+    ARB_AUTO_EXECUTE: 'false',
+    CROSS_PLATFORM_AUTO_EXECUTE: 'false',
+    CROSS_PLATFORM_EXECUTION_VWAP_CHECK: 'true',
+    CROSS_PLATFORM_ADAPTIVE_SIZE: 'true',
+    CROSS_PLATFORM_DEPTH_USAGE: '0.3',
+    CROSS_PLATFORM_RECHECK_MS: '300',
+    CROSS_PLATFORM_STABILITY_SAMPLES: '3',
+    CROSS_PLATFORM_STABILITY_INTERVAL_MS: '120',
+    CROSS_PLATFORM_CHUNK_MAX_SHARES: '10',
+    CROSS_PLATFORM_CHUNK_DELAY_MIN_MS: '200',
+    CROSS_PLATFORM_CHUNK_DELAY_MAX_MS: '1200',
+    CROSS_PLATFORM_VOLATILITY_BPS: '60',
+    CROSS_PLATFORM_POST_TRADE_DRIFT_BPS: '60',
+    CROSS_PLATFORM_AUTO_TUNE: 'true',
+    CROSS_PLATFORM_CHUNK_AUTO_TUNE: 'true',
+    CROSS_PLATFORM_USE_FOK: 'true',
+    CROSS_PLATFORM_PARALLEL_SUBMIT: 'true',
+  };
+  Object.entries(updates).forEach(([key, value]) => {
+    text = setEnvValue(text, key, value);
+  });
+  envEditor.value = text;
+  detectTradingMode(text);
+  syncTogglesFromEnv(text);
+  updateMetricsPaths();
+  pushLog({ type: 'system', level: 'system', message: '已应用安全降级参数（请保存生效）' });
 }
 
 function formatNumber(value, digits = 0) {
@@ -498,11 +587,29 @@ function updateAlerts({ successRate, postTradeDriftBps, qualityScore, cooldownUn
   });
 }
 
+function computeRiskLevel({ successRate, postTradeDriftBps, qualityScore, metricsAgeMs }) {
+  let score = 0;
+  if (metricsAgeMs > 60000) score += 20;
+  if (successRate < 40) score += 40;
+  else if (successRate < 60) score += 25;
+  else if (successRate < 75) score += 10;
+  if (postTradeDriftBps > 120) score += 30;
+  else if (postTradeDriftBps > 80) score += 20;
+  else if (postTradeDriftBps > 50) score += 10;
+  if (qualityScore < 0.6) score += 30;
+  else if (qualityScore < 0.8) score += 15;
+
+  if (score >= 70) return { level: '高风险', tone: 'error' };
+  if (score >= 40) return { level: '中风险', tone: 'warn' };
+  return { level: '低风险', tone: 'ok' };
+}
+
 async function loadMetrics() {
   try {
     const raw = await window.predictBot.readMetrics();
     if (!raw) {
       setMetricsStatus('无数据', false);
+      setRiskLevel('风险未知', 'warn');
       return;
     }
     let data;
@@ -569,12 +676,8 @@ async function loadMetrics() {
     };
     updateAlerts(metricsSnapshot);
     renderAdvice(null, metricsSnapshot);
-      successRate,
-      postTradeDriftBps,
-      qualityScore: Number(data.qualityScore || 0),
-      cooldownUntil,
-      metricsAgeMs,
-    });
+    const risk = computeRiskLevel(metricsSnapshot);
+    setRiskLevel(risk.level, risk.tone);
 
     const flushMs = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_METRICS_FLUSH_MS') || 30000);
     if (metricsAgeMs > flushMs * 2) {
@@ -584,6 +687,7 @@ async function loadMetrics() {
     }
   } catch (error) {
     setMetricsStatus('读取失败', false);
+    setRiskLevel('风险未知', 'warn');
   }
 }
 
@@ -685,6 +789,8 @@ tabButtons.forEach((btn) => {
 refreshMetrics.addEventListener('click', loadMetrics);
 runDiagnosticsBtn.addEventListener('click', runDiagnostics);
 exportDiagnosticsBtn.addEventListener('click', exportDiagnostics);
+copyFailuresBtn.addEventListener('click', copyFailures);
+downgradeProfileBtn.addEventListener('click', applyDowngradeProfile);
 
 init().catch((err) => {
   pushLog({ type: 'system', level: 'stderr', message: err?.message || '初始化失败' });
