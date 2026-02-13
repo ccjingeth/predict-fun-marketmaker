@@ -114,6 +114,12 @@ export interface Config {
   mmPartialFillHedge?: boolean;
   mmPartialFillHedgeMaxShares?: number;
   mmPartialFillHedgeSlippageBps?: number;
+  mmCancelRecheckMs?: number;
+  mmRepriceRecheckMs?: number;
+  mmRecheckCooldownMs?: number;
+  mmFillSlowdownWindowMs?: number;
+  mmFillSlowdownFactor?: number;
+  mmFillSlowdownMaxMultiplier?: number;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;

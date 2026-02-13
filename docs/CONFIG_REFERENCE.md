@@ -62,6 +62,12 @@
 - `MM_PARTIAL_FILL_HEDGE`：部分成交时是否轻度对冲。
 - `MM_PARTIAL_FILL_HEDGE_MAX_SHARES`：轻度对冲最大份额。
 - `MM_PARTIAL_FILL_HEDGE_SLIPPAGE_BPS`：轻度对冲允许滑点。
+- `MM_CANCEL_RECHECK_MS`：撤单前二次快照确认等待时间。
+- `MM_REPRICE_RECHECK_MS`：重报价前二次快照确认等待时间。
+- `MM_RECHECK_COOLDOWN_MS`：二次确认最小间隔（防止频繁拉取）。
+- `MM_FILL_SLOWDOWN_WINDOW_MS`：成交减速统计窗口。
+- `MM_FILL_SLOWDOWN_FACTOR`：成交减速强度。
+- `MM_FILL_SLOWDOWN_MAX_MULTIPLIER`：成交减速最大倍率。
 
 ### 做市自适应参数（新增）
 

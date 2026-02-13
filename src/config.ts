@@ -139,6 +139,12 @@ export function loadConfig(): Config {
     mmPartialFillHedge: process.env.MM_PARTIAL_FILL_HEDGE === 'true',
     mmPartialFillHedgeMaxShares: parseFloat(process.env.MM_PARTIAL_FILL_HEDGE_MAX_SHARES || '20'),
     mmPartialFillHedgeSlippageBps: parseInt(process.env.MM_PARTIAL_FILL_HEDGE_SLIPPAGE_BPS || '300'),
+    mmCancelRecheckMs: parseInt(process.env.MM_CANCEL_RECHECK_MS || '200'),
+    mmRepriceRecheckMs: parseInt(process.env.MM_REPRICE_RECHECK_MS || '200'),
+    mmRecheckCooldownMs: parseInt(process.env.MM_RECHECK_COOLDOWN_MS || '1000'),
+    mmFillSlowdownWindowMs: parseInt(process.env.MM_FILL_SLOWDOWN_WINDOW_MS || '60000'),
+    mmFillSlowdownFactor: parseFloat(process.env.MM_FILL_SLOWDOWN_FACTOR || '0.15'),
+    mmFillSlowdownMaxMultiplier: parseFloat(process.env.MM_FILL_SLOWDOWN_MAX_MULTIPLIER || '2'),
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -491,6 +497,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `MM Cancel Confirm: reprice=${config.mmRepriceConfirmMs}ms cancel=${config.mmCancelConfirmMs}ms`
+  );
+  console.log(
+    `MM Recheck: cancel=${config.mmCancelRecheckMs}ms reprice=${config.mmRepriceRecheckMs}ms cooldown=${config.mmRecheckCooldownMs}ms`
   );
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);

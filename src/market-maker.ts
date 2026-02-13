@@ -67,6 +67,8 @@ export class MarketMaker {
   private repriceHoldUntil: Map<string, number> = new Map();
   private cancelHoldUntil: Map<string, number> = new Map();
   private sizePenalty: Map<string, { value: number; ts: number }> = new Map();
+  private recheckCooldownUntil: Map<string, number> = new Map();
+  private fillPressure: Map<string, { score: number; ts: number }> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -241,6 +243,7 @@ export class MarketMaker {
         multiplier *= mult;
       }
     }
+    multiplier *= this.getFillSlowdownMultiplier(tokenId);
     return Math.max(500, Math.round(base * multiplier));
   }
 
@@ -258,6 +261,13 @@ export class MarketMaker {
 
   private markCooldown(tokenId: string, durationMs: number): void {
     this.cooldownUntil.set(tokenId, Date.now() + durationMs);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    if (!ms || ms <= 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private isPaused(tokenId: string): boolean {
@@ -702,6 +712,52 @@ export class MarketMaker {
     }
     const recovered = entry.value + (1 - entry.value) * Math.min(1, elapsed / decayMs);
     return this.clamp(recovered, entry.value, 1);
+  }
+
+  private canRecheck(tokenId: string): boolean {
+    const cooldown = Math.max(0, this.config.mmRecheckCooldownMs ?? 0);
+    if (!cooldown) {
+      return true;
+    }
+    const until = this.recheckCooldownUntil.get(tokenId) || 0;
+    if (Date.now() < until) {
+      return false;
+    }
+    this.recheckCooldownUntil.set(tokenId, Date.now() + cooldown);
+    return true;
+  }
+
+  private updateFillPressure(tokenId: string, shares: number): void {
+    if (!Number.isFinite(shares) || shares <= 0) {
+      return;
+    }
+    const windowMs = Math.max(1, this.config.mmFillSlowdownWindowMs ?? 60000);
+    const threshold = Math.max(1, this.config.mmPartialFillShares ?? 5);
+    const entry = this.fillPressure.get(tokenId);
+    const now = Date.now();
+    let score = entry?.score ?? 0;
+    if (entry) {
+      const elapsed = now - entry.ts;
+      const decay = Math.exp(-elapsed / windowMs);
+      score *= decay;
+    }
+    score += shares / threshold;
+    this.fillPressure.set(tokenId, { score, ts: now });
+  }
+
+  private getFillSlowdownMultiplier(tokenId: string): number {
+    const entry = this.fillPressure.get(tokenId);
+    if (!entry) {
+      return 1;
+    }
+    const windowMs = Math.max(1, this.config.mmFillSlowdownWindowMs ?? 60000);
+    const elapsed = Date.now() - entry.ts;
+    const decay = Math.exp(-elapsed / windowMs);
+    const score = entry.score * decay;
+    const factor = Math.max(0, this.config.mmFillSlowdownFactor ?? 0.15);
+    const maxMult = Math.max(1, this.config.mmFillSlowdownMaxMultiplier ?? 2);
+    const multiplier = 1 + score * factor;
+    return Math.min(maxMult, Math.max(1, multiplier));
   }
 
   private async flushMmMetrics(): Promise<void> {
@@ -1236,7 +1292,7 @@ export class MarketMaker {
       return;
     }
 
-    const prices = this.calculatePrices(market, orderbook);
+    let prices = this.calculatePrices(market, orderbook);
     if (!prices) {
       return;
     }
@@ -1255,8 +1311,33 @@ export class MarketMaker {
     const existingAsk = existingOrders.find((o) => o.side === 'SELL');
 
     if (existingBid) {
-      const risk = this.evaluateOrderRisk(existingBid, orderbook);
-      if (risk.cancel || this.shouldRepriceOrder(existingBid, prices.bidPrice)) {
+      let risk = this.evaluateOrderRisk(existingBid, orderbook);
+      let shouldReprice = this.shouldRepriceOrder(existingBid, prices.bidPrice);
+      if ((risk.cancel || shouldReprice) && this.canRecheck(tokenId)) {
+        const delay = risk.cancel
+          ? Math.max(0, this.config.mmCancelRecheckMs ?? 0)
+          : Math.max(0, this.config.mmRepriceRecheckMs ?? 0);
+        if (delay > 0) {
+          await this.sleep(delay);
+          const freshBook = await this.api.getOrderbook(tokenId);
+          if (risk.cancel) {
+            const freshRisk = this.evaluateOrderRisk(existingBid, freshBook);
+            if (!freshRisk.cancel) {
+              risk = freshRisk;
+            } else {
+              risk = freshRisk;
+            }
+          }
+          if (shouldReprice) {
+            const freshPrices = this.calculatePrices(market, freshBook);
+            if (freshPrices) {
+              prices = freshPrices;
+              shouldReprice = this.shouldRepriceOrder(existingBid, prices.bidPrice);
+            }
+          }
+        }
+      }
+      if (risk.cancel || shouldReprice) {
         await this.cancelOrder(existingBid);
         const softCooldown = this.config.mmSoftCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
         const hardCooldown = this.config.mmHardCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
@@ -1272,8 +1353,33 @@ export class MarketMaker {
     }
 
     if (existingAsk) {
-      const risk = this.evaluateOrderRisk(existingAsk, orderbook);
-      if (risk.cancel || this.shouldRepriceOrder(existingAsk, prices.askPrice)) {
+      let risk = this.evaluateOrderRisk(existingAsk, orderbook);
+      let shouldReprice = this.shouldRepriceOrder(existingAsk, prices.askPrice);
+      if ((risk.cancel || shouldReprice) && this.canRecheck(tokenId)) {
+        const delay = risk.cancel
+          ? Math.max(0, this.config.mmCancelRecheckMs ?? 0)
+          : Math.max(0, this.config.mmRepriceRecheckMs ?? 0);
+        if (delay > 0) {
+          await this.sleep(delay);
+          const freshBook = await this.api.getOrderbook(tokenId);
+          if (risk.cancel) {
+            const freshRisk = this.evaluateOrderRisk(existingAsk, freshBook);
+            if (!freshRisk.cancel) {
+              risk = freshRisk;
+            } else {
+              risk = freshRisk;
+            }
+          }
+          if (shouldReprice) {
+            const freshPrices = this.calculatePrices(market, freshBook);
+            if (freshPrices) {
+              prices = freshPrices;
+              shouldReprice = this.shouldRepriceOrder(existingAsk, prices.askPrice);
+            }
+          }
+        }
+      }
+      if (risk.cancel || shouldReprice) {
         await this.cancelOrder(existingAsk);
         const softCooldown = this.config.mmSoftCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
         const hardCooldown = this.config.mmHardCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
@@ -1449,6 +1555,9 @@ export class MarketMaker {
       const prev = this.lastNetShares.get(tokenId) ?? 0;
       const delta = net - prev;
       const absDelta = Math.abs(delta);
+      if (absDelta > 0) {
+        this.updateFillPressure(tokenId, absDelta);
+      }
       const partialThreshold = this.config.mmPartialFillShares ?? 5;
       if (absDelta >= partialThreshold) {
         const penalty = this.config.mmPartialFillPenalty ?? 0.6;
