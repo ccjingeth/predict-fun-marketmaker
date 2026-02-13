@@ -163,7 +163,10 @@ export class MarketMaker {
     }
 
     const priceChange = Math.abs(orderbook.mid_price - lastPrice) / lastPrice;
-    if (priceChange > this.config.cancelThreshold) {
+    const base = this.config.cancelThreshold;
+    const mult = this.getVolatilityMultiplier(tokenId, this.config.mmCancelVolMultiplier ?? 2);
+    const threshold = base / mult;
+    if (priceChange > threshold) {
       return true;
     }
 
@@ -246,6 +249,14 @@ export class MarketMaker {
     return (bestBid + bestAsk) / 2;
   }
 
+  private getVolatilityMultiplier(tokenId: string, multiplier: number): number {
+    const vol = this.volatilityEma.get(tokenId) ?? 0;
+    if (!multiplier || multiplier <= 0) {
+      return 1;
+    }
+    return 1 + vol * multiplier;
+  }
+
   private checkVolatility(tokenId: string, orderbook: Orderbook): boolean {
     if (!orderbook.mid_price) {
       return false;
@@ -271,6 +282,11 @@ export class MarketMaker {
   }
 
   private evaluateOrderRisk(order: Order, orderbook: Orderbook): { cancel: boolean; panic: boolean; reason: string } {
+    const refreshMs = this.config.mmOrderRefreshMs ?? 0;
+    if (refreshMs > 0 && Date.now() - order.timestamp > refreshMs) {
+      return { cancel: true, panic: false, reason: 'refresh' };
+    }
+
     const price = Number(order.price);
     if (!Number.isFinite(price) || price <= 0) {
       return { cancel: true, panic: true, reason: 'invalid price' };
@@ -282,8 +298,12 @@ export class MarketMaker {
       return { cancel: false, panic: false, reason: '' };
     }
 
-    const nearTouch = this.config.nearTouchBps ?? 0.0015;
-    const antiFill = this.config.antiFillBps ?? 0.002;
+    const nearTouchBase = this.config.nearTouchBps ?? 0.0015;
+    const antiFillBase = this.config.antiFillBps ?? 0.002;
+    const nearMult = this.getVolatilityMultiplier(order.token_id, this.config.mmNearTouchVolMultiplier ?? 1.5);
+    const antiMult = this.getVolatilityMultiplier(order.token_id, this.config.mmAntiFillVolMultiplier ?? 1.5);
+    const nearTouch = nearTouchBase * nearMult;
+    const antiFill = antiFillBase * antiMult;
 
     if (order.side === 'BUY') {
       const distance = (bestAsk - price) / price;
@@ -563,7 +583,9 @@ export class MarketMaker {
       }
     }
 
-    const half = adaptiveSpread / 2;
+    const inventorySpreadWeight = this.config.mmInventorySpreadWeight ?? 0.2;
+    const spreadBoost = 1 + Math.abs(inventoryBias) * inventorySpreadWeight;
+    const half = (adaptiveSpread * spreadBoost) / 2;
 
     let bid = fairPrice * (1 - half);
     let ask = fairPrice * (1 + half);
@@ -612,6 +634,12 @@ export class MarketMaker {
     }
 
     let shares = Math.floor(targetOrderValue / price);
+    const depthUsage = this.config.mmOrderDepthUsage ?? 0;
+    const topDepth = this.lastDepth.get(market.token_id);
+    if (depthUsage > 0 && topDepth && topDepth > 0) {
+      const cap = Math.max(1, Math.floor(topDepth * depthUsage));
+      shares = Math.min(shares, cap);
+    }
 
     const minShares = market.liquidity_activation?.min_shares || 0;
     if (minShares > 0 && shares < minShares) {
@@ -682,7 +710,10 @@ export class MarketMaker {
     }
 
     const diff = Math.abs(targetPrice - current) / current;
-    return diff >= (this.config.repriceThreshold ?? 0.003);
+    const base = this.config.repriceThreshold ?? 0.003;
+    const mult = this.getVolatilityMultiplier(order.token_id, this.config.mmRepriceVolMultiplier ?? 1.5);
+    const threshold = base / mult;
+    return diff >= threshold;
   }
 
   private trimExcessOrders(tokenId: string, orders: Order[]): Order[] {
@@ -813,6 +844,7 @@ export class MarketMaker {
     const profileScale = profile === 'CALM' ? 1.0 : profile === 'VOLATILE' ? 0.6 : 0.85;
     const canIceberg = this.config.mmIcebergEnabled && this.canRequoteIceberg(tokenId);
     if (canIceberg) {
+      await this.cancelOrdersForMarket(tokenId);
       hasBid = false;
       hasAsk = false;
     }

@@ -62,6 +62,13 @@
 - `MM_PROFILE_SPREAD_MIN_VOLATILE`：高波动档位最小价差。
 - `MM_PROFILE_SPREAD_MAX_VOLATILE`：高波动档位最大价差。
 - `MM_ICEBERG_REQUOTE_MS`：冰山挂单重挂间隔（毫秒）。
+- `MM_ORDER_REFRESH_MS`：挂单超过该时间自动撤单重挂。
+- `MM_ORDER_DEPTH_USAGE`：单笔挂单不超过顶层深度的比例。
+- `MM_INVENTORY_SPREAD_WEIGHT`：库存偏置导致价差扩大的权重。
+- `MM_REPRICE_VOL_MULTIPLIER`：波动越大，重报价阈值越敏感。
+- `MM_CANCEL_VOL_MULTIPLIER`：波动越大，撤单阈值越敏感。
+- `MM_NEAR_TOUCH_VOL_MULTIPLIER`：波动越大，近成交撤单更早触发。
+- `MM_ANTI_FILL_VOL_MULTIPLIER`：波动越大，防吃单撤单更早触发。
 
 ## 3. 做市商防吃单/对冲
 
