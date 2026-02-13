@@ -46,6 +46,7 @@ export class MarketMaker {
   private pauseUntil: Map<string, number> = new Map();
   private lastNetShares: Map<string, number> = new Map();
   private lastHedgeAt: Map<string, number> = new Map();
+  private lastIcebergAt: Map<string, number> = new Map();
   private valueDetector?: ValueMismatchDetector;
   private crossAggregator?: CrossPlatformAggregator;
   private crossExecutionRouter?: CrossPlatformExecutionRouter;
@@ -434,6 +435,16 @@ export class MarketMaker {
     return Math.min(next, chunkMax);
   }
 
+  private canRequoteIceberg(tokenId: string): boolean {
+    const interval = this.config.mmIcebergRequoteMs ?? 4000;
+    const last = this.lastIcebergAt.get(tokenId) || 0;
+    if (Date.now() - last >= interval) {
+      this.lastIcebergAt.set(tokenId, Date.now());
+      return true;
+    }
+    return false;
+  }
+
   private isLiquidityThin(metrics: { topDepth: number; topDepthUsd: number }): boolean {
     const minShares = this.config.mmMinTopDepthShares ?? 0;
     const minUsd = this.config.mmMinTopDepthUsd ?? 0;
@@ -482,8 +493,8 @@ export class MarketMaker {
     }
 
     const baseSpread = this.config.spread;
-    const minSpread = this.config.minSpread ?? 0.01;
-    const maxSpread = this.config.maxSpread ?? 0.08;
+    let minSpread = this.config.minSpread ?? 0.01;
+    let maxSpread = this.config.maxSpread ?? 0.08;
 
     const lastMid = this.lastPrices.get(market.token_id);
     const volatilityComponent =
@@ -495,6 +506,17 @@ export class MarketMaker {
     const depthFactor =
       depthRef > 0 && depthEma > 0 ? this.clamp(depthEma / depthRef, 0.2, 3) : 1;
     const liquidityPenalty = depthFactor < 1 ? 1 / depthFactor - 1 : 0;
+
+    const profile = this.resolveAdaptiveProfile(volEma, depthEma);
+    if (this.config.mmAdaptiveParams !== false) {
+      if (profile === 'CALM') {
+        minSpread = this.config.mmProfileSpreadMinCalm ?? minSpread;
+        maxSpread = this.config.mmProfileSpreadMaxCalm ?? maxSpread;
+      } else if (profile === 'VOLATILE') {
+        minSpread = this.config.mmProfileSpreadMinVolatile ?? minSpread;
+        maxSpread = this.config.mmProfileSpreadMaxVolatile ?? maxSpread;
+      }
+    }
 
     const bookWeight = this.config.mmBookSpreadWeight ?? 0.35;
     const volWeight = this.config.mmSpreadVolWeight ?? 1.2;
@@ -782,13 +804,18 @@ export class MarketMaker {
       (o) => o.token_id === tokenId && o.status === 'OPEN'
     );
 
-    const hasBid = refreshedOrders.some((o) => o.side === 'BUY');
-    const hasAsk = refreshedOrders.some((o) => o.side === 'SELL');
+    let hasBid = refreshedOrders.some((o) => o.side === 'BUY');
+    let hasAsk = refreshedOrders.some((o) => o.side === 'SELL');
 
     const bidOrderSize = this.calculateOrderSize(market, prices.bidPrice);
     const askOrderSize = this.calculateOrderSize(market, prices.askPrice);
 
     const profileScale = profile === 'CALM' ? 1.0 : profile === 'VOLATILE' ? 0.6 : 0.85;
+    const canIceberg = this.config.mmIcebergEnabled && this.canRequoteIceberg(tokenId);
+    if (canIceberg) {
+      hasBid = false;
+      hasAsk = false;
+    }
 
     console.log(`📝 Market ${market.question.substring(0, 40)}...`);
     const valueInfo =

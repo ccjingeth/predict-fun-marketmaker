@@ -46,6 +46,11 @@ export interface Config {
   mmIntervalVolMultiplier?: number;
   mmProfileLiquidityLow?: number;
   mmProfileLiquidityHigh?: number;
+  mmProfileSpreadMinCalm?: number;
+  mmProfileSpreadMaxCalm?: number;
+  mmProfileSpreadMinVolatile?: number;
+  mmProfileSpreadMaxVolatile?: number;
+  mmIcebergRequoteMs?: number;
   inventorySkewFactor?: number;
   cancelThreshold: number;
   repriceThreshold?: number;
