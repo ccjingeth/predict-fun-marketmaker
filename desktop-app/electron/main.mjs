@@ -185,6 +185,18 @@ function readTextFile(filePath, fallback = '') {
   return fs.readFileSync(filePath, 'utf8');
 }
 
+function readJsonFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    return null;
+  }
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function writeTextFile(filePath, text) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, text.endsWith('\n') ? text : `${text}\n`, 'utf8');
@@ -285,6 +297,166 @@ function stopBot(type) {
   return { ok: true };
 }
 
+function buildDiagnostics() {
+  const items = [];
+  const envPath = getEnvPath();
+  const envText = readEnvFile();
+  const env = parseEnv(envText);
+  const mappingPath = resolveMappingPath();
+  const dependencyPath = resolveDependencyPath();
+  const metricsPath = resolveMetricsPath();
+  const statePath = resolveStatePath();
+
+  if (!envText || !envText.trim()) {
+    items.push({ level: 'error', title: '环境变量', message: '.env 为空或不存在' });
+  } else {
+    items.push({ level: 'ok', title: '环境变量', message: `已加载 ${envPath}` });
+  }
+
+  const apiKey = env.get('API_KEY');
+  const privateKey = env.get('PRIVATE_KEY');
+  const jwtToken = env.get('JWT_TOKEN');
+  const enableTrading = (env.get('ENABLE_TRADING') || '').toLowerCase() === 'true';
+
+  if (!apiKey) {
+    items.push({ level: 'error', title: 'API_KEY', message: 'Predict API Key 未配置' });
+  } else {
+    items.push({ level: 'ok', title: 'API_KEY', message: '已配置' });
+  }
+
+  if (!privateKey) {
+    items.push({ level: 'error', title: 'PRIVATE_KEY', message: '钱包私钥未配置' });
+  } else {
+    items.push({ level: 'ok', title: 'PRIVATE_KEY', message: '已配置' });
+  }
+
+  if (enableTrading && !jwtToken) {
+    items.push({ level: 'warn', title: 'JWT_TOKEN', message: '实盘模式未检测到 JWT_TOKEN' });
+  } else if (jwtToken) {
+    items.push({ level: 'ok', title: 'JWT_TOKEN', message: '已配置' });
+  }
+
+  const mapping = readJsonFile(mappingPath);
+  if (!mapping) {
+    items.push({ level: 'warn', title: '跨平台映射', message: '映射文件缺失或格式错误' });
+  } else {
+    const entries = Array.isArray(mapping.entries) ? mapping.entries.length : 0;
+    items.push({ level: entries > 0 ? 'ok' : 'warn', title: '跨平台映射', message: `entries=${entries}` });
+  }
+
+  const dependencyEnabled = (env.get('DEPENDENCY_ARB_ENABLED') || '').toLowerCase() === 'true';
+  if (dependencyEnabled) {
+    const dependency = readJsonFile(dependencyPath);
+    if (!dependency) {
+      items.push({ level: 'warn', title: '依赖约束', message: '依赖套利已启用但 JSON 为空/错误' });
+    } else {
+      const groups = Array.isArray(dependency.groups) ? dependency.groups.length : 0;
+      items.push({ level: groups > 0 ? 'ok' : 'warn', title: '依赖约束', message: `groups=${groups}` });
+    }
+  }
+
+  const crossEnabled = (env.get('CROSS_PLATFORM_ENABLED') || '').toLowerCase() === 'true';
+  if (crossEnabled) {
+    const polyKey = env.get('POLYMARKET_API_KEY');
+    const opKey = env.get('OPINION_API_KEY');
+    if (!polyKey && !opKey) {
+      items.push({
+        level: 'warn',
+        title: '跨平台密钥',
+        message: '跨平台已启用但未检测到 Polymarket/Opinion API Key',
+      });
+    } else {
+      items.push({ level: 'ok', title: '跨平台密钥', message: '已检测到至少一个平台密钥' });
+    }
+  }
+
+  const wsPredict = (env.get('PREDICT_WS_ENABLED') || '').toLowerCase() === 'true';
+  const wsPoly = (env.get('POLYMARKET_WS_ENABLED') || '').toLowerCase() === 'true';
+  const wsOpinion = (env.get('OPINION_WS_ENABLED') || '').toLowerCase() === 'true';
+  if (!wsPredict && !wsPoly && !wsOpinion) {
+    items.push({ level: 'warn', title: 'WebSocket', message: 'WS 未开启，行情更新可能延迟' });
+  } else {
+    items.push({
+      level: 'ok',
+      title: 'WebSocket',
+      message: `Predict=${wsPredict ? '开' : '关'} Polymarket=${wsPoly ? '开' : '关'} Opinion=${wsOpinion ? '开' : '关'}`,
+    });
+  }
+
+  const metrics = readJsonFile(metricsPath);
+  if (!metrics || !metrics.ts) {
+    items.push({ level: 'warn', title: '指标文件', message: '指标文件缺失或无更新' });
+  } else {
+    const ageMs = Date.now() - Number(metrics.ts || 0);
+    items.push({
+      level: ageMs > 60000 ? 'warn' : 'ok',
+      title: '指标文件',
+      message: `最近更新 ${Math.round(ageMs / 1000)}s 前`,
+    });
+  }
+
+  const state = readJsonFile(statePath);
+  if (!state || !state.ts) {
+    items.push({ level: 'warn', title: '状态文件', message: '状态文件缺失或未保存' });
+  } else {
+    items.push({ level: 'ok', title: '状态文件', message: '已存在' });
+  }
+
+  items.push({
+    level: 'ok',
+    title: '运行状态',
+    message: `做市商=${processes.has('mm') ? '运行中' : '未运行'} / 套利=${processes.has('arb') ? '运行中' : '未运行'}`,
+  });
+
+  return { items };
+}
+
+function exportDiagnosticsBundle() {
+  const timestamp = new Date();
+  const stamp = timestamp
+    .toISOString()
+    .replace(/[:.]/g, '-')
+    .replace('T', '_')
+    .replace('Z', '');
+  const outputDir = path.join(getUserDataRoot(), 'diagnostics', `diag_${stamp}`);
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const envPath = getEnvPath();
+  const mappingPath = resolveMappingPath();
+  const dependencyPath = resolveDependencyPath();
+  const metricsPath = resolveMetricsPath();
+  const statePath = resolveStatePath();
+
+  const report = {
+    version: 1,
+    ts: Date.now(),
+    envPath,
+    mappingPath,
+    dependencyPath,
+    metricsPath,
+    statePath,
+    diagnostics: buildDiagnostics().items,
+  };
+
+  fs.writeFileSync(path.join(outputDir, 'diagnostics.json'), JSON.stringify(report, null, 2), 'utf8');
+
+  const copies = [
+    { src: envPath, name: 'env.txt' },
+    { src: mappingPath, name: 'cross-platform-mapping.json' },
+    { src: dependencyPath, name: 'dependency-constraints.json' },
+    { src: metricsPath, name: 'cross-platform-metrics.json' },
+    { src: statePath, name: 'cross-platform-state.json' },
+  ];
+
+  copies.forEach((file) => {
+    if (fs.existsSync(file.src)) {
+      fs.copyFileSync(file.src, path.join(outputDir, file.name));
+    }
+  });
+
+  return outputDir;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -335,6 +507,22 @@ ipcMain.handle('write-dependency', (_, text) => {
   return { ok: true };
 });
 ipcMain.handle('read-metrics', () => readTextFile(resolveMetricsPath(), '{\"version\":1,\"ts\":0,\"metrics\":{}}'));
+ipcMain.handle('run-diagnostics', () => {
+  try {
+    const result = buildDiagnostics();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, message: error?.message || String(error) };
+  }
+});
+ipcMain.handle('export-diagnostics', () => {
+  try {
+    const outputDir = exportDiagnosticsBundle();
+    return { ok: true, path: outputDir };
+  } catch (error) {
+    return { ok: false, message: error?.message || String(error) };
+  }
+});
 
 ipcMain.handle('start-bot', (_, type) => spawnBot(type));
 ipcMain.handle('stop-bot', (_, type) => stopBot(type));

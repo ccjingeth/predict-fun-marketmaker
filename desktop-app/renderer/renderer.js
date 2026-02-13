@@ -33,6 +33,11 @@ const refreshMetrics = document.getElementById('refreshMetrics');
 const chartSuccess = document.getElementById('chartSuccess');
 const chartDrift = document.getElementById('chartDrift');
 const metricAlertsList = document.getElementById('metricAlertsList');
+const healthStatus = document.getElementById('healthStatus');
+const healthList = document.getElementById('healthList');
+const healthExportHint = document.getElementById('healthExportHint');
+const runDiagnosticsBtn = document.getElementById('runDiagnostics');
+const exportDiagnosticsBtn = document.getElementById('exportDiagnostics');
 
 const logs = [];
 const MAX_LOGS = 800;
@@ -55,6 +60,25 @@ function setMetricsStatus(text, active) {
     : 'rgba(247, 196, 108, 0.15)';
   metricsStatus.style.color = active ? '#51d1b6' : '#f7c46c';
   metricsStatus.style.borderColor = active ? 'rgba(81, 209, 182, 0.45)' : 'rgba(247, 196, 108, 0.35)';
+}
+
+function setHealthStatus(text, tone) {
+  healthStatus.textContent = text;
+  if (tone === 'error') {
+    healthStatus.style.background = 'rgba(255, 107, 107, 0.2)';
+    healthStatus.style.color = '#ff6b6b';
+    healthStatus.style.borderColor = 'rgba(255, 107, 107, 0.4)';
+    return;
+  }
+  if (tone === 'warn') {
+    healthStatus.style.background = 'rgba(247, 196, 108, 0.15)';
+    healthStatus.style.color = '#f7c46c';
+    healthStatus.style.borderColor = 'rgba(247, 196, 108, 0.35)';
+    return;
+  }
+  healthStatus.style.background = 'rgba(81, 209, 182, 0.2)';
+  healthStatus.style.color = '#51d1b6';
+  healthStatus.style.borderColor = 'rgba(81, 209, 182, 0.45)';
 }
 
 function updateStatusDisplay(status) {
@@ -230,6 +254,80 @@ function formatTimestamp(ts) {
 function setMetricText(el, text) {
   if (!el) return;
   el.textContent = text;
+}
+
+function renderHealthItems(items) {
+  if (!healthList) return;
+  healthList.innerHTML = '';
+  if (!items || items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'health-item';
+    empty.textContent = '暂无体检结果。';
+    healthList.appendChild(empty);
+    return;
+  }
+  items.forEach((item) => {
+    const row = document.createElement('div');
+    row.className = `health-item ${item.level}`;
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = item.title;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.textContent = item.message;
+    row.appendChild(label);
+    row.appendChild(hint);
+    healthList.appendChild(row);
+  });
+}
+
+function updateHealthStatus(items) {
+  if (!items || items.length === 0) {
+    setHealthStatus('无数据', 'warn');
+    return;
+  }
+  const hasError = items.some((item) => item.level === 'error');
+  const hasWarn = items.some((item) => item.level === 'warn');
+  if (hasError) {
+    setHealthStatus('存在问题', 'error');
+  } else if (hasWarn) {
+    setHealthStatus('有提示', 'warn');
+  } else {
+    setHealthStatus('通过', 'ok');
+  }
+}
+
+async function runDiagnostics() {
+  if (!window.predictBot.runDiagnostics) {
+    setHealthStatus('不可用', 'error');
+    return;
+  }
+  setHealthStatus('检测中', 'warn');
+  const result = await window.predictBot.runDiagnostics();
+  if (!result || !result.ok) {
+    setHealthStatus('失败', 'error');
+    renderHealthItems([{ level: 'error', title: '体检失败', message: result?.message || '未知错误' }]);
+    return;
+  }
+  renderHealthItems(result.items || []);
+  updateHealthStatus(result.items || []);
+}
+
+async function exportDiagnostics() {
+  if (!window.predictBot.exportDiagnostics) {
+    if (healthExportHint) healthExportHint.textContent = '当前版本不支持导出诊断包。';
+    return;
+  }
+  const result = await window.predictBot.exportDiagnostics();
+  if (!result || !result.ok) {
+    if (healthExportHint) {
+      healthExportHint.textContent = result?.message || '导出失败，请稍后重试。';
+    }
+    return;
+  }
+  if (healthExportHint) {
+    healthExportHint.textContent = `诊断包已导出：${result.path}`;
+  }
 }
 
 function drawSparkline(canvas, values, color) {
@@ -430,6 +528,7 @@ async function init() {
   updateStatusDisplay(status);
   setGlobalStatus('已连接', false);
   await loadMetrics();
+  await runDiagnostics();
 }
 
 window.predictBot.onLog((payload) => {
@@ -489,6 +588,8 @@ tabButtons.forEach((btn) => {
 });
 
 refreshMetrics.addEventListener('click', loadMetrics);
+runDiagnosticsBtn.addEventListener('click', runDiagnostics);
+exportDiagnosticsBtn.addEventListener('click', exportDiagnostics);
 
 init().catch((err) => {
   pushLog({ type: 'system', level: 'stderr', message: err?.message || '初始化失败' });

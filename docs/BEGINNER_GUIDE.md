@@ -115,11 +115,23 @@
 - 趋势图：成功率与 Post-trade Drift 的滚动趋势，便于识别“执行退化”。
 - 告警：当成功率过低、漂移过高、质量分过低或指标过期时会提示。
 
+## 10. 一键体检（桌面端推荐）
+
+桌面端新增“一键体检”，可快速发现配置缺失与风险点：
+
+- API Key / 私钥 / JWT 是否就绪
+- WS 是否开启
+- 跨平台映射与依赖约束是否有效
+- metrics / state 文件是否更新
+- 做市/套利进程运行状态
+
+点击“导出诊断包”会生成包含 `.env`、映射、依赖、metrics/state 的诊断包，方便排查问题。
+
 指标文件可在 `.env` 里设置：
 - `CROSS_PLATFORM_METRICS_PATH`
 - `CROSS_PLATFORM_STATE_PATH`
 
-## 10. 小额实盘演练（推荐）
+## 11. 小额实盘演练（推荐）
 
 脚本内置一键烟雾测试（下单后自动撤单）：
 
@@ -130,25 +142,25 @@
 - `SMOKE_LIVE=true`
 - 建议设置 `SMOKE_SHARES=1`、`SMOKE_PRICE_BUFFER_BPS=50`
 
-## 11. 深度与 VWAP（已默认启用）
+## 12. 深度与 VWAP（已默认启用）
 
 脚本会基于订单簿深度计算 VWAP，确保“总成本 < $1”的判断更接近真实成交。
 
-## 12. 失败熔断（防止连亏）
+## 13. 失败熔断（防止连亏）
 
 建议开启：
 - `ARB_MAX_ERRORS=5`
 - `ARB_ERROR_WINDOW_MS=60000`
 - `ARB_PAUSE_ON_ERROR_MS=60000`
 
-## 13. 手续费提示（重要）
+## 14. 手续费提示（重要）
 
 - Polymarket 的部分市场存在**曲线型手续费**，不是简单的线性比例。
 - 脚本默认使用 `POLYMARKET_FEE_RATE_URL` 获取费率，并用 `POLYMARKET_FEE_CURVE_*` 估算费用。
 - 如果你在非收费市场或费用变化频繁，建议：
   - 将 `POLYMARKET_FEE_BPS=0` 或关闭曲线（`POLYMARKET_FEE_CURVE_RATE=0`）。
 
-## 14. 常见问题
+## 15. 常见问题
 
 1. 没有数据？检查 API Key / WS 开关 / 网络。
 2. 自动执行失败？看日志，检查 JWT / 余额 / Approvals。

@@ -316,6 +316,49 @@ canvas {
   color: #b5f3e6;
 }
 
+.health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.health-item {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(11, 14, 29, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  color: var(--text);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.health-item.ok {
+  border-color: rgba(81, 209, 182, 0.4);
+  color: #b5f3e6;
+}
+
+.health-item.warn {
+  border-color: rgba(247, 196, 108, 0.5);
+  color: #ffe1a3;
+}
+
+.health-item.error {
+  border-color: rgba(255, 107, 107, 0.5);
+  color: #ffb3b3;
+}
+
+.health-label {
+  font-weight: 600;
+  color: #f2f4ff;
+}
+
+.health-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .log-output {
   background: #0b0e1d;
   border-radius: 14px;

@@ -208,6 +208,21 @@
           </div>
         </section>
 
+        <section class="card health-card">
+          <div class="card-header">
+            <h2>系统体检</h2>
+            <div class="filters">
+              <span class="badge" id="healthStatus">待检查</span>
+              <button class="btn ghost" id="runDiagnostics">一键体检</button>
+              <button class="btn ghost" id="exportDiagnostics">导出诊断包</button>
+            </div>
+          </div>
+          <div class="health-list" id="healthList">
+            <div class="health-item">点击“一键体检”开始检测。</div>
+          </div>
+          <p class="hint" id="healthExportHint"></p>
+        </section>
+
         <section class="card config-card">
           <div class="card-header">
             <h2>配置中心</h2>
