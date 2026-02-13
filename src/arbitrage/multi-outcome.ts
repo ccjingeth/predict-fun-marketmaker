@@ -82,40 +82,18 @@ export class MultiOutcomeArbitrageDetector {
         continue;
       }
 
-      const recommendedSize = Math.max(
-        1,
-        Math.floor(Math.min(minDepth, this.config.maxRecommendedShares))
-      );
-
-      let totalCost = 0;
-      let totalFees = 0;
-      let totalSlippage = 0;
-      let totalAllIn = 0;
-      let usable = true;
-
-      for (const market of group) {
-        const book = orderbooks.get(market.token_id);
-        const feeBps = market.fee_rate_bps || this.config.feeBps;
-        const fill = estimateBuy(book?.asks, recommendedSize, feeBps, undefined, undefined, this.config.slippageBps);
-        if (!fill) {
-          usable = false;
-          break;
-        }
-        totalCost += fill.totalNotional;
-        totalFees += fill.totalFees;
-        totalSlippage += fill.totalSlippage;
-        totalAllIn += fill.totalAllIn;
-      }
-
-      if (!usable) {
+      const startSize = Math.max(1, Math.floor(Math.min(minDepth, this.config.maxRecommendedShares)));
+      const candidate = this.findBestSize(group, orderbooks, startSize);
+      if (!candidate) {
         continue;
       }
 
-      const allInPerShare = totalAllIn / recommendedSize;
-      const guaranteedProfit = 1 - allInPerShare;
-      if (guaranteedProfit < this.config.minProfitThreshold) {
-        continue;
-      }
+      const recommendedSize = candidate.size;
+      const totalCost = candidate.totalCost;
+      const totalFees = candidate.totalFees;
+      const totalSlippage = candidate.totalSlippage;
+      const totalAllIn = candidate.totalAllIn;
+      const guaranteedProfit = candidate.edge;
 
       const marketId = group[0].condition_id || group[0].event_id || group[0].token_id;
       const question = group[0].question;
@@ -146,6 +124,53 @@ export class MultiOutcomeArbitrageDetector {
 
     opportunities.sort((a, b) => (b.expectedReturn || 0) - (a.expectedReturn || 0));
     return opportunities;
+  }
+
+  private findBestSize(
+    group: Market[],
+    orderbooks: Map<string, Orderbook>,
+    startSize: number
+  ): { size: number; totalCost: number; totalFees: number; totalSlippage: number; totalAllIn: number; edge: number } | null {
+    if (startSize <= 0) {
+      return null;
+    }
+    let size = startSize;
+    let best: { size: number; totalCost: number; totalFees: number; totalSlippage: number; totalAllIn: number; edge: number } | null = null;
+    for (let i = 0; i < 4 && size >= 1; i += 1) {
+      let totalCost = 0;
+      let totalFees = 0;
+      let totalSlippage = 0;
+      let totalAllIn = 0;
+      let usable = true;
+
+      for (const market of group) {
+        const book = orderbooks.get(market.token_id);
+        const feeBps = market.fee_rate_bps || this.config.feeBps;
+        const fill = estimateBuy(book?.asks, size, feeBps, undefined, undefined, this.config.slippageBps);
+        if (!fill) {
+          usable = false;
+          break;
+        }
+        totalCost += fill.totalNotional;
+        totalFees += fill.totalFees;
+        totalSlippage += fill.totalSlippage;
+        totalAllIn += fill.totalAllIn;
+      }
+
+      if (usable) {
+        const allInPerShare = totalAllIn / size;
+        const edge = 1 - allInPerShare;
+        if (!best || edge > best.edge) {
+          best = { size, totalCost, totalFees, totalSlippage, totalAllIn, edge };
+        }
+        if (edge >= this.config.minProfitThreshold) {
+          return { size, totalCost, totalFees, totalSlippage, totalAllIn, edge };
+        }
+      }
+
+      size = Math.max(1, Math.floor(size * 0.6));
+    }
+    return best && best.edge >= this.config.minProfitThreshold ? best : null;
   }
 
   private groupByCondition(markets: Market[]): Map<string, Market[]> {
