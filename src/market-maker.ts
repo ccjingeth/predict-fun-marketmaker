@@ -419,7 +419,10 @@ export class MarketMaker {
     return { shares, usd };
   }
 
-  private updateMarketMetrics(tokenId: string, orderbook: Orderbook): { volEma: number; depthEma: number; topDepth: number; topDepthUsd: number } {
+  private updateMarketMetrics(
+    tokenId: string,
+    orderbook: Orderbook
+  ): { volEma: number; depthEma: number; topDepth: number; topDepthUsd: number; depthTrend: number } {
     const micro = this.calculateMicroPrice(orderbook);
     if (micro && micro > 0) {
       const lastMid = this.lastPrices.get(tokenId);
@@ -439,15 +442,18 @@ export class MarketMaker {
     this.depthEma.set(tokenId, nextDepth);
     this.lastDepth.set(tokenId, depth.shares);
 
+    const depthTrend = nextDepth > 0 ? depth.shares / nextDepth : 1;
+
     return {
       volEma: this.volatilityEma.get(tokenId) ?? 0,
       depthEma: nextDepth,
       topDepth: depth.shares,
       topDepthUsd: depth.usd,
+      depthTrend,
     };
   }
 
-  private resolveAdaptiveProfile(volEma: number, depthEma: number): 'CALM' | 'NORMAL' | 'VOLATILE' {
+  private resolveAdaptiveProfile(volEma: number, depthEma: number, depthTrend: number): 'CALM' | 'NORMAL' | 'VOLATILE' {
     const configured = (this.config.mmAdaptiveProfile || 'AUTO').toUpperCase();
     if (configured === 'CALM' || configured === 'NORMAL' || configured === 'VOLATILE') {
       return configured;
@@ -458,6 +464,8 @@ export class MarketMaker {
     const depthRatio = depthRef > 0 ? depthEma / depthRef : 1;
     const low = this.config.mmProfileLiquidityLow ?? 0.5;
     const high = this.config.mmProfileLiquidityHigh ?? 1.2;
+    const trendDrop = this.config.mmDepthTrendDropRatio ?? 0.4;
+    if (depthTrend < 1 - trendDrop) return 'VOLATILE';
     if (depthRatio <= low) return 'VOLATILE';
     if (volEma >= volatile) return 'VOLATILE';
     if (volEma <= calm && depthRatio >= high) return 'CALM';
@@ -474,8 +482,11 @@ export class MarketMaker {
     return Math.min(next, chunkMax);
   }
 
-  private canRequoteIceberg(tokenId: string): boolean {
-    const interval = this.config.mmIcebergRequoteMs ?? 4000;
+  private canRequoteIceberg(tokenId: string, depthTrend: number): boolean {
+    const base = this.config.mmIcebergRequoteMs ?? 4000;
+    const volMult = this.getVolatilityMultiplier(tokenId, this.config.mmIcebergRequoteVolMultiplier ?? 1.2);
+    const depthMult = depthTrend < 1 ? 1 + (1 - depthTrend) * (this.config.mmIcebergRequoteDepthMultiplier ?? 1.0) : 1;
+    const interval = Math.round(base * volMult * depthMult);
     const last = this.lastIcebergAt.get(tokenId) || 0;
     if (Date.now() - last >= interval) {
       this.lastIcebergAt.set(tokenId, Date.now());
@@ -542,11 +553,13 @@ export class MarketMaker {
     const volEma = this.volatilityEma.get(market.token_id) ?? volatilityComponent;
     const depthRef = this.config.mmDepthRefShares ?? 200;
     const depthEma = this.depthEma.get(market.token_id) ?? 0;
+    const topDepth = this.getTopDepth(orderbook).shares;
+    const depthTrend = depthEma > 0 ? topDepth / depthEma : 1;
     const depthFactor =
       depthRef > 0 && depthEma > 0 ? this.clamp(depthEma / depthRef, 0.2, 3) : 1;
     const liquidityPenalty = depthFactor < 1 ? 1 / depthFactor - 1 : 0;
 
-    const profile = this.resolveAdaptiveProfile(volEma, depthEma);
+    const profile = this.resolveAdaptiveProfile(volEma, depthEma, depthTrend);
     if (this.config.mmAdaptiveParams !== false) {
       if (profile === 'CALM') {
         minSpread = this.config.mmProfileSpreadMinCalm ?? minSpread;
@@ -831,7 +844,7 @@ export class MarketMaker {
       return;
     }
 
-    const profile = this.resolveAdaptiveProfile(metrics.volEma, metrics.depthEma);
+    const profile = this.resolveAdaptiveProfile(metrics.volEma, metrics.depthEma, metrics.depthTrend);
 
     let existingOrders = Array.from(this.openOrders.values()).filter(
       (o) => o.token_id === tokenId && o.status === 'OPEN'
@@ -880,7 +893,7 @@ export class MarketMaker {
     const askOrderSize = this.calculateOrderSize(market, prices.askPrice);
 
     const profileScale = profile === 'CALM' ? 1.0 : profile === 'VOLATILE' ? 0.6 : 0.85;
-    const canIceberg = this.config.mmIcebergEnabled && this.canRequoteIceberg(tokenId);
+    const canIceberg = this.config.mmIcebergEnabled && this.canRequoteIceberg(tokenId, metrics.depthTrend);
     if (canIceberg) {
       await this.cancelOrdersForMarket(tokenId);
       hasBid = false;

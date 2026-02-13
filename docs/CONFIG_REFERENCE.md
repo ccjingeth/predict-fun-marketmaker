@@ -74,6 +74,9 @@
 - `MM_IMBALANCE_WEIGHT`：盘口不平衡对报价的影响权重。
 - `MM_IMBALANCE_MAX_SKEW`：盘口不平衡最大偏移幅度。
 - `MM_IMBALANCE_SPREAD_WEIGHT`：盘口不平衡导致价差扩张的权重。
+- `MM_DEPTH_TREND_DROP_RATIO`：深度趋势快速下滑阈值（相对 EMA）。
+- `MM_ICEBERG_REQUOTE_VOL_MULTIPLIER`：波动越大，冰山重挂间隔越长。
+- `MM_ICEBERG_REQUOTE_DEPTH_MULTIPLIER`：深度下降时，冰山重挂间隔越长。
 
 ## 3. 做市商防吃单/对冲
 

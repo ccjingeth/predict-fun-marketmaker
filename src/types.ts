@@ -63,6 +63,9 @@ export interface Config {
   mmImbalanceWeight?: number;
   mmImbalanceMaxSkew?: number;
   mmImbalanceSpreadWeight?: number;
+  mmDepthTrendDropRatio?: number;
+  mmIcebergRequoteVolMultiplier?: number;
+  mmIcebergRequoteDepthMultiplier?: number;
   inventorySkewFactor?: number;
   cancelThreshold: number;
   repriceThreshold?: number;
