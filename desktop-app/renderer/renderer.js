@@ -34,6 +34,7 @@ const riskLevel = document.getElementById('riskLevel');
 const downgradeProfileBtn = document.getElementById('downgradeProfile');
 const downgradeSafeBtn = document.getElementById('downgradeSafe');
 const downgradeUltraBtn = document.getElementById('downgradeUltra');
+const applyFixTemplateBtn = document.getElementById('applyFixTemplate');
 const metricRiskScore = document.getElementById('metricRiskScore');
 const metricRiskBar = document.getElementById('metricRiskBar');
 const chartSuccess = document.getElementById('chartSuccess');
@@ -494,6 +495,78 @@ function applyDowngradeProfile(level = 'safe') {
   pushLog({ type: 'system', level: 'system', message: `已应用${level === 'ultra' ? '极保守' : '保守'}参数（请保存生效）` });
 }
 
+function buildFixTemplate() {
+  const categories = new Map();
+  for (const [line, count] of failureCounts.entries()) {
+    const category = classifyFailure(line);
+    categories.set(category, (categories.get(category) || 0) + count);
+  }
+  const topCategory = Array.from(categories.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const template = [];
+  template.push('# 自动修复建议（根据高频失败分类生成）');
+  if (!topCategory) {
+    template.push('# 暂无足够失败数据，建议先运行一段时间再应用。');
+    return template.join('\n');
+  }
+  template.push(`# 主要问题: ${topCategory}`);
+  if (topCategory === '深度不足') {
+    template.push('CROSS_PLATFORM_ADAPTIVE_SIZE=true');
+    template.push('CROSS_PLATFORM_DEPTH_USAGE=0.25');
+    template.push('CROSS_PLATFORM_CHUNK_MAX_SHARES=8');
+  } else if (topCategory === 'VWAP 偏离') {
+    template.push('CROSS_PLATFORM_SLIPPAGE_BPS=250');
+    template.push('CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true');
+    template.push('CROSS_PLATFORM_RECHECK_MS=300');
+  } else if (topCategory === '价格漂移') {
+    template.push('CROSS_PLATFORM_PRICE_DRIFT_BPS=40');
+    template.push('CROSS_PLATFORM_RECHECK_MS=300');
+    template.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
+  } else if (topCategory === '高波动') {
+    template.push('CROSS_PLATFORM_VOLATILITY_BPS=80');
+    template.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
+  } else if (topCategory === '未成交订单') {
+    template.push('CROSS_PLATFORM_POST_FILL_CHECK=true');
+    template.push('CROSS_PLATFORM_USE_FOK=true');
+  } else if (topCategory === '权限/密钥') {
+    template.push('# 请补齐 API_KEY / PRIVATE_KEY / JWT_TOKEN');
+  } else if (topCategory === '熔断触发') {
+    template.push('CROSS_PLATFORM_CIRCUIT_MAX_FAILURES=3');
+    template.push('CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS=120000');
+  } else if (topCategory === '冷却触发') {
+    template.push('CROSS_PLATFORM_GLOBAL_MIN_QUALITY=0.8');
+    template.push('CROSS_PLATFORM_GLOBAL_COOLDOWN_MS=120000');
+  } else if (topCategory === '映射/依赖') {
+    template.push('# 检查 cross-platform-mapping.json 与 dependency-constraints.json');
+  } else if (topCategory === '网络/请求') {
+    template.push('ARB_WS_HEALTH_LOG_MS=5000');
+    template.push('PREDICT_WS_STALE_MS=20000');
+  } else {
+    template.push('# 先应用保守档位再观察。');
+  }
+  return template.join('\n');
+}
+
+function applyFixTemplate() {
+  const template = buildFixTemplate();
+  let text = envEditor.value || '';
+  const lines = template.split('\n').filter(Boolean);
+  for (const line of lines) {
+    if (line.startsWith('#')) {
+      continue;
+    }
+    const idx = line.indexOf('=');
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    text = setEnvValue(text, key, value);
+  }
+  envEditor.value = text;
+  detectTradingMode(text);
+  syncTogglesFromEnv(text);
+  updateMetricsPaths();
+  pushLog({ type: 'system', level: 'system', message: '已应用修复建议模板（请保存生效）' });
+}
+
 function formatNumber(value, digits = 0) {
   if (!Number.isFinite(value)) return '--';
   return Number(value).toFixed(digits);
@@ -945,6 +1018,7 @@ copyFailuresBtn.addEventListener('click', copyFailures);
 downgradeProfileBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
 downgradeSafeBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
 downgradeUltraBtn.addEventListener('click', () => applyDowngradeProfile('ultra'));
+applyFixTemplateBtn.addEventListener('click', applyFixTemplate);
 
 init().catch((err) => {
   pushLog({ type: 'system', level: 'stderr', message: err?.message || '初始化失败' });

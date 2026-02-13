@@ -529,6 +529,22 @@ function exportDiagnosticsBundle() {
     return /error|failed|失败|异常/i.test(entry.message || '');
   });
 
+  const metricsSnapshot = readJsonFile(metricsPath) || null;
+  const summary = metricsSnapshot?.metrics
+    ? {
+        attempts: metricsSnapshot.metrics.attempts || 0,
+        successes: metricsSnapshot.metrics.successes || 0,
+        failures: metricsSnapshot.metrics.failures || 0,
+        emaPreflightMs: metricsSnapshot.metrics.emaPreflightMs || 0,
+        emaExecMs: metricsSnapshot.metrics.emaExecMs || 0,
+        emaTotalMs: metricsSnapshot.metrics.emaTotalMs || 0,
+        emaPostTradeDriftBps: metricsSnapshot.metrics.emaPostTradeDriftBps || 0,
+        qualityScore: metricsSnapshot.qualityScore || 0,
+        chunkFactor: metricsSnapshot.chunkFactor || 0,
+        chunkDelayMs: metricsSnapshot.chunkDelayMs || 0,
+      }
+    : null;
+
   const report = {
     version: 1,
     ts: now,
@@ -544,7 +560,8 @@ function exportDiagnosticsBundle() {
       keyLogs: keyLogs.length,
       cutoff,
     },
-    metricsSnapshot: readJsonFile(metricsPath) || null,
+    metricsSnapshot,
+    summary24h: summary,
   };
 
   fs.writeFileSync(path.join(outputDir, 'diagnostics.json'), JSON.stringify(report, null, 2), 'utf8');
