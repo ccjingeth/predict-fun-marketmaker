@@ -41,11 +41,13 @@ const chartSuccess = document.getElementById('chartSuccess');
 const chartDrift = document.getElementById('chartDrift');
 const chartRisk = document.getElementById('chartRisk');
 const metricAlertsList = document.getElementById('metricAlertsList');
+const riskBreakdownList = document.getElementById('riskBreakdownList');
 const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
 const healthAdviceList = document.getElementById('healthAdviceList');
 const healthFailureList = document.getElementById('healthFailureList');
 const healthFailureCategories = document.getElementById('healthFailureCategories');
+const fixPreviewList = document.getElementById('fixPreviewList');
 const healthExportHint = document.getElementById('healthExportHint');
 const runDiagnosticsBtn = document.getElementById('runDiagnostics');
 const exportDiagnosticsBtn = document.getElementById('exportDiagnostics');
@@ -56,6 +58,7 @@ const MAX_LOGS = 800;
 const METRICS_HISTORY_MAX = 120;
 const metricsHistory = [];
 const failureCounts = new Map();
+const failureEvents = [];
 
 function setGlobalStatus(text, active) {
   globalStatus.textContent = text;
@@ -227,12 +230,20 @@ function classifyFailure(line) {
 
 function renderFailureCategories() {
   if (!healthFailureCategories) return;
-  const counts = new Map();
-  for (const [line, count] of failureCounts.entries()) {
-    const category = classifyFailure(line);
-    counts.set(category, (counts.get(category) || 0) + count);
+  const counts24h = new Map();
+  const counts1h = new Map();
+  const now = Date.now();
+  const cutoff24h = now - 24 * 60 * 60 * 1000;
+  const cutoff1h = now - 60 * 60 * 1000;
+  for (const event of failureEvents) {
+    if (!event || !event.ts) continue;
+    if (event.ts < cutoff24h) continue;
+    counts24h.set(event.category, (counts24h.get(event.category) || 0) + 1);
+    if (event.ts >= cutoff1h) {
+      counts1h.set(event.category, (counts1h.get(event.category) || 0) + 1);
+    }
   }
-  const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const entries = Array.from(counts24h.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
   healthFailureCategories.innerHTML = '';
   if (!entries.length) {
     const item = document.createElement('div');
@@ -249,7 +260,8 @@ function renderFailureCategories() {
     label.textContent = `${category}`;
     const hint = document.createElement('div');
     hint.className = 'health-hint';
-    hint.textContent = `${count} 次`;
+    const recent = counts1h.get(category) || 0;
+    hint.textContent = `24h ${count} 次 / 1h ${recent} 次`;
     row.appendChild(label);
     row.appendChild(hint);
     healthFailureCategories.appendChild(row);
@@ -261,6 +273,12 @@ function updateFailureCounts(line) {
   if (!normalized) return;
   const count = failureCounts.get(normalized) || 0;
   failureCounts.set(normalized, count + 1);
+  const category = classifyFailure(normalized);
+  failureEvents.push({ ts: Date.now(), category });
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  while (failureEvents.length > 0 && failureEvents[0].ts < cutoff) {
+    failureEvents.shift();
+  }
 }
 
 function renderFailureTopN() {
@@ -369,6 +387,7 @@ function pushLog(entry) {
     updateFailureCounts(entry.message || '');
     renderFailureTopN();
     renderFailureCategories();
+    updateFixPreview();
   }
   renderLogs();
 }
@@ -387,6 +406,7 @@ async function loadEnv() {
   detectTradingMode(text);
   syncTogglesFromEnv(text);
   updateMetricsPaths();
+  updateFixPreview();
 }
 
 async function saveEnv() {
@@ -495,6 +515,50 @@ function applyDowngradeProfile(level = 'safe') {
   pushLog({ type: 'system', level: 'system', message: `已应用${level === 'ultra' ? '极保守' : '保守'}参数（请保存生效）` });
 }
 
+function parseFixTemplate(template) {
+  const entries = [];
+  const lines = template.split('\n');
+  for (const line of lines) {
+    if (!line || line.trim().startsWith('#')) continue;
+    const idx = line.indexOf('=');
+    if (idx === -1) continue;
+    entries.push({
+      key: line.slice(0, idx).trim(),
+      value: line.slice(idx + 1).trim(),
+    });
+  }
+  return entries;
+}
+
+function updateFixPreview() {
+  if (!fixPreviewList) return;
+  const template = buildFixTemplate();
+  const entries = parseFixTemplate(template);
+  const env = parseEnv(envEditor.value || '');
+  fixPreviewList.innerHTML = '';
+  if (!entries.length) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无修复建议。';
+    fixPreviewList.appendChild(item);
+    return;
+  }
+  entries.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = entry.key;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    const current = env.get(entry.key);
+    hint.textContent = `当前: ${current ?? '未设置'} → 建议: ${entry.value}`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    fixPreviewList.appendChild(row);
+  });
+}
+
 function buildFixTemplate() {
   const categories = new Map();
   for (const [line, count] of failureCounts.entries()) {
@@ -565,6 +629,31 @@ function applyFixTemplate() {
   syncTogglesFromEnv(text);
   updateMetricsPaths();
   pushLog({ type: 'system', level: 'system', message: '已应用修复建议模板（请保存生效）' });
+}
+
+function renderRiskBreakdown(breakdown) {
+  if (!riskBreakdownList) return;
+  riskBreakdownList.innerHTML = '';
+  if (!breakdown || breakdown.length === 0) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无风险来源。';
+    riskBreakdownList.appendChild(item);
+    return;
+  }
+  breakdown.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = entry.label;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.textContent = `+${entry.score}`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    riskBreakdownList.appendChild(row);
+  });
 }
 
 function formatNumber(value, digits = 0) {
@@ -801,20 +890,45 @@ function updateAlerts({ successRate, postTradeDriftBps, qualityScore, cooldownUn
 
 function computeRiskLevel({ successRate, postTradeDriftBps, qualityScore, metricsAgeMs }) {
   let score = 0;
-  if (metricsAgeMs > 60000) score += 20;
-  if (successRate < 40) score += 40;
-  else if (successRate < 60) score += 25;
-  else if (successRate < 75) score += 10;
-  if (postTradeDriftBps > 120) score += 30;
-  else if (postTradeDriftBps > 80) score += 20;
-  else if (postTradeDriftBps > 50) score += 10;
-  if (qualityScore < 0.6) score += 30;
-  else if (qualityScore < 0.8) score += 15;
+  const breakdown = [];
+
+  if (metricsAgeMs > 60000) {
+    score += 20;
+    breakdown.push({ label: '指标过期', score: 20 });
+  }
+  if (successRate < 40) {
+    score += 40;
+    breakdown.push({ label: '成功率过低', score: 40 });
+  } else if (successRate < 60) {
+    score += 25;
+    breakdown.push({ label: '成功率偏低', score: 25 });
+  } else if (successRate < 75) {
+    score += 10;
+    breakdown.push({ label: '成功率一般', score: 10 });
+  }
+  if (postTradeDriftBps > 120) {
+    score += 30;
+    breakdown.push({ label: '漂移过高', score: 30 });
+  } else if (postTradeDriftBps > 80) {
+    score += 20;
+    breakdown.push({ label: '漂移偏高', score: 20 });
+  } else if (postTradeDriftBps > 50) {
+    score += 10;
+    breakdown.push({ label: '漂移偏高', score: 10 });
+  }
+  if (qualityScore < 0.6) {
+    score += 30;
+    breakdown.push({ label: '质量分过低', score: 30 });
+  } else if (qualityScore < 0.8) {
+    score += 15;
+    breakdown.push({ label: '质量分偏低', score: 15 });
+  }
+
   score = Math.max(0, Math.min(100, score));
 
-  if (score >= 70) return { level: '高风险', tone: 'error', score };
-  if (score >= 40) return { level: '中风险', tone: 'warn', score };
-  return { level: '低风险', tone: 'ok', score };
+  if (score >= 70) return { level: '高风险', tone: 'error', score, breakdown };
+  if (score >= 40) return { level: '中风险', tone: 'warn', score, breakdown };
+  return { level: '低风险', tone: 'ok', score, breakdown };
 }
 
 async function loadMetrics() {
@@ -825,6 +939,7 @@ async function loadMetrics() {
       setRiskLevel('风险未知', 'warn');
       if (metricRiskScore) metricRiskScore.textContent = '--';
       if (metricRiskBar) metricRiskBar.style.width = '0%';
+      renderRiskBreakdown([]);
       return;
     }
     let data;
@@ -896,6 +1011,7 @@ async function loadMetrics() {
     setRiskLevel(risk.level, risk.tone);
     if (metricRiskScore) metricRiskScore.textContent = `${Math.round(risk.score)}`;
     if (metricRiskBar) metricRiskBar.style.width = `${Math.min(100, Math.max(0, risk.score))}%`;
+    renderRiskBreakdown(risk.breakdown);
     const last = metricsHistory[metricsHistory.length - 1];
     if (last && last.ts === updatedAt) {
       last.riskScore = risk.score;
@@ -913,6 +1029,7 @@ async function loadMetrics() {
     setRiskLevel('风险未知', 'warn');
     if (metricRiskScore) metricRiskScore.textContent = '--';
     if (metricRiskBar) metricRiskBar.style.width = '0%';
+    renderRiskBreakdown([]);
   }
 }
 
@@ -1005,6 +1122,7 @@ toggleInputs.forEach((input) => {
 envEditor.addEventListener('input', () => {
   syncTogglesFromEnv(envEditor.value);
   updateMetricsPaths();
+  updateFixPreview();
 });
 
 tabButtons.forEach((btn) => {

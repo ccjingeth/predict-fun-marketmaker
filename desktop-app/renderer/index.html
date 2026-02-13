@@ -161,6 +161,12 @@
               </div>
               <span class="metric-hint">0-100（越高越危险）</span>
             </div>
+            <div class="metric full">
+              <span class="metric-label">风险解释</span>
+              <div class="health-list" id="riskBreakdownList">
+                <div class="health-item ok">暂无风险来源。</div>
+              </div>
+            </div>
             <div class="metric">
               <span class="metric-label">告警次数</span>
               <span class="metric-value" id="metricAlerts">--</span>
@@ -249,6 +255,10 @@
           <div class="health-subtitle">失败分类</div>
           <div class="health-list" id="healthFailureCategories">
             <div class="health-item ok">暂无分类。</div>
+          </div>
+          <div class="health-subtitle">修复建议预览</div>
+          <div class="health-list" id="fixPreviewList">
+            <div class="health-item ok">暂无修复建议。</div>
           </div>
           <p class="hint" id="healthExportHint"></p>
         </section>
