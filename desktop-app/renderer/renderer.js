@@ -35,6 +35,8 @@ const chartDrift = document.getElementById('chartDrift');
 const metricAlertsList = document.getElementById('metricAlertsList');
 const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
+const healthAdviceList = document.getElementById('healthAdviceList');
+const healthFailureList = document.getElementById('healthFailureList');
 const healthExportHint = document.getElementById('healthExportHint');
 const runDiagnosticsBtn = document.getElementById('runDiagnostics');
 const exportDiagnosticsBtn = document.getElementById('exportDiagnostics');
@@ -43,6 +45,7 @@ const logs = [];
 const MAX_LOGS = 800;
 const METRICS_HISTORY_MAX = 120;
 const metricsHistory = [];
+const failureCounts = new Map();
 
 function setGlobalStatus(text, active) {
   globalStatus.textContent = text;
@@ -154,10 +157,57 @@ function renderLogs() {
   logOutput.scrollTop = logOutput.scrollHeight;
 }
 
+function normalizeFailureLine(text) {
+  if (!text) return '';
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/\d+(\.\d+)?/g, '#')
+    .slice(0, 140);
+}
+
+function updateFailureCounts(line) {
+  const normalized = normalizeFailureLine(line);
+  if (!normalized) return;
+  const count = failureCounts.get(normalized) || 0;
+  failureCounts.set(normalized, count + 1);
+}
+
+function renderFailureTopN() {
+  if (!healthFailureList) return;
+  const entries = Array.from(failureCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+  healthFailureList.innerHTML = '';
+  if (!entries.length) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无失败原因。';
+    healthFailureList.appendChild(item);
+    return;
+  }
+  entries.forEach(([line, count]) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = `${count} 次`;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.textContent = line;
+    row.appendChild(label);
+    row.appendChild(hint);
+    healthFailureList.appendChild(row);
+  });
+}
+
 function pushLog(entry) {
   logs.push(entry);
   if (logs.length > MAX_LOGS) {
     logs.shift();
+  }
+  if (entry.level === 'stderr' || /error|failed|失败|异常/i.test(entry.message || '')) {
+    updateFailureCounts(entry.message || '');
+    renderFailureTopN();
   }
   renderLogs();
 }
@@ -297,6 +347,40 @@ function updateHealthStatus(items) {
   }
 }
 
+function renderAdvice(items, metricsSnapshot) {
+  if (!healthAdviceList) return;
+  const advice = [];
+  const hasError = (items || []).some((item) => item.level === 'error');
+  const hasWarn = (items || []).some((item) => item.level === 'warn');
+  if (hasError) {
+    advice.push('先修复红色错误项，再尝试启动做市/套利。');
+  }
+  if (hasWarn) {
+    advice.push('黄色提示项建议补齐，能显著降低执行失败。');
+  }
+  if (metricsSnapshot) {
+    if (metricsSnapshot.successRate < 60) {
+      advice.push('成功率偏低：建议提高 VWAP 保护或减小下单量。');
+    }
+    if (metricsSnapshot.postTradeDriftBps > metricsSnapshot.driftLimit) {
+      advice.push('Post-trade drift 偏高：建议加大分块/缩小深度使用。');
+    }
+    if (metricsSnapshot.qualityScore < metricsSnapshot.minQuality) {
+      advice.push('质量分偏低：建议开启自动降级或暂时降低频率。');
+    }
+  }
+  if (!advice.length) {
+    advice.push('运行良好，无需额外调整。');
+  }
+  healthAdviceList.innerHTML = '';
+  advice.forEach((text) => {
+    const row = document.createElement('div');
+    row.className = 'health-item ok';
+    row.textContent = text;
+    healthAdviceList.appendChild(row);
+  });
+}
+
 async function runDiagnostics() {
   if (!window.predictBot.runDiagnostics) {
     setHealthStatus('不可用', 'error');
@@ -311,6 +395,7 @@ async function runDiagnostics() {
   }
   renderHealthItems(result.items || []);
   updateHealthStatus(result.items || []);
+  renderAdvice(result.items || [], null);
 }
 
 async function exportDiagnostics() {
@@ -473,7 +558,17 @@ async function loadMetrics() {
     }
 
     updateCharts();
-    updateAlerts({
+    const metricsSnapshot = {
+      successRate,
+      postTradeDriftBps,
+      qualityScore: Number(data.qualityScore || 0),
+      cooldownUntil,
+      metricsAgeMs,
+      driftLimit: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80),
+      minQuality: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7),
+    };
+    updateAlerts(metricsSnapshot);
+    renderAdvice(null, metricsSnapshot);
       successRate,
       postTradeDriftBps,
       qualityScore: Number(data.qualityScore || 0),

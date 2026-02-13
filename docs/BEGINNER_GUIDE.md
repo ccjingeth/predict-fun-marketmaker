@@ -126,6 +126,7 @@
 - 做市/套利进程运行状态
 
 点击“导出诊断包”会生成包含 `.env`、映射、依赖、metrics/state 的诊断包，方便排查问题。
+诊断包还会包含最近日志（`bot-logs.json`），以及体检报告（`diagnostics.json`）。
 
 指标文件可在 `.env` 里设置：
 - `CROSS_PLATFORM_METRICS_PATH`

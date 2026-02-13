@@ -359,6 +359,13 @@ canvas {
   font-size: 11px;
 }
 
+.health-subtitle {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+}
+
 .log-output {
   background: #0b0e1d;
   border-radius: 14px;

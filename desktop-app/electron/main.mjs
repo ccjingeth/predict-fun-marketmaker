@@ -11,10 +11,19 @@ const rendererPath = path.resolve(__dirname, '..', 'renderer', 'index.html');
 
 const processes = new Map();
 let mainWindow = null;
+const logBuffer = [];
+const LOG_MAX = 2000;
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send(channel, payload);
+  }
+}
+
+function pushLog(entry) {
+  logBuffer.push(entry);
+  if (logBuffer.length > LOG_MAX) {
+    logBuffer.shift();
   }
 }
 
@@ -258,24 +267,42 @@ function spawnBot(type) {
   processes.set(type, child);
 
   child.stdout.on('data', (data) => {
-    sendToRenderer('bot-log', { type, level: 'stdout', message: data.toString() });
+    const text = data.toString();
+    sendToRenderer('bot-log', { type, level: 'stdout', message: text });
+    text
+      .split('\n')
+      .filter(Boolean)
+      .forEach((line) =>
+        pushLog({ ts: Date.now(), type, level: 'stdout', message: line.slice(0, 500) })
+      );
   });
 
   child.stderr.on('data', (data) => {
-    sendToRenderer('bot-log', { type, level: 'stderr', message: data.toString() });
+    const text = data.toString();
+    sendToRenderer('bot-log', { type, level: 'stderr', message: text });
+    text
+      .split('\n')
+      .filter(Boolean)
+      .forEach((line) =>
+        pushLog({ ts: Date.now(), type, level: 'stderr', message: line.slice(0, 500) })
+      );
   });
 
   child.on('exit', (code, signal) => {
     processes.delete(type);
+    const message = `进程退出 (${type}) code=${code ?? 'null'} signal=${signal ?? 'null'}`;
     sendToRenderer('bot-log', {
       type,
       level: 'system',
-      message: `进程退出 (${type}) code=${code ?? 'null'} signal=${signal ?? 'null'}`,
+      message,
     });
+    pushLog({ ts: Date.now(), type, level: 'system', message });
     sendStatus();
   });
 
-  sendToRenderer('bot-log', { type, level: 'system', message: `启动进程 (${type})` });
+  const startMessage = `启动进程 (${type})`;
+  sendToRenderer('bot-log', { type, level: 'system', message: startMessage });
+  pushLog({ ts: Date.now(), type, level: 'system', message: startMessage });
   sendStatus();
   return { ok: true };
 }
@@ -439,6 +466,7 @@ function exportDiagnosticsBundle() {
   };
 
   fs.writeFileSync(path.join(outputDir, 'diagnostics.json'), JSON.stringify(report, null, 2), 'utf8');
+  fs.writeFileSync(path.join(outputDir, 'bot-logs.json'), JSON.stringify(logBuffer, null, 2), 'utf8');
 
   const copies = [
     { src: envPath, name: 'env.txt' },
