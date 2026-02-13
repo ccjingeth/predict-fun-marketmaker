@@ -192,6 +192,7 @@ export interface Config {
   crossPlatformChunkMaxShares?: number;
   crossPlatformChunkMaxNotional?: number;
   crossPlatformChunkDelayMs?: number;
+  crossPlatformChunkPreflight?: boolean;
   crossPlatformChunkAutoTune?: boolean;
   crossPlatformChunkFactorMin?: number;
   crossPlatformChunkFactorMax?: number;

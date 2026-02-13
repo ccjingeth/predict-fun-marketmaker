@@ -217,6 +217,7 @@ export function loadConfig(): Config {
     crossPlatformChunkMaxShares: parseFloat(process.env.CROSS_PLATFORM_CHUNK_MAX_SHARES || '0'),
     crossPlatformChunkMaxNotional: parseFloat(process.env.CROSS_PLATFORM_CHUNK_MAX_NOTIONAL || '0'),
     crossPlatformChunkDelayMs: parseInt(process.env.CROSS_PLATFORM_CHUNK_DELAY_MS || '0'),
+    crossPlatformChunkPreflight: process.env.CROSS_PLATFORM_CHUNK_PREFLIGHT !== 'false',
     crossPlatformChunkAutoTune: process.env.CROSS_PLATFORM_CHUNK_AUTO_TUNE !== 'false',
     crossPlatformChunkFactorMin: parseFloat(process.env.CROSS_PLATFORM_CHUNK_FACTOR_MIN || '0.5'),
     crossPlatformChunkFactorMax: parseFloat(process.env.CROSS_PLATFORM_CHUNK_FACTOR_MAX || '1.5'),

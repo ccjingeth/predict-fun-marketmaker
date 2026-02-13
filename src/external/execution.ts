@@ -825,9 +825,15 @@ export class CrossPlatformExecutionRouter {
     const penalizedLegs: PlatformLeg[] = [];
     const penalizedTokenIds = new Set<string>();
     const spreadPenalizedLegs: PlatformLeg[] = [];
+    const chunkPreflight = this.config.crossPlatformChunkPreflight !== false;
 
     for (let i = 0; i < chunks.length; i += 1) {
       const chunk = chunks[i];
+      if (chunkPreflight) {
+        const cache = new Map<string, Promise<OrderbookSnapshot | null>>();
+        await this.preflightVwapWithCache(chunk, cache);
+        this.assertMinNotionalAndProfit(chunk);
+      }
       const results = await this.executeOnce(chunk);
       await this.postFillCheck(results);
       const post = await this.postTradeCheck(chunk);
