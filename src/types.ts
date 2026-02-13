@@ -169,6 +169,7 @@ export interface Config {
   crossPlatformStabilityBps?: number;
   crossPlatformPostTradeDriftBps?: number;
   crossPlatformAbortPostTradeDriftBps?: number;
+  crossPlatformAbortCooldownMs?: number;
   crossPlatformAutoTune?: boolean;
   crossPlatformAutoTuneMinFactor?: number;
   crossPlatformAutoTuneMaxFactor?: number;
@@ -285,6 +286,8 @@ export interface Config {
   arbStabilityRequired?: boolean;
   arbStabilityMinCount?: number;
   arbStabilityWindowMs?: number;
+  arbRequireWsHealth?: boolean;
+  arbWsHealthMaxAgeMs?: number;
   predictFeeBps?: number;
   polymarketGammaUrl?: string;
   polymarketClobUrl?: string;

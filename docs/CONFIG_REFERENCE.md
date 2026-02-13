@@ -176,6 +176,8 @@
 - `ARB_STABILITY_REQUIRED`：自动执行前是否要求机会连续出现。
 - `ARB_STABILITY_MIN_COUNT`：连续出现次数阈值。
 - `ARB_STABILITY_WINDOW_MS`：连续出现的时间窗口（毫秒）。
+- `ARB_REQUIRE_WS_HEALTH`：自动执行前强制 WS 健康检查。
+- `ARB_WS_HEALTH_MAX_AGE_MS`：WS 健康检查允许的最大延迟（0=使用 ARB_WS_MAX_AGE_MS）。
 
 ## 6. 站内套利
 
@@ -238,6 +240,7 @@
 - `CROSS_PLATFORM_STABILITY_BPS`：稳定性漂移阈值（bps）。
 - `CROSS_PLATFORM_POST_TRADE_DRIFT_BPS`：成交后盘口漂移阈值（超出则记录降级）。
 - `CROSS_PLATFORM_ABORT_POST_TRADE_BPS`：成交后漂移超过该阈值直接终止后续分块。
+- `CROSS_PLATFORM_ABORT_COOLDOWN_MS`：触发终止后进入全局冷却时间。
 - `CROSS_PLATFORM_AUTO_TUNE`：执行质量自动调参开关。
 - `CROSS_PLATFORM_AUTO_TUNE_MIN_FACTOR`：自动调参最小系数。
 - `CROSS_PLATFORM_AUTO_TUNE_MAX_FACTOR`：自动调参最大系数。

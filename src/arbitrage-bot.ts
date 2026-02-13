@@ -36,6 +36,7 @@ class ArbitrageBot {
   private arbErrorCount = 0;
   private arbPausedUntil = 0;
   private wsHealthTimer?: NodeJS.Timeout;
+  private wsHealthWarned = false;
   private oppStability: Map<string, { count: number; lastSeen: number }> = new Map();
 
   constructor() {
@@ -200,6 +201,15 @@ class ArbitrageBot {
     const maxTop = Math.max(1, this.config.arbExecuteTopN || 1);
 
     const executeOne = async (opp: any) => {
+      if (opp.type === 'CROSS_PLATFORM') {
+        if (!this.isCrossWsHealthy(now)) {
+          this.warnWsHealth('Cross-platform WS unhealthy, skip auto-exec');
+          return;
+        }
+      } else if (!this.isPredictWsHealthy(now)) {
+        this.warnWsHealth('Predict WS unhealthy, skip auto-exec');
+        return;
+      }
       const key = `${opp.type}-${opp.marketId}`;
       const last = this.lastExecution.get(key) || 0;
       if (now - last < cooldown) {
@@ -535,6 +545,71 @@ class ArbitrageBot {
 
   private isArbPaused(): boolean {
     return Date.now() < this.arbPausedUntil;
+  }
+
+  private isPredictWsHealthy(now: number): boolean {
+    if (this.config.arbRequireWsHealth !== true) {
+      return true;
+    }
+    const maxAge = this.config.arbWsHealthMaxAgeMs || this.config.arbWsMaxAgeMs || 0;
+    if (!this.predictWs) {
+      return this.config.arbRequireWs !== true;
+    }
+    const status = this.predictWs.getStatus();
+    if (!status.connected) {
+      return false;
+    }
+    if (maxAge > 0 && now - status.lastMessageAt > maxAge) {
+      return false;
+    }
+    return true;
+  }
+
+  private isCrossWsHealthy(now: number): boolean {
+    if (this.config.arbRequireWsHealth !== true) {
+      return true;
+    }
+    if (!this.config.crossPlatformEnabled) {
+      return true;
+    }
+    if (!this.crossAggregator) {
+      return false;
+    }
+    if (this.config.crossPlatformRequireWs !== true) {
+      return true;
+    }
+    const maxAge = this.config.arbWsHealthMaxAgeMs || this.config.arbWsMaxAgeMs || 0;
+    const status = this.crossAggregator.getWsStatus();
+    if (this.config.polymarketWsEnabled) {
+      const poly = status.polymarket;
+      if (!poly || !poly.connected) {
+        return false;
+      }
+      if (maxAge > 0 && now - poly.lastMessageAt > maxAge) {
+        return false;
+      }
+    }
+    if (this.config.opinionWsEnabled) {
+      const opn = status.opinion;
+      if (!opn || !opn.connected) {
+        return false;
+      }
+      if (maxAge > 0 && now - opn.lastMessageAt > maxAge) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private warnWsHealth(message: string): void {
+    if (this.wsHealthWarned) {
+      return;
+    }
+    this.wsHealthWarned = true;
+    console.log(`⚠️ ${message}`);
+    setTimeout(() => {
+      this.wsHealthWarned = false;
+    }, 5000);
   }
 
   private startWsHealthLogger(): void {

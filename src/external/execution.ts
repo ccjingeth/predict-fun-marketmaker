@@ -849,6 +849,10 @@ export class CrossPlatformExecutionRouter {
       post.penalizedTokenIds.forEach((id) => penalizedTokenIds.add(id));
       const abortBps = Math.max(0, this.config.crossPlatformAbortPostTradeDriftBps || 0);
       if (abortBps > 0 && post.maxDriftBps >= abortBps) {
+        const cooldown = Math.max(0, this.config.crossPlatformAbortCooldownMs || 0);
+        if (cooldown > 0) {
+          this.globalCooldownUntil = Date.now() + cooldown;
+        }
         throw new ExecutionAttemptError(
           `Post-trade drift ${post.maxDriftBps.toFixed(1)} bps >= abort ${abortBps}`,
           true

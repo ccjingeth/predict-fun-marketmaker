@@ -194,6 +194,7 @@ export function loadConfig(): Config {
     crossPlatformStabilityBps: parseInt(process.env.CROSS_PLATFORM_STABILITY_BPS || '0'),
     crossPlatformPostTradeDriftBps: parseInt(process.env.CROSS_PLATFORM_POST_TRADE_DRIFT_BPS || '0'),
     crossPlatformAbortPostTradeDriftBps: parseInt(process.env.CROSS_PLATFORM_ABORT_POST_TRADE_BPS || '0'),
+    crossPlatformAbortCooldownMs: parseInt(process.env.CROSS_PLATFORM_ABORT_COOLDOWN_MS || '0'),
     crossPlatformAutoTune: process.env.CROSS_PLATFORM_AUTO_TUNE !== 'false',
     crossPlatformAutoTuneMinFactor: parseFloat(process.env.CROSS_PLATFORM_AUTO_TUNE_MIN_FACTOR || '0.5'),
     crossPlatformAutoTuneMaxFactor: parseFloat(process.env.CROSS_PLATFORM_AUTO_TUNE_MAX_FACTOR || '1.2'),
@@ -310,6 +311,8 @@ export function loadConfig(): Config {
     arbStabilityRequired: process.env.ARB_STABILITY_REQUIRED !== 'false',
     arbStabilityMinCount: parseInt(process.env.ARB_STABILITY_MIN_COUNT || '2'),
     arbStabilityWindowMs: parseInt(process.env.ARB_STABILITY_WINDOW_MS || '2000'),
+    arbRequireWsHealth: process.env.ARB_REQUIRE_WS_HEALTH === 'true',
+    arbWsHealthMaxAgeMs: parseInt(process.env.ARB_WS_HEALTH_MAX_AGE_MS || '0'),
     predictFeeBps: parseFloat(process.env.PREDICT_FEE_BPS || '100'),
     polymarketGammaUrl: process.env.POLYMARKET_GAMMA_URL || 'https://gamma-api.polymarket.com',
     polymarketClobUrl: process.env.POLYMARKET_CLOB_URL || 'https://clob.polymarket.com',
@@ -403,6 +406,9 @@ export function loadConfig(): Config {
   if ((config.arbStabilityWindowMs ?? 0) < 0) {
     config.arbStabilityWindowMs = 0;
   }
+  if ((config.arbWsHealthMaxAgeMs ?? 0) < 0) {
+    config.arbWsHealthMaxAgeMs = 0;
+  }
 
   if (
     config.crossPlatformOrderType &&
@@ -453,6 +459,9 @@ export function loadConfig(): Config {
   }
   if ((config.crossPlatformAbortPostTradeDriftBps ?? 0) < 0) {
     config.crossPlatformAbortPostTradeDriftBps = 0;
+  }
+  if ((config.crossPlatformAbortCooldownMs ?? 0) < 0) {
+    config.crossPlatformAbortCooldownMs = 0;
   }
   if ((config.crossPlatformRetryFactorMin ?? 0) <= 0 || (config.crossPlatformRetryFactorMin ?? 0) > 1) {
     config.crossPlatformRetryFactorMin = 0.4;
@@ -614,6 +623,7 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Retry Size Factor: ${config.crossPlatformRetrySizeFactor}`);
   console.log(`Cross-Platform Retry Aggressive Bps: ${config.crossPlatformRetryAggressiveBps}`);
   console.log(`Cross-Platform Abort Drift Bps: ${config.crossPlatformAbortPostTradeDriftBps}`);
+  console.log(`Cross-Platform Abort Cooldown Ms: ${config.crossPlatformAbortCooldownMs}`);
   console.log(
     `Cross-Platform Retry Factor: ${config.crossPlatformRetryFactorMin}-${config.crossPlatformRetryFactorMax} up=${config.crossPlatformRetryFactorUp} down=${config.crossPlatformRetryFactorDown}`
   );
@@ -638,6 +648,12 @@ export function printConfig(config: Config): void {
   console.log(
     `Arb Stability: ${config.arbStabilityRequired ? '✅' : '❌'} count=${config.arbStabilityMinCount} window=${config.arbStabilityWindowMs}ms`
   );
+  if (config.arbRequireWsHealth) {
+    const maxAge = config.arbWsHealthMaxAgeMs || config.arbWsMaxAgeMs || 0;
+    console.log(`Arb WS Health Required: ✅ maxAge=${maxAge}ms`);
+  } else {
+    console.log('Arb WS Health Required: ❌');
+  }
   console.log(`Refresh Interval: ${config.refreshInterval}ms`);
   console.log(`Trading Enabled: ${config.enableTrading ? '✅' : '❌ (Dry Run)'}`);
   if (config.marketTokenIds && config.marketTokenIds.length > 0) {
