@@ -48,6 +48,7 @@ const healthAdviceList = document.getElementById('healthAdviceList');
 const healthFailureList = document.getElementById('healthFailureList');
 const healthFailureCategories = document.getElementById('healthFailureCategories');
 const fixPreviewList = document.getElementById('fixPreviewList');
+const fixSelectList = document.getElementById('fixSelectList');
 const healthExportHint = document.getElementById('healthExportHint');
 const runDiagnosticsBtn = document.getElementById('runDiagnostics');
 const exportDiagnosticsBtn = document.getElementById('exportDiagnostics');
@@ -557,6 +558,74 @@ function updateFixPreview() {
     row.appendChild(hint);
     fixPreviewList.appendChild(row);
   });
+
+  renderFixSelect(entries, env);
+}
+
+function renderFixSelect(entries, env) {
+  if (!fixSelectList) return;
+  fixSelectList.innerHTML = '';
+  if (!entries.length) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无可选项。';
+    fixSelectList.appendChild(item);
+    return;
+  }
+  entries.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'health-item';
+
+    const checkboxWrap = document.createElement('label');
+    checkboxWrap.className = 'checkbox';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = true;
+    checkbox.dataset.key = entry.key;
+    checkbox.dataset.value = entry.value;
+    const labelText = document.createElement('span');
+    labelText.textContent = `${entry.key}`;
+    checkboxWrap.appendChild(checkbox);
+    checkboxWrap.appendChild(labelText);
+
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    const current = env.get(entry.key);
+    hint.textContent = `当前: ${current ?? '未设置'} → 建议: ${entry.value}`;
+
+    row.appendChild(checkboxWrap);
+    row.appendChild(hint);
+    fixSelectList.appendChild(row);
+  });
+
+  const applyRow = document.createElement('div');
+  applyRow.className = 'health-item';
+  const applyBtn = document.createElement('button');
+  applyBtn.className = 'btn ghost apply-btn';
+  applyBtn.textContent = '应用已选项';
+  applyBtn.addEventListener('click', applySelectedFixes);
+  applyRow.appendChild(applyBtn);
+  fixSelectList.appendChild(applyRow);
+}
+
+function applySelectedFixes() {
+  if (!fixSelectList) return;
+  const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
+  let text = envEditor.value || '';
+  let applied = 0;
+  checkboxes.forEach((cb) => {
+    if (!cb.checked) return;
+    const key = cb.dataset.key;
+    const value = cb.dataset.value;
+    if (!key || value === undefined) return;
+    text = setEnvValue(text, key, value);
+    applied += 1;
+  });
+  envEditor.value = text;
+  detectTradingMode(text);
+  syncTogglesFromEnv(text);
+  updateMetricsPaths();
+  pushLog({ type: 'system', level: 'system', message: `已应用 ${applied} 条修复建议（请保存生效）` });
 }
 
 function buildFixTemplate() {

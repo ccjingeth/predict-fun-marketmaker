@@ -334,6 +334,23 @@ canvas {
   gap: 12px;
 }
 
+.health-item .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.health-item .checkbox input {
+  accent-color: var(--accent);
+}
+
+.health-item .apply-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
 .health-item.ok {
   border-color: rgba(81, 209, 182, 0.4);
   color: #b5f3e6;
