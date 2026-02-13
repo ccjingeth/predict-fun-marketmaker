@@ -97,7 +97,27 @@
 并可设置：
 - `ARB_WS_HEALTH_LOG_MS=5000`（日志监控）
 
-## 9. 小额实盘演练（推荐）
+## 9. 执行指标看板（桌面端推荐）
+
+桌面端新增“执行指标”面板，用于快速判断当前执行是否健康。常见字段说明：
+
+- 成功率：`successes / attempts`，低于 60% 建议检查滑点与映射质量。
+- 预检耗时 EMA：`EMA(preflight)`，反映订单簿获取 + VWAP 校验耗时。
+- 执行耗时 EMA：`EMA(exec)`，反映下单与撮合链路速度。
+- 总耗时 EMA：`EMA(total)`，预检 + 执行整体耗时。
+- Post-trade Drift：成交后价格漂移均值，越高越危险。
+- 质量分：自适应执行评分，低于阈值会触发降级或冷却。
+- Chunk 因子：分块下单比例，自动调参会拉低冲击。
+- Chunk 延迟：分块间延迟，失败会拉长、成功会缩短。
+- 全局冷却：质量分过低后自动暂停执行。
+- 封禁 Token / 平台：失败过多会被临时跳过。
+- 最后错误：最近一次失败原因。
+
+指标文件可在 `.env` 里设置：
+- `CROSS_PLATFORM_METRICS_PATH`
+- `CROSS_PLATFORM_STATE_PATH`
+
+## 10. 小额实盘演练（推荐）
 
 脚本内置一键烟雾测试（下单后自动撤单）：
 
@@ -108,25 +128,25 @@
 - `SMOKE_LIVE=true`
 - 建议设置 `SMOKE_SHARES=1`、`SMOKE_PRICE_BUFFER_BPS=50`
 
-## 10. 深度与 VWAP（已默认启用）
+## 11. 深度与 VWAP（已默认启用）
 
 脚本会基于订单簿深度计算 VWAP，确保“总成本 < $1”的判断更接近真实成交。
 
-## 11. 失败熔断（防止连亏）
+## 12. 失败熔断（防止连亏）
 
 建议开启：
 - `ARB_MAX_ERRORS=5`
 - `ARB_ERROR_WINDOW_MS=60000`
 - `ARB_PAUSE_ON_ERROR_MS=60000`
 
-## 12. 手续费提示（重要）
+## 13. 手续费提示（重要）
 
 - Polymarket 的部分市场存在**曲线型手续费**，不是简单的线性比例。
 - 脚本默认使用 `POLYMARKET_FEE_RATE_URL` 获取费率，并用 `POLYMARKET_FEE_CURVE_*` 估算费用。
 - 如果你在非收费市场或费用变化频繁，建议：
   - 将 `POLYMARKET_FEE_BPS=0` 或关闭曲线（`POLYMARKET_FEE_CURVE_RATE=0`）。
 
-## 13. 常见问题
+## 14. 常见问题
 
 1. 没有数据？检查 API Key / WS 开关 / 网络。
 2. 自动执行失败？看日志，检查 JWT / 余额 / Approvals。

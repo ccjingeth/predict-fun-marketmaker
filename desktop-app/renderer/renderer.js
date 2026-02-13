@@ -10,6 +10,26 @@ const statusArb = document.getElementById('statusArb');
 const toggleInputs = Array.from(document.querySelectorAll('.toggle input[data-env]'));
 const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
 const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
+const metricsStatus = document.getElementById('metricsStatus');
+const metricSuccessRate = document.getElementById('metricSuccessRate');
+const metricSuccessRaw = document.getElementById('metricSuccessRaw');
+const metricAttempts = document.getElementById('metricAttempts');
+const metricPreflight = document.getElementById('metricPreflight');
+const metricExec = document.getElementById('metricExec');
+const metricTotal = document.getElementById('metricTotal');
+const metricPostDrift = document.getElementById('metricPostDrift');
+const metricQuality = document.getElementById('metricQuality');
+const metricChunkFactor = document.getElementById('metricChunkFactor');
+const metricChunkDelay = document.getElementById('metricChunkDelay');
+const metricAlerts = document.getElementById('metricAlerts');
+const metricBlockedTokens = document.getElementById('metricBlockedTokens');
+const metricBlockedPlatforms = document.getElementById('metricBlockedPlatforms');
+const metricCooldown = document.getElementById('metricCooldown');
+const metricLastError = document.getElementById('metricLastError');
+const metricMetricsPath = document.getElementById('metricMetricsPath');
+const metricStatePath = document.getElementById('metricStatePath');
+const metricUpdatedAt = document.getElementById('metricUpdatedAt');
+const refreshMetrics = document.getElementById('refreshMetrics');
 
 const logs = [];
 const MAX_LOGS = 800;
@@ -21,6 +41,15 @@ function setGlobalStatus(text, active) {
     : 'rgba(106, 163, 255, 0.2)';
   globalStatus.style.color = active ? '#51d1b6' : '#6aa3ff';
   globalStatus.style.borderColor = active ? 'rgba(81, 209, 182, 0.45)' : 'rgba(106, 163, 255, 0.4)';
+}
+
+function setMetricsStatus(text, active) {
+  metricsStatus.textContent = text;
+  metricsStatus.style.background = active
+    ? 'rgba(81, 209, 182, 0.2)'
+    : 'rgba(247, 196, 108, 0.15)';
+  metricsStatus.style.color = active ? '#51d1b6' : '#f7c46c';
+  metricsStatus.style.borderColor = active ? 'rgba(81, 209, 182, 0.45)' : 'rgba(247, 196, 108, 0.35)';
 }
 
 function updateStatusDisplay(status) {
@@ -55,6 +84,14 @@ function parseEnv(text) {
       if (key) map.set(key, value);
     });
   return map;
+}
+
+function updateMetricsPaths() {
+  const env = parseEnv(envEditor.value || '');
+  const metricsPath = env.get('CROSS_PLATFORM_METRICS_PATH') || 'data/cross-platform-metrics.json';
+  const statePath = env.get('CROSS_PLATFORM_STATE_PATH') || 'data/cross-platform-state.json';
+  if (metricMetricsPath) metricMetricsPath.textContent = metricsPath;
+  if (metricStatePath) metricStatePath.textContent = statePath;
 }
 
 function syncTogglesFromEnv(text) {
@@ -109,6 +146,7 @@ async function loadEnv() {
   envEditor.value = text;
   detectTradingMode(text);
   syncTogglesFromEnv(text);
+  updateMetricsPaths();
 }
 
 async function saveEnv() {
@@ -159,6 +197,81 @@ function applyToggles() {
   }
   envEditor.value = text;
   detectTradingMode(text);
+  updateMetricsPaths();
+}
+
+function formatNumber(value, digits = 0) {
+  if (!Number.isFinite(value)) return '--';
+  return Number(value).toFixed(digits);
+}
+
+function formatMs(value) {
+  if (!Number.isFinite(value)) return '--';
+  return `${Math.round(Number(value))} ms`;
+}
+
+function formatBps(value) {
+  if (!Number.isFinite(value)) return '--';
+  return `${Number(value).toFixed(1)} bps`;
+}
+
+function formatTimestamp(ts) {
+  if (!Number.isFinite(ts) || !ts) return '--';
+  const date = new Date(Number(ts));
+  if (Number.isNaN(date.getTime())) return '--';
+  return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+}
+
+function setMetricText(el, text) {
+  if (!el) return;
+  el.textContent = text;
+}
+
+async function loadMetrics() {
+  try {
+    const raw = await window.predictBot.readMetrics();
+    if (!raw) {
+      setMetricsStatus('无数据', false);
+      return;
+    }
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (error) {
+      setMetricsStatus('解析失败', false);
+      return;
+    }
+
+    const metrics = data.metrics || {};
+    const attempts = Number(metrics.attempts || 0);
+    const successes = Number(metrics.successes || 0);
+    const failures = Number(metrics.failures || 0);
+    const successRate = attempts > 0 ? (successes / attempts) * 100 : 0;
+
+    setMetricText(metricSuccessRate, `${formatNumber(successRate, 1)}%`);
+    setMetricText(metricSuccessRaw, `${successes}/${attempts} 成功`);
+    setMetricText(metricAttempts, `${attempts}`);
+    setMetricText(metricPreflight, formatMs(metrics.emaPreflightMs));
+    setMetricText(metricExec, formatMs(metrics.emaExecMs));
+    setMetricText(metricTotal, formatMs(metrics.emaTotalMs));
+    setMetricText(metricPostDrift, formatBps(metrics.emaPostTradeDriftBps));
+    setMetricText(metricQuality, formatNumber(data.qualityScore, 2));
+    setMetricText(metricChunkFactor, formatNumber(data.chunkFactor, 2));
+    setMetricText(metricChunkDelay, formatMs(data.chunkDelayMs));
+    setMetricText(metricAlerts, `${metrics.postTradeAlerts || 0}`);
+    setMetricText(metricBlockedTokens, `${(data.blockedTokens || []).length}`);
+    setMetricText(metricBlockedPlatforms, `${(data.blockedPlatforms || []).length}`);
+    const cooldownUntil = Number(data.globalCooldownUntil || 0);
+    setMetricText(
+      metricCooldown,
+      cooldownUntil && cooldownUntil > Date.now() ? `冷却中：${formatTimestamp(cooldownUntil)}` : '未触发'
+    );
+    setMetricText(metricLastError, metrics.lastError || '无');
+    setMetricText(metricUpdatedAt, formatTimestamp(data.ts));
+    setMetricsStatus('已更新', true);
+  } catch (error) {
+    setMetricsStatus('读取失败', false);
+  }
 }
 
 function activateTab(name) {
@@ -196,6 +309,7 @@ async function init() {
   const status = await window.predictBot.getStatus();
   updateStatusDisplay(status);
   setGlobalStatus('已连接', false);
+  await loadMetrics();
 }
 
 window.predictBot.onLog((payload) => {
@@ -247,12 +361,19 @@ toggleInputs.forEach((input) => {
 
 envEditor.addEventListener('input', () => {
   syncTogglesFromEnv(envEditor.value);
+  updateMetricsPaths();
 });
 
 tabButtons.forEach((btn) => {
   btn.addEventListener('click', () => activateTab(btn.dataset.tab || 'env'));
 });
 
+refreshMetrics.addEventListener('click', loadMetrics);
+
 init().catch((err) => {
   pushLog({ type: 'system', level: 'stderr', message: err?.message || '初始化失败' });
 });
+
+setInterval(() => {
+  loadMetrics().catch(() => {});
+}, 5000);

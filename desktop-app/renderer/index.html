@@ -94,6 +94,101 @@
           <div id="logOutput" class="log-output"></div>
         </section>
 
+        <section class="card metrics-card">
+          <div class="card-header">
+            <h2>执行指标</h2>
+            <div class="filters">
+              <span class="badge" id="metricsStatus">未加载</span>
+              <button class="btn ghost" id="refreshMetrics">刷新</button>
+            </div>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric">
+              <span class="metric-label">成功率</span>
+              <span class="metric-value" id="metricSuccessRate">--</span>
+              <span class="metric-hint" id="metricSuccessRaw">--</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">尝试次数</span>
+              <span class="metric-value" id="metricAttempts">--</span>
+              <span class="metric-hint">累计执行请求</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">预检耗时 EMA</span>
+              <span class="metric-value" id="metricPreflight">--</span>
+              <span class="metric-hint">单位 ms</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">执行耗时 EMA</span>
+              <span class="metric-value" id="metricExec">--</span>
+              <span class="metric-hint">单位 ms</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">总耗时 EMA</span>
+              <span class="metric-value" id="metricTotal">--</span>
+              <span class="metric-hint">单位 ms</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Post-trade Drift</span>
+              <span class="metric-value" id="metricPostDrift">--</span>
+              <span class="metric-hint">EMA (bps)</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">质量分</span>
+              <span class="metric-value" id="metricQuality">--</span>
+              <span class="metric-hint">自适应执行评分</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Chunk 因子</span>
+              <span class="metric-value" id="metricChunkFactor">--</span>
+              <span class="metric-hint">自动调参</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Chunk 延迟</span>
+              <span class="metric-value" id="metricChunkDelay">--</span>
+              <span class="metric-hint">动态 ms</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">告警次数</span>
+              <span class="metric-value" id="metricAlerts">--</span>
+              <span class="metric-hint">post-trade 触发</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">封禁 Token</span>
+              <span class="metric-value" id="metricBlockedTokens">--</span>
+              <span class="metric-hint">当前数量</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">封禁平台</span>
+              <span class="metric-value" id="metricBlockedPlatforms">--</span>
+              <span class="metric-hint">当前数量</span>
+            </div>
+            <div class="metric full">
+              <span class="metric-label">全局冷却</span>
+              <span class="metric-value" id="metricCooldown">--</span>
+              <span class="metric-hint">达到阈值时自动暂停</span>
+            </div>
+            <div class="metric full">
+              <span class="metric-label">最后错误</span>
+              <span class="metric-value" id="metricLastError">--</span>
+              <span class="metric-hint">用于排查失败原因</span>
+            </div>
+            <div class="metric full">
+              <span class="metric-label">指标文件</span>
+              <span class="metric-path" id="metricMetricsPath">--</span>
+            </div>
+            <div class="metric full">
+              <span class="metric-label">状态文件</span>
+              <span class="metric-path" id="metricStatePath">--</span>
+            </div>
+            <div class="metric full">
+              <span class="metric-label">最后刷新</span>
+              <span class="metric-value" id="metricUpdatedAt">--</span>
+              <span class="metric-hint">指标文件更新时间</span>
+            </div>
+          </div>
+        </section>
+
         <section class="card config-card">
           <div class="card-header">
             <h2>配置中心</h2>

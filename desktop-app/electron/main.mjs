@@ -40,6 +40,8 @@ function ensureUserDataAssets() {
   const envPath = path.join(userRoot, '.env');
   const mappingPath = path.join(userRoot, 'cross-platform-mapping.json');
   const dependencyPath = path.join(userRoot, 'dependency-constraints.json');
+  const statePath = path.join(userRoot, 'cross-platform-state.json');
+  const metricsPath = path.join(userRoot, 'cross-platform-metrics.json');
 
   if (!fs.existsSync(envPath)) {
     const templatePath = path.join(getProjectRoot(), '.env.example');
@@ -63,6 +65,16 @@ function ensureUserDataAssets() {
         `DEPENDENCY_CONSTRAINTS_PATH=${dependencyPath}`
       );
     }
+    if (!template.includes('CROSS_PLATFORM_STATE_PATH')) {
+      template = `${template.trim()}\nCROSS_PLATFORM_STATE_PATH=${statePath}\n`;
+    } else {
+      template = template.replace(/CROSS_PLATFORM_STATE_PATH=.*/g, `CROSS_PLATFORM_STATE_PATH=${statePath}`);
+    }
+    if (!template.includes('CROSS_PLATFORM_METRICS_PATH')) {
+      template = `${template.trim()}\nCROSS_PLATFORM_METRICS_PATH=${metricsPath}\n`;
+    } else {
+      template = template.replace(/CROSS_PLATFORM_METRICS_PATH=.*/g, `CROSS_PLATFORM_METRICS_PATH=${metricsPath}`);
+    }
     fs.writeFileSync(envPath, template.endsWith('\n') ? template : `${template}\n`, 'utf8');
   }
 
@@ -82,6 +94,14 @@ function ensureUserDataAssets() {
     } else {
       fs.writeFileSync(dependencyPath, '{\"conditions\":[],\"groups\":[],\"relations\":[]}\n', 'utf8');
     }
+  }
+
+  if (!fs.existsSync(statePath)) {
+    fs.writeFileSync(statePath, '{\"version\":1,\"ts\":0}\n', 'utf8');
+  }
+
+  if (!fs.existsSync(metricsPath)) {
+    fs.writeFileSync(metricsPath, '{\"version\":1,\"ts\":0,\"metrics\":{}}\n', 'utf8');
   }
 }
 
@@ -142,6 +162,20 @@ function resolveDependencyPath() {
   const env = parseEnv(envText);
   const fallback = path.join(getUserDataRoot(), 'dependency-constraints.json');
   return resolveConfigPath(env.get('DEPENDENCY_CONSTRAINTS_PATH'), fallback);
+}
+
+function resolveStatePath() {
+  const envText = readEnvFile();
+  const env = parseEnv(envText);
+  const fallback = path.join(getUserDataRoot(), 'cross-platform-state.json');
+  return resolveConfigPath(env.get('CROSS_PLATFORM_STATE_PATH'), fallback);
+}
+
+function resolveMetricsPath() {
+  const envText = readEnvFile();
+  const env = parseEnv(envText);
+  const fallback = path.join(getUserDataRoot(), 'cross-platform-metrics.json');
+  return resolveConfigPath(env.get('CROSS_PLATFORM_METRICS_PATH'), fallback);
 }
 
 function readTextFile(filePath, fallback = '') {
@@ -300,6 +334,7 @@ ipcMain.handle('write-dependency', (_, text) => {
   writeTextFile(resolveDependencyPath(), text);
   return { ok: true };
 });
+ipcMain.handle('read-metrics', () => readTextFile(resolveMetricsPath(), '{\"version\":1,\"ts\":0,\"metrics\":{}}'));
 
 ipcMain.handle('start-bot', (_, type) => spawnBot(type));
 ipcMain.handle('stop-bot', (_, type) => stopBot(type));
