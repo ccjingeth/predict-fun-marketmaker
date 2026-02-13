@@ -30,6 +30,9 @@ export interface ArbitrageConfig {
   crossPlatformMaxShares: number;
   crossPlatformDepthLevels: number;
   crossPlatformSlippageBps: number;
+  crossPlatformDepthUsage: number;
+  crossPlatformMinNotionalUsd: number;
+  crossPlatformMinProfitUsd: number;
   predictFeeBps: number;
   dependencyConstraintsPath: string;
   dependencyPythonPath: string;
@@ -84,6 +87,9 @@ export class ArbitrageMonitor {
       crossPlatformMaxShares: 200,
       crossPlatformDepthLevels: 10,
       crossPlatformSlippageBps: 250,
+      crossPlatformDepthUsage: 0.5,
+      crossPlatformMinNotionalUsd: 0,
+      crossPlatformMinProfitUsd: 0,
       predictFeeBps: 100,
       dependencyConstraintsPath: 'dependency-constraints.json',
       dependencyPythonPath: 'python3',
@@ -137,7 +143,10 @@ export class ArbitrageMonitor {
       this.config.crossPlatformAllowShorting,
       this.config.crossPlatformMaxShares,
       this.config.crossPlatformSlippageBps,
-      this.config.crossPlatformDepthLevels
+      this.config.crossPlatformDepthLevels,
+      this.config.crossPlatformDepthUsage ?? 0.5,
+      this.config.crossPlatformMinNotionalUsd ?? 0,
+      this.config.crossPlatformMinProfitUsd ?? 0
     );
     if (this.config.enableDependency) {
       this.dependencyDetector = new DependencyArbitrageDetector({

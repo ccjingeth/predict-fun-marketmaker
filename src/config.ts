@@ -176,6 +176,8 @@ export function loadConfig(): Config {
     crossPlatformPriceDriftBps: parseInt(process.env.CROSS_PLATFORM_PRICE_DRIFT_BPS || '40'),
     crossPlatformAdaptiveSize: process.env.CROSS_PLATFORM_ADAPTIVE_SIZE !== 'false',
     crossPlatformMinDepthShares: parseFloat(process.env.CROSS_PLATFORM_MIN_DEPTH_SHARES || '1'),
+    crossPlatformMinNotionalUsd: parseFloat(process.env.CROSS_PLATFORM_MIN_NOTIONAL_USD || '0'),
+    crossPlatformMinProfitUsd: parseFloat(process.env.CROSS_PLATFORM_MIN_PROFIT_USD || '0'),
     crossPlatformVolatilityBps: parseFloat(process.env.CROSS_PLATFORM_VOLATILITY_BPS || '80'),
     crossPlatformVolatilityLookbackMs: parseInt(process.env.CROSS_PLATFORM_VOLATILITY_LOOKBACK_MS || '2000'),
     crossPlatformTokenMaxFailures: parseInt(process.env.CROSS_PLATFORM_TOKEN_MAX_FAILURES || '2'),
@@ -421,6 +423,15 @@ export function loadConfig(): Config {
   if ((config.crossPlatformMinDepthShares ?? 0) < 0) {
     config.crossPlatformMinDepthShares = 0;
   }
+  if ((config.crossPlatformDepthUsage ?? 0) <= 0 || (config.crossPlatformDepthUsage ?? 0) > 1) {
+    config.crossPlatformDepthUsage = 0.5;
+  }
+  if ((config.crossPlatformMinNotionalUsd ?? 0) < 0) {
+    config.crossPlatformMinNotionalUsd = 0;
+  }
+  if ((config.crossPlatformMinProfitUsd ?? 0) < 0) {
+    config.crossPlatformMinProfitUsd = 0;
+  }
 
   if ((config.crossPlatformMetricsLogMs ?? 0) < 0) {
     config.crossPlatformMetricsLogMs = 0;
@@ -550,6 +561,9 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Max Shares: ${config.crossPlatformMaxShares}`);
   console.log(`Cross-Platform Depth Levels: ${config.crossPlatformDepthLevels}`);
   console.log(`Cross-Platform Slippage Bps: ${config.crossPlatformSlippageBps}`);
+  console.log(
+    `Cross-Platform Min Notional/Profit: $${config.crossPlatformMinNotionalUsd}/$${config.crossPlatformMinProfitUsd}`
+  );
   console.log(`Cross-Platform Limit Orders: ${config.crossPlatformLimitOrders ? '✅' : '❌'}`);
   console.log(`Cross-Platform Use FOK: ${config.crossPlatformUseFok ? '✅' : '❌'}`);
   console.log(`Cross-Platform Parallel Submit: ${config.crossPlatformParallelSubmit ? '✅' : '❌'}`);

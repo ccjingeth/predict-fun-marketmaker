@@ -19,6 +19,9 @@ export class CrossPlatformArbitrageDetector {
   private maxShares: number;
   private slippageBps: number;
   private depthLevels: number;
+  private depthUsage: number;
+  private minNotionalUsd: number;
+  private minProfitUsd: number;
 
   constructor(
     platforms: string[] = ['Predict', 'Polymarket', 'Opinion'],
@@ -28,7 +31,10 @@ export class CrossPlatformArbitrageDetector {
     allowSellBoth: boolean = false,
     maxShares: number = 200,
     slippageBps: number = 250,
-    depthLevels: number = 0
+    depthLevels: number = 0,
+    depthUsage: number = 0.5,
+    minNotionalUsd: number = 0,
+    minProfitUsd: number = 0
   ) {
     this.platforms = platforms;
     this.minProfitThreshold = minProfitThreshold;
@@ -38,6 +44,9 @@ export class CrossPlatformArbitrageDetector {
     this.maxShares = maxShares;
     this.slippageBps = slippageBps;
     this.depthLevels = depthLevels;
+    this.depthUsage = Math.max(0.05, Math.min(1, depthUsage));
+    this.minNotionalUsd = Math.max(0, minNotionalUsd);
+    this.minProfitUsd = Math.max(0, minProfitUsd);
   }
 
   private toEntries(levels?: DepthLevel[]): OrderbookEntry[] {
@@ -185,8 +194,8 @@ export class CrossPlatformArbitrageDetector {
     const depthYesB = this.sumLevels(marketB.yesAsks) || marketB.yesAskSize || 0;
     const depthNoB = this.sumLevels(marketB.noAsks) || marketB.noAskSize || 0;
 
-    const buyDepthAB = Math.min(depthYesA, depthNoB);
-    const buyDepthBA = Math.min(depthYesB, depthNoA);
+    const buyDepthAB = Math.min(depthYesA, depthNoB) * this.depthUsage;
+    const buyDepthBA = Math.min(depthYesB, depthNoA) * this.depthUsage;
     const buySizeAB = buyDepthAB > 0 ? Math.max(1, Math.floor(Math.min(buyDepthAB, this.maxShares))) : 0;
     const buySizeBA = buyDepthBA > 0 ? Math.max(1, Math.floor(Math.min(buyDepthBA, this.maxShares))) : 0;
 
@@ -195,21 +204,25 @@ export class CrossPlatformArbitrageDetector {
     const yesAskLevelsB = this.toEntries(marketB.yesAsks);
     const noAskLevelsB = this.toEntries(marketB.noAsks);
 
-    const buyYesA = yesAskLevelsA.length
+    const requireDepth = this.depthLevels > 0;
+    const canUseAB = !requireDepth || (yesAskLevelsA.length > 0 && noAskLevelsB.length > 0);
+    const canUseBA = !requireDepth || (yesAskLevelsB.length > 0 && noAskLevelsA.length > 0);
+
+    const buyYesA = canUseAB && yesAskLevelsA.length
       ? estimateBuy(yesAskLevelsA, buySizeAB, feeA, feeCurveA, feeExpA, this.slippageBps)
       : null;
-    const buyNoB = noAskLevelsB.length
+    const buyNoB = canUseAB && noAskLevelsB.length
       ? estimateBuy(noAskLevelsB, buySizeAB, feeB, feeCurveB, feeExpB, this.slippageBps)
       : null;
 
-    const buyYesB = yesAskLevelsB.length
+    const buyYesB = canUseBA && yesAskLevelsB.length
       ? estimateBuy(yesAskLevelsB, buySizeBA, feeB, feeCurveB, feeExpB, this.slippageBps)
       : null;
-    const buyNoA = noAskLevelsA.length
+    const buyNoA = canUseBA && noAskLevelsA.length
       ? estimateBuy(noAskLevelsA, buySizeBA, feeA, feeCurveA, feeExpA, this.slippageBps)
       : null;
 
-    const buyCandidateAB = yesAskLevelsA.length && noAskLevelsB.length
+    const buyCandidateAB = canUseAB && yesAskLevelsA.length && noAskLevelsB.length
       ? this.refineBuyCandidate(
           yesAskLevelsA,
           noAskLevelsB,
@@ -222,7 +235,7 @@ export class CrossPlatformArbitrageDetector {
           buySizeAB
         )
       : null;
-    const buyCandidateBA = yesAskLevelsB.length && noAskLevelsA.length
+    const buyCandidateBA = canUseBA && yesAskLevelsB.length && noAskLevelsA.length
       ? this.refineBuyCandidate(
           yesAskLevelsB,
           noAskLevelsA,
@@ -243,7 +256,7 @@ export class CrossPlatformArbitrageDetector {
     const resolvedBuySizeAB = buyCandidateAB?.size ?? buySizeAB;
     const resolvedBuySizeBA = buyCandidateBA?.size ?? buySizeBA;
 
-    if (buySizeAB > 0) {
+    if (buySizeAB > 0 && canUseAB) {
       if (buyCandidateAB) {
         buyCostAB = buyCandidateAB.costPerShare;
         buyNetAB = buyCandidateAB.edge;
@@ -259,7 +272,7 @@ export class CrossPlatformArbitrageDetector {
       }
     }
 
-    if (buySizeBA > 0) {
+    if (buySizeBA > 0 && canUseBA) {
       if (buyCandidateBA) {
         buyCostBA = buyCandidateBA.costPerShare;
         buyNetBA = buyCandidateBA.edge;
@@ -280,12 +293,16 @@ export class CrossPlatformArbitrageDetector {
     let profitPct = 0;
     let legs: CrossPlatformArbitrage['legs'] = [];
     let depthShares = 0;
+    let notionalUsd = 0;
+    let profitUsd = 0;
 
     if (buyNetAB >= buyNetBA && buyNetAB >= this.minProfitThreshold) {
       minCost = buyCostAB;
       profitPct = buyNetAB * 100;
       action = 'BUY_BOTH';
       depthShares = resolvedBuySizeAB;
+      notionalUsd = minCost * depthShares;
+      profitUsd = Math.max(0, (profitPct / 100) * depthShares);
       legs = [
         {
           platform: marketA.platform,
@@ -309,6 +326,8 @@ export class CrossPlatformArbitrageDetector {
       profitPct = buyNetBA * 100;
       action = 'BUY_BOTH';
       depthShares = resolvedBuySizeBA;
+      notionalUsd = minCost * depthShares;
+      profitUsd = Math.max(0, (profitPct / 100) * depthShares);
       legs = [
         {
           platform: marketB.platform,
@@ -333,8 +352,8 @@ export class CrossPlatformArbitrageDetector {
       const depthYesBidB = this.sumLevels(marketB.yesBids) || marketB.yesBidSize || 0;
       const depthNoBidB = this.sumLevels(marketB.noBids) || marketB.noBidSize || 0;
 
-      const sellDepthAB = Math.min(depthYesBidA, depthNoBidB);
-      const sellDepthBA = Math.min(depthYesBidB, depthNoBidA);
+      const sellDepthAB = Math.min(depthYesBidA, depthNoBidB) * this.depthUsage;
+      const sellDepthBA = Math.min(depthYesBidB, depthNoBidA) * this.depthUsage;
       const sellSizeAB = sellDepthAB > 0 ? Math.max(1, Math.floor(Math.min(sellDepthAB, this.maxShares))) : 0;
       const sellSizeBA = sellDepthBA > 0 ? Math.max(1, Math.floor(Math.min(sellDepthBA, this.maxShares))) : 0;
 
@@ -343,20 +362,23 @@ export class CrossPlatformArbitrageDetector {
       const yesBidLevelsB = this.toEntries(marketB.yesBids);
       const noBidLevelsB = this.toEntries(marketB.noBids);
 
-      const sellYesA = yesBidLevelsA.length
+      const canSellAB = !requireDepth || (yesBidLevelsA.length > 0 && noBidLevelsB.length > 0);
+      const canSellBA = !requireDepth || (yesBidLevelsB.length > 0 && noBidLevelsA.length > 0);
+
+      const sellYesA = canSellAB && yesBidLevelsA.length
         ? estimateSell(yesBidLevelsA, sellSizeAB, feeA, feeCurveA, feeExpA, this.slippageBps)
         : null;
-      const sellNoB = noBidLevelsB.length
+      const sellNoB = canSellAB && noBidLevelsB.length
         ? estimateSell(noBidLevelsB, sellSizeAB, feeB, feeCurveB, feeExpB, this.slippageBps)
         : null;
-      const sellYesB = yesBidLevelsB.length
+      const sellYesB = canSellBA && yesBidLevelsB.length
         ? estimateSell(yesBidLevelsB, sellSizeBA, feeB, feeCurveB, feeExpB, this.slippageBps)
         : null;
-      const sellNoA = noBidLevelsA.length
+      const sellNoA = canSellBA && noBidLevelsA.length
         ? estimateSell(noBidLevelsA, sellSizeBA, feeA, feeCurveA, feeExpA, this.slippageBps)
         : null;
 
-      const sellCandidateAB = yesBidLevelsA.length && noBidLevelsB.length
+      const sellCandidateAB = canSellAB && yesBidLevelsA.length && noBidLevelsB.length
         ? this.refineSellCandidate(
             yesBidLevelsA,
             noBidLevelsB,
@@ -369,7 +391,7 @@ export class CrossPlatformArbitrageDetector {
             sellSizeAB
           )
         : null;
-      const sellCandidateBA = yesBidLevelsB.length && noBidLevelsA.length
+      const sellCandidateBA = canSellBA && yesBidLevelsB.length && noBidLevelsA.length
         ? this.refineSellCandidate(
             yesBidLevelsB,
             noBidLevelsA,
@@ -388,7 +410,7 @@ export class CrossPlatformArbitrageDetector {
       const resolvedSellSizeAB = sellCandidateAB?.size ?? sellSizeAB;
       const resolvedSellSizeBA = sellCandidateBA?.size ?? sellSizeBA;
 
-      if (sellSizeAB > 0) {
+      if (sellSizeAB > 0 && canSellAB) {
         if (sellCandidateAB) {
           sellNetAB = sellCandidateAB.edge;
         } else {
@@ -403,7 +425,7 @@ export class CrossPlatformArbitrageDetector {
         }
       }
 
-      if (sellSizeBA > 0) {
+      if (sellSizeBA > 0 && canSellBA) {
         if (sellCandidateBA) {
           sellNetBA = sellCandidateBA.edge;
         } else {
@@ -423,6 +445,14 @@ export class CrossPlatformArbitrageDetector {
         profitPct = sellNetAB * 100;
         action = 'SELL_BOTH';
         depthShares = resolvedSellSizeAB;
+        const proceedsPerShare =
+          sellCandidateAB?.yes.avgAllIn && sellCandidateAB?.no.avgAllIn
+            ? sellCandidateAB.yes.avgAllIn + sellCandidateAB.no.avgAllIn
+            : sellYesA && sellNoB
+              ? (sellYesA.totalAllIn + sellNoB.totalAllIn) / resolvedSellSizeAB
+              : 1;
+        notionalUsd = proceedsPerShare * depthShares;
+        profitUsd = Math.max(0, (profitPct / 100) * depthShares);
         legs = [
           {
             platform: marketA.platform,
@@ -446,6 +476,14 @@ export class CrossPlatformArbitrageDetector {
         profitPct = sellNetBA * 100;
         action = 'SELL_BOTH';
         depthShares = resolvedSellSizeBA;
+        const proceedsPerShare =
+          sellCandidateBA?.yes.avgAllIn && sellCandidateBA?.no.avgAllIn
+            ? sellCandidateBA.yes.avgAllIn + sellCandidateBA.no.avgAllIn
+            : sellYesB && sellNoA
+              ? (sellYesB.totalAllIn + sellNoA.totalAllIn) / resolvedSellSizeBA
+              : 1;
+        notionalUsd = proceedsPerShare * depthShares;
+        profitUsd = Math.max(0, (profitPct / 100) * depthShares);
         legs = [
           {
             platform: marketB.platform,
@@ -468,6 +506,13 @@ export class CrossPlatformArbitrageDetector {
         return null;
       }
     } else {
+      return null;
+    }
+
+    if (this.minNotionalUsd > 0 && notionalUsd < this.minNotionalUsd) {
+      return null;
+    }
+    if (this.minProfitUsd > 0 && profitUsd < this.minProfitUsd) {
       return null;
     }
 

@@ -217,6 +217,8 @@
 - `CROSS_PLATFORM_PRICE_DRIFT_BPS`：预检时允许的最优价漂移上限（bps）。
 - `CROSS_PLATFORM_ADAPTIVE_SIZE`：执行前根据订单簿深度自动缩小下单份额。
 - `CROSS_PLATFORM_MIN_DEPTH_SHARES`：深度不足时的最小下单份额门槛。
+- `CROSS_PLATFORM_MIN_NOTIONAL_USD`：跨平台机会的最小成交金额过滤。
+- `CROSS_PLATFORM_MIN_PROFIT_USD`：跨平台机会的最小收益金额过滤。
 - `CROSS_PLATFORM_VOLATILITY_BPS`：短时间内价格波动阈值（bps），超出则跳过。
 - `CROSS_PLATFORM_VOLATILITY_LOOKBACK_MS`：波动检测的回看窗口（毫秒）。
 - `CROSS_PLATFORM_TOKEN_MAX_FAILURES`：单 token 失败次数阈值。

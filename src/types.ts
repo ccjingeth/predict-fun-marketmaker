@@ -151,6 +151,8 @@ export interface Config {
   crossPlatformPriceDriftBps?: number;
   crossPlatformAdaptiveSize?: boolean;
   crossPlatformMinDepthShares?: number;
+  crossPlatformMinNotionalUsd?: number;
+  crossPlatformMinProfitUsd?: number;
   crossPlatformVolatilityBps?: number;
   crossPlatformVolatilityLookbackMs?: number;
   crossPlatformTokenMaxFailures?: number;
