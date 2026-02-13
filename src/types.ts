@@ -269,6 +269,8 @@ export interface Config {
   arbErrorWindowMs?: number;
   arbPauseOnErrorMs?: number;
   arbWsHealthLogMs?: number;
+  arbPreflightEnabled?: boolean;
+  arbPreflightMaxAgeMs?: number;
   predictFeeBps?: number;
   polymarketGammaUrl?: string;
   polymarketClobUrl?: string;

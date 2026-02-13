@@ -6,7 +6,12 @@
 import { Wallet } from 'ethers';
 import { loadConfig } from './config.js';
 import { PredictAPI } from './api/client.js';
-import { ArbitrageMonitor, ArbitrageExecutor } from './arbitrage/index.js';
+import {
+  ArbitrageMonitor,
+  ArbitrageExecutor,
+  InPlatformArbitrageDetector,
+  MultiOutcomeArbitrageDetector,
+} from './arbitrage/index.js';
 import { OrderManager } from './order-manager.js';
 import type { Market, Orderbook } from './types.js';
 import { CrossPlatformAggregator } from './external/aggregator.js';
@@ -182,6 +187,7 @@ class ArbitrageBot {
       return;
     }
 
+    const markets = await this.getMarketsCached();
     const now = Date.now();
     const cooldown = this.config.arbExecutionCooldownMs || 60000;
     const maxTop = Math.max(1, this.config.arbExecuteTopN || 1);
@@ -191,6 +197,13 @@ class ArbitrageBot {
       const last = this.lastExecution.get(key) || 0;
       if (now - last < cooldown) {
         return;
+      }
+      if (this.config.arbPreflightEnabled !== false) {
+        const ok = await this.preflightOpportunity(opp, markets);
+        if (!ok) {
+          console.log(`⚠️ Preflight failed for ${opp.type} ${opp.marketId}, skip execution.`);
+          return;
+        }
       }
       try {
         switch (opp.type) {
@@ -330,11 +343,11 @@ class ArbitrageBot {
     await this.crossExecutionRouter.execute(sized);
   }
 
-  private async loadOrderbooks(markets: Market[]): Promise<Map<string, Orderbook>> {
+  private async loadOrderbooks(markets: Market[], maxAgeOverrideMs?: number): Promise<Map<string, Orderbook>> {
     const orderbooks = new Map<string, Orderbook>();
     const limit = Math.max(1, this.config.arbOrderbookConcurrency || 8);
     let index = 0;
-    const wsMaxAgeMs = this.config.arbWsMaxAgeMs || 10000;
+    const wsMaxAgeMs = maxAgeOverrideMs ?? this.config.arbWsMaxAgeMs || 10000;
 
     if (this.predictWs && markets.length > 0) {
       this.predictWs.subscribeMarkets(markets);
@@ -372,6 +385,70 @@ class ArbitrageBot {
     const workers = Array.from({ length: Math.min(limit, markets.length) }, () => worker());
     await Promise.all(workers);
     return orderbooks;
+  }
+
+  private async preflightOpportunity(opp: any, markets: Market[]): Promise<boolean> {
+    switch (opp.type) {
+      case 'IN_PLATFORM':
+        return this.preflightInPlatform(opp, markets);
+      case 'MULTI_OUTCOME':
+        return this.preflightMultiOutcome(opp, markets);
+      default:
+        return true;
+    }
+  }
+
+  private async preflightInPlatform(opp: any, markets: Market[]): Promise<boolean> {
+    const yesTokenId = opp.yesTokenId;
+    const noTokenId = opp.noTokenId;
+    if (!yesTokenId || !noTokenId) {
+      return true;
+    }
+    const yesMarket = markets.find((m) => m.token_id === yesTokenId);
+    const noMarket = markets.find((m) => m.token_id === noTokenId);
+    if (!yesMarket || !noMarket) {
+      return false;
+    }
+    const orderbooks = await this.loadOrderbooks(
+      [yesMarket, noMarket],
+      this.config.arbPreflightMaxAgeMs || this.config.arbWsMaxAgeMs
+    );
+    const minProfit = this.config.crossPlatformMinProfit || 0.02;
+    const detector = new InPlatformArbitrageDetector(minProfit, (this.config.predictFeeBps || 0) / 10000);
+    const refreshed = detector.scanMarkets([yesMarket, noMarket], orderbooks);
+    if (refreshed.length === 0) {
+      return false;
+    }
+    const minProfitPct = minProfit * 100;
+    return refreshed[0].maxProfit >= minProfitPct;
+  }
+
+  private async preflightMultiOutcome(opp: any, markets: Market[]): Promise<boolean> {
+    const groupKey = opp.marketId;
+    if (!groupKey) {
+      return true;
+    }
+    const group = markets.filter((m) => (m.condition_id || m.event_id || m.token_id) === groupKey);
+    if (group.length === 0) {
+      return false;
+    }
+    const orderbooks = await this.loadOrderbooks(
+      group,
+      this.config.arbPreflightMaxAgeMs || this.config.arbWsMaxAgeMs
+    );
+    const minProfit = this.config.crossPlatformMinProfit || 0.02;
+    const detector = new MultiOutcomeArbitrageDetector({
+      minProfitThreshold: minProfit,
+      minOutcomes: this.config.multiOutcomeMinOutcomes || 3,
+      maxRecommendedShares: this.config.multiOutcomeMaxShares || 500,
+      feeBps: this.config.predictFeeBps || 100,
+    });
+    const refreshed = detector.scanMarkets(group, orderbooks);
+    if (refreshed.length === 0) {
+      return false;
+    }
+    const minProfitPct = minProfit * 100;
+    return (refreshed[0].expectedReturn || 0) >= minProfitPct;
   }
 
   private async getMarketsCached(): Promise<Market[]> {

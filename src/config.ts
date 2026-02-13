@@ -294,6 +294,8 @@ export function loadConfig(): Config {
     arbErrorWindowMs: parseInt(process.env.ARB_ERROR_WINDOW_MS || '60000'),
     arbPauseOnErrorMs: parseInt(process.env.ARB_PAUSE_ON_ERROR_MS || '60000'),
     arbWsHealthLogMs: parseInt(process.env.ARB_WS_HEALTH_LOG_MS || '0'),
+    arbPreflightEnabled: process.env.ARB_PREFLIGHT_ENABLED !== 'false',
+    arbPreflightMaxAgeMs: parseInt(process.env.ARB_PREFLIGHT_MAX_AGE_MS || '3000'),
     predictFeeBps: parseFloat(process.env.PREDICT_FEE_BPS || '100'),
     polymarketGammaUrl: process.env.POLYMARKET_GAMMA_URL || 'https://gamma-api.polymarket.com',
     polymarketClobUrl: process.env.POLYMARKET_CLOB_URL || 'https://clob.polymarket.com',
@@ -563,6 +565,7 @@ export function printConfig(config: Config): void {
   console.log(`Arb Max Markets: ${config.arbMaxMarkets}`);
   console.log(`Arb WS Max Age: ${config.arbWsMaxAgeMs}ms`);
   console.log(`Arb WS Health Log: ${config.arbWsHealthLogMs}ms`);
+  console.log(`Arb Preflight: ${config.arbPreflightEnabled ? '✅' : '❌'} maxAge=${config.arbPreflightMaxAgeMs}ms`);
   console.log(`Refresh Interval: ${config.refreshInterval}ms`);
   console.log(`Trading Enabled: ${config.enableTrading ? '✅' : '❌ (Dry Run)'}`);
   if (config.marketTokenIds && config.marketTokenIds.length > 0) {
