@@ -3,6 +3,7 @@ const mappingEditor = document.getElementById('mappingEditor');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
+const failureCategoryFilter = document.getElementById('failureCategoryFilter');
 const globalStatus = document.getElementById('globalStatus');
 const tradingMode = document.getElementById('tradingMode');
 const statusMM = document.getElementById('statusMM');
@@ -35,6 +36,15 @@ const downgradeProfileBtn = document.getElementById('downgradeProfile');
 const downgradeSafeBtn = document.getElementById('downgradeSafe');
 const downgradeUltraBtn = document.getElementById('downgradeUltra');
 const applyFixTemplateBtn = document.getElementById('applyFixTemplate');
+const weightSuccess = document.getElementById('weightSuccess');
+const weightDrift = document.getElementById('weightDrift');
+const weightQuality = document.getElementById('weightQuality');
+const weightStale = document.getElementById('weightStale');
+const weightSuccessVal = document.getElementById('weightSuccessVal');
+const weightDriftVal = document.getElementById('weightDriftVal');
+const weightQualityVal = document.getElementById('weightQualityVal');
+const weightStaleVal = document.getElementById('weightStaleVal');
+const resetRiskWeightsBtn = document.getElementById('resetRiskWeights');
 const metricRiskScore = document.getElementById('metricRiskScore');
 const metricRiskBar = document.getElementById('metricRiskBar');
 const chartSuccess = document.getElementById('chartSuccess');
@@ -60,6 +70,12 @@ const METRICS_HISTORY_MAX = 120;
 const metricsHistory = [];
 const failureCounts = new Map();
 const failureEvents = [];
+const riskWeights = {
+  success: 1,
+  drift: 1,
+  quality: 1,
+  stale: 1,
+};
 
 function setGlobalStatus(text, active) {
   globalStatus.textContent = text;
@@ -118,6 +134,74 @@ function setRiskLevel(level, tone) {
   riskLevel.style.borderColor = 'rgba(81, 209, 182, 0.45)';
 }
 
+function updateRiskWeightsUI() {
+  if (!weightSuccess || !weightDrift || !weightQuality || !weightStale) return;
+  weightSuccess.value = riskWeights.success.toFixed(1);
+  weightDrift.value = riskWeights.drift.toFixed(1);
+  weightQuality.value = riskWeights.quality.toFixed(1);
+  weightStale.value = riskWeights.stale.toFixed(1);
+  if (weightSuccessVal) weightSuccessVal.textContent = riskWeights.success.toFixed(1);
+  if (weightDriftVal) weightDriftVal.textContent = riskWeights.drift.toFixed(1);
+  if (weightQualityVal) weightQualityVal.textContent = riskWeights.quality.toFixed(1);
+  if (weightStaleVal) weightStaleVal.textContent = riskWeights.stale.toFixed(1);
+}
+
+function saveRiskWeights() {
+  try {
+    localStorage.setItem('riskWeights', JSON.stringify(riskWeights));
+  } catch {
+    // ignore
+  }
+}
+
+function loadRiskWeights() {
+  try {
+    const raw = localStorage.getItem('riskWeights');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    ['success', 'drift', 'quality', 'stale'].forEach((key) => {
+      const value = Number(parsed?.[key]);
+      if (Number.isFinite(value)) {
+        riskWeights[key] = Math.max(0, Math.min(2, value));
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
+
+function bindRiskWeightInputs() {
+  if (!weightSuccess) return;
+  const bind = (input, key, label) => {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      const val = Number(input.value);
+      if (Number.isFinite(val)) {
+        riskWeights[key] = val;
+        if (label) label.textContent = val.toFixed(1);
+        saveRiskWeights();
+        loadMetrics();
+      }
+    });
+  };
+  bind(weightSuccess, 'success', weightSuccessVal);
+  bind(weightDrift, 'drift', weightDriftVal);
+  bind(weightQuality, 'quality', weightQualityVal);
+  bind(weightStale, 'stale', weightStaleVal);
+  if (resetRiskWeightsBtn) {
+    resetRiskWeightsBtn.addEventListener('click', () => {
+      riskWeights.success = 1;
+      riskWeights.drift = 1;
+      riskWeights.quality = 1;
+      riskWeights.stale = 1;
+      updateRiskWeightsUI();
+      saveRiskWeights();
+      loadMetrics();
+      pushLog({ type: 'system', level: 'system', message: '已重置风险权重' });
+    });
+  }
+}
+
 function updateStatusDisplay(status) {
   const mmRunning = status.marketMaker;
   const arbRunning = status.arbitrage;
@@ -172,12 +256,16 @@ function syncTogglesFromEnv(text) {
 
 function renderLogs() {
   const filter = logFilter.value;
+  const category = failureCategoryFilter?.value || 'all';
   logOutput.innerHTML = '';
   const fragment = document.createDocumentFragment();
 
   const view = logs.filter((entry) => {
     if (filter === 'all') return true;
     return entry.type === filter;
+  }).filter((entry) => {
+    if (category === 'all') return true;
+    return entry.category === category;
   });
 
   for (const entry of view) {
@@ -265,6 +353,12 @@ function renderFailureCategories() {
     hint.textContent = `24h ${count} 次 / 1h ${recent} 次`;
     row.appendChild(label);
     row.appendChild(hint);
+    row.addEventListener('click', () => {
+      if (!failureCategoryFilter) return;
+      failureCategoryFilter.value = category;
+      renderLogs();
+      pushLog({ type: 'system', level: 'system', message: `日志过滤：${category}`, category: null });
+    });
     healthFailureCategories.appendChild(row);
   });
 }
@@ -380,6 +474,10 @@ async function copyFailureAdvice(line) {
 }
 
 function pushLog(entry) {
+  if (entry.category === undefined) {
+    const normalized = normalizeFailureLine(entry.message || '');
+    entry.category = normalized ? classifyFailure(normalized) : null;
+  }
   logs.push(entry);
   if (logs.length > MAX_LOGS) {
     logs.shift();
@@ -962,35 +1060,44 @@ function computeRiskLevel({ successRate, postTradeDriftBps, qualityScore, metric
   const breakdown = [];
 
   if (metricsAgeMs > 60000) {
-    score += 20;
-    breakdown.push({ label: '指标过期', score: 20 });
+    const weighted = 20 * riskWeights.stale;
+    score += weighted;
+    breakdown.push({ label: `指标过期 x${riskWeights.stale.toFixed(1)}`, score: weighted.toFixed(1) });
   }
   if (successRate < 40) {
-    score += 40;
-    breakdown.push({ label: '成功率过低', score: 40 });
+    const weighted = 40 * riskWeights.success;
+    score += weighted;
+    breakdown.push({ label: `成功率过低 x${riskWeights.success.toFixed(1)}`, score: weighted.toFixed(1) });
   } else if (successRate < 60) {
-    score += 25;
-    breakdown.push({ label: '成功率偏低', score: 25 });
+    const weighted = 25 * riskWeights.success;
+    score += weighted;
+    breakdown.push({ label: `成功率偏低 x${riskWeights.success.toFixed(1)}`, score: weighted.toFixed(1) });
   } else if (successRate < 75) {
-    score += 10;
-    breakdown.push({ label: '成功率一般', score: 10 });
+    const weighted = 10 * riskWeights.success;
+    score += weighted;
+    breakdown.push({ label: `成功率一般 x${riskWeights.success.toFixed(1)}`, score: weighted.toFixed(1) });
   }
   if (postTradeDriftBps > 120) {
-    score += 30;
-    breakdown.push({ label: '漂移过高', score: 30 });
+    const weighted = 30 * riskWeights.drift;
+    score += weighted;
+    breakdown.push({ label: `漂移过高 x${riskWeights.drift.toFixed(1)}`, score: weighted.toFixed(1) });
   } else if (postTradeDriftBps > 80) {
-    score += 20;
-    breakdown.push({ label: '漂移偏高', score: 20 });
+    const weighted = 20 * riskWeights.drift;
+    score += weighted;
+    breakdown.push({ label: `漂移偏高 x${riskWeights.drift.toFixed(1)}`, score: weighted.toFixed(1) });
   } else if (postTradeDriftBps > 50) {
-    score += 10;
-    breakdown.push({ label: '漂移偏高', score: 10 });
+    const weighted = 10 * riskWeights.drift;
+    score += weighted;
+    breakdown.push({ label: `漂移偏高 x${riskWeights.drift.toFixed(1)}`, score: weighted.toFixed(1) });
   }
   if (qualityScore < 0.6) {
-    score += 30;
-    breakdown.push({ label: '质量分过低', score: 30 });
+    const weighted = 30 * riskWeights.quality;
+    score += weighted;
+    breakdown.push({ label: `质量分过低 x${riskWeights.quality.toFixed(1)}`, score: weighted.toFixed(1) });
   } else if (qualityScore < 0.8) {
-    score += 15;
-    breakdown.push({ label: '质量分偏低', score: 15 });
+    const weighted = 15 * riskWeights.quality;
+    score += weighted;
+    breakdown.push({ label: `质量分偏低 x${riskWeights.quality.toFixed(1)}`, score: weighted.toFixed(1) });
   }
 
   score = Math.max(0, Math.min(100, score));
@@ -1137,6 +1244,9 @@ async function init() {
   const status = await window.predictBot.getStatus();
   updateStatusDisplay(status);
   setGlobalStatus('已连接', false);
+  loadRiskWeights();
+  updateRiskWeightsUI();
+  bindRiskWeightInputs();
   await loadMetrics();
   await runDiagnostics();
 }
@@ -1153,6 +1263,7 @@ window.predictBot.onStatus((payload) => {
 });
 
 logFilter.addEventListener('change', renderLogs);
+failureCategoryFilter.addEventListener('change', renderLogs);
 
 document.getElementById('clearLog').addEventListener('click', () => {
   logs.length = 0;

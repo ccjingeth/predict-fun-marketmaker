@@ -88,6 +88,21 @@
                 <option value="mm">做市商</option>
                 <option value="arb">套利</option>
               </select>
+              <label>失败分类</label>
+              <select id="failureCategoryFilter">
+                <option value="all">全部</option>
+                <option value="深度不足">深度不足</option>
+                <option value="VWAP 偏离">VWAP 偏离</option>
+                <option value="价格漂移">价格漂移</option>
+                <option value="高波动">高波动</option>
+                <option value="未成交订单">未成交订单</option>
+                <option value="权限/密钥">权限/密钥</option>
+                <option value="熔断触发">熔断触发</option>
+                <option value="冷却触发">冷却触发</option>
+                <option value="映射/依赖">映射/依赖</option>
+                <option value="网络/请求">网络/请求</option>
+                <option value="其他">其他</option>
+              </select>
               <button class="btn ghost" id="clearLog">清空</button>
             </div>
           </div>
@@ -166,6 +181,28 @@
               <div class="health-list" id="riskBreakdownList">
                 <div class="health-item ok">暂无风险来源。</div>
               </div>
+            </div>
+            <div class="metric full">
+              <span class="metric-label">风险权重</span>
+              <div class="risk-weights">
+                <label>成功率
+                  <input type="range" id="weightSuccess" min="0" max="2" step="0.1" />
+                  <span id="weightSuccessVal">1.0</span>
+                </label>
+                <label>漂移
+                  <input type="range" id="weightDrift" min="0" max="2" step="0.1" />
+                  <span id="weightDriftVal">1.0</span>
+                </label>
+                <label>质量分
+                  <input type="range" id="weightQuality" min="0" max="2" step="0.1" />
+                  <span id="weightQualityVal">1.0</span>
+                </label>
+                <label>时效
+                  <input type="range" id="weightStale" min="0" max="2" step="0.1" />
+                  <span id="weightStaleVal">1.0</span>
+                </label>
+              </div>
+              <button class="btn ghost" id="resetRiskWeights">重置权重</button>
             </div>
             <div class="metric">
               <span class="metric-label">告警次数</span>

@@ -432,6 +432,29 @@ canvas {
   font-size: 12px;
 }
 
+.risk-weights {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.risk-weights label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  background: rgba(11, 14, 29, 0.5);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.risk-weights input[type='range'] {
+  flex: 1;
+}
+
 select {
   background: #0f1328;
   border: 1px solid rgba(255, 255, 255, 0.12);
