@@ -941,6 +941,8 @@ export class CrossPlatformExecutionRouter {
     }
 
     const slippage = this.config.crossPlatformHedgeSlippageBps || this.getSlippageBps() || 400;
+    const minProfitUsd = Math.max(0, this.config.crossPlatformHedgeMinProfitUsd || 0);
+    const minEdge = Math.max(0, this.config.crossPlatformHedgeMinEdge || 0);
 
     const hedgePromises: Promise<void>[] = [];
     for (const result of results) {
@@ -948,6 +950,9 @@ export class CrossPlatformExecutionRouter {
       const { platform, legs } = result.value;
       if (!legs || legs.length === 0) continue;
       if (this.config.crossPlatformHedgePredictOnly && platform !== 'Predict') {
+        continue;
+      }
+      if (!this.shouldHedgeLegs(legs, minProfitUsd, minEdge, slippage)) {
         continue;
       }
       const executor = this.executors.get(platform);
@@ -2190,6 +2195,66 @@ export class CrossPlatformExecutionRouter {
     }
 
     return null;
+  }
+
+  private shouldHedgeLegs(
+    legs: PlatformLeg[],
+    minProfitUsd: number,
+    minEdge: number,
+    slippageBps: number
+  ): boolean {
+    if (!legs.length) {
+      return false;
+    }
+    if (minProfitUsd <= 0 && minEdge <= 0) {
+      return true;
+    }
+
+    const shares = Math.min(...legs.map((leg) => leg.shares));
+    if (!Number.isFinite(shares) || shares <= 0) {
+      return false;
+    }
+    const slippage = slippageBps / 10000;
+    let totalCostPerShare = 0;
+    let totalProceedsPerShare = 0;
+    let hasBuy = false;
+    let hasSell = false;
+
+    for (const leg of legs) {
+      const feeBps = this.getFeeBps(leg.platform);
+      const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
+      const fee = calcFeeCost(leg.price, feeBps, curveRate, curveExponent);
+      if (leg.side === 'BUY') {
+        hasBuy = true;
+        totalCostPerShare += leg.price + fee + leg.price * slippage;
+      } else {
+        hasSell = true;
+        totalProceedsPerShare += leg.price - fee - leg.price * slippage;
+      }
+    }
+
+    const transfer = Math.max(0, this.config.crossPlatformTransferCost || 0);
+    let edge = 0;
+    let profit = 0;
+
+    if (hasBuy && !hasSell) {
+      edge = 1 - totalCostPerShare - transfer;
+      profit = edge * shares;
+    } else if (hasSell && !hasBuy) {
+      edge = totalProceedsPerShare - 1 - transfer;
+      profit = edge * shares;
+    } else {
+      edge = totalProceedsPerShare - totalCostPerShare - transfer;
+      profit = edge * shares;
+    }
+
+    if (minEdge > 0 && edge < minEdge) {
+      return false;
+    }
+    if (minProfitUsd > 0 && profit < minProfitUsd) {
+      return false;
+    }
+    return true;
   }
 
   private limitEntries(entries: OrderbookEntry[], depthLevels: number): OrderbookEntry[] {

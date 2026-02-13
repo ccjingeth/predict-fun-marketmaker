@@ -253,6 +253,8 @@ export function loadConfig(): Config {
     crossPlatformHedgeOnFailure: process.env.CROSS_PLATFORM_HEDGE_ON_FAILURE === 'true',
     crossPlatformHedgePredictOnly: process.env.CROSS_PLATFORM_HEDGE_PREDICT_ONLY !== 'false',
     crossPlatformHedgeSlippageBps: parseInt(process.env.CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS || '400'),
+    crossPlatformHedgeMinProfitUsd: parseFloat(process.env.CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD || '0'),
+    crossPlatformHedgeMinEdge: parseFloat(process.env.CROSS_PLATFORM_HEDGE_MIN_EDGE || '0'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -537,6 +539,12 @@ export function loadConfig(): Config {
   if ((config.crossPlatformSuccessChunkFactorUp ?? 0) < 0) {
     config.crossPlatformSuccessChunkFactorUp = 0;
   }
+  if ((config.crossPlatformHedgeMinProfitUsd ?? 0) < 0) {
+    config.crossPlatformHedgeMinProfitUsd = 0;
+  }
+  if ((config.crossPlatformHedgeMinEdge ?? 0) < 0) {
+    config.crossPlatformHedgeMinEdge = 0;
+  }
 
   if ((config.mmDepthEmaAlpha ?? 0) <= 0 || (config.mmDepthEmaAlpha ?? 0) >= 1) {
     config.mmDepthEmaAlpha = 0.2;
@@ -672,6 +680,9 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Hedge On Failure: ${config.crossPlatformHedgeOnFailure ? '✅' : '❌'}`);
   console.log(`Cross-Platform Hedge Predict Only: ${config.crossPlatformHedgePredictOnly ? '✅' : '❌'}`);
   console.log(`Cross-Platform Hedge Slippage Bps: ${config.crossPlatformHedgeSlippageBps}`);
+  console.log(
+    `Cross-Platform Hedge Min Profit/Edge: $${config.crossPlatformHedgeMinProfitUsd} / ${config.crossPlatformHedgeMinEdge}`
+  );
   console.log(`Cross-Platform Max Retries: ${config.crossPlatformMaxRetries}`);
   console.log(`Cross-Platform Retry Delay Ms: ${config.crossPlatformRetryDelayMs}`);
   console.log(`Cross-Platform Circuit Max Failures: ${config.crossPlatformCircuitMaxFailures}`);

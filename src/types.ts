@@ -228,6 +228,8 @@ export interface Config {
   crossPlatformHedgeOnFailure?: boolean;
   crossPlatformHedgePredictOnly?: boolean;
   crossPlatformHedgeSlippageBps?: number;
+  crossPlatformHedgeMinProfitUsd?: number;
+  crossPlatformHedgeMinEdge?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;
