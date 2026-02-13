@@ -98,6 +98,12 @@ export interface Config {
   mmSizeImbalanceWeight?: number;
   mmSizeMinFactor?: number;
   mmSizeMaxFactor?: number;
+  mmSoftCancelBps?: number;
+  mmHardCancelBps?: number;
+  mmSoftCancelCooldownMs?: number;
+  mmHardCancelCooldownMs?: number;
+  mmHoldNearTouchMs?: number;
+  mmHoldNearTouchMaxBps?: number;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;

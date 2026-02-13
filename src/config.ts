@@ -123,6 +123,12 @@ export function loadConfig(): Config {
     mmSizeImbalanceWeight: parseFloat(process.env.MM_SIZE_IMBALANCE_WEIGHT || '0.3'),
     mmSizeMinFactor: parseFloat(process.env.MM_SIZE_MIN_FACTOR || '0.3'),
     mmSizeMaxFactor: parseFloat(process.env.MM_SIZE_MAX_FACTOR || '1.4'),
+    mmSoftCancelBps: parseFloat(process.env.MM_SOFT_CANCEL_BPS || '0.0012'),
+    mmHardCancelBps: parseFloat(process.env.MM_HARD_CANCEL_BPS || '0.0025'),
+    mmSoftCancelCooldownMs: parseInt(process.env.MM_SOFT_CANCEL_COOLDOWN_MS || '2000'),
+    mmHardCancelCooldownMs: parseInt(process.env.MM_HARD_CANCEL_COOLDOWN_MS || '4500'),
+    mmHoldNearTouchMs: parseInt(process.env.MM_HOLD_NEAR_TOUCH_MS || '800'),
+    mmHoldNearTouchMaxBps: parseFloat(process.env.MM_HOLD_NEAR_TOUCH_MAX_BPS || '0.0010'),
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -461,6 +467,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `MM Size Weights: inv=${config.mmSizeInventoryWeight} imb=${config.mmSizeImbalanceWeight} clamp=${config.mmSizeMinFactor}-${config.mmSizeMaxFactor}`
+  );
+  console.log(
+    `MM Cancel Bands: soft=${(config.mmSoftCancelBps ?? 0) * 100}% hard=${(config.mmHardCancelBps ?? 0) * 100}%`
   );
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);

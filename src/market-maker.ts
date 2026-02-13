@@ -63,6 +63,7 @@ export class MarketMaker {
   private lastProfile: Map<string, 'CALM' | 'NORMAL' | 'VOLATILE'> = new Map();
   private lastProfileAt: Map<string, number> = new Map();
   private icebergPenalty: Map<string, { value: number; ts: number }> = new Map();
+  private nearTouchHoldUntil: Map<string, number> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -375,7 +376,10 @@ export class MarketMaker {
     return false;
   }
 
-  private evaluateOrderRisk(order: Order, orderbook: Orderbook): { cancel: boolean; panic: boolean; reason: string } {
+  private evaluateOrderRisk(
+    order: Order,
+    orderbook: Orderbook
+  ): { cancel: boolean; panic: boolean; reason: string } {
     const refreshMs = this.config.mmOrderRefreshMs ?? 0;
     if (refreshMs > 0 && Date.now() - order.timestamp > refreshMs) {
       return { cancel: true, panic: false, reason: 'refresh' };
@@ -398,6 +402,10 @@ export class MarketMaker {
     const antiMult = this.getVolatilityMultiplier(order.token_id, this.config.mmAntiFillVolMultiplier ?? 1.5);
     const nearTouch = nearTouchBase * nearMult;
     const antiFill = antiFillBase * antiMult;
+    const softCancel = this.config.mmSoftCancelBps ?? nearTouch;
+    const hardCancel = this.config.mmHardCancelBps ?? antiFill;
+    const holdMs = this.config.mmHoldNearTouchMs ?? 800;
+    const holdMax = this.config.mmHoldNearTouchMaxBps ?? nearTouch;
     const aggressiveMove = this.config.mmAggressiveMoveBps ?? 0.002;
     const aggressiveWindow = this.config.mmAggressiveMoveWindowMs ?? 1500;
 
@@ -415,19 +423,47 @@ export class MarketMaker {
 
     if (order.side === 'BUY') {
       const distance = (bestAsk - price) / price;
-      if (distance <= antiFill) {
+      if (distance <= hardCancel || distance <= antiFill) {
+        this.nearTouchHoldUntil.delete(order.order_hash);
         return { cancel: true, panic: true, reason: 'anti-fill' };
       }
-      if (distance <= nearTouch) {
-        return { cancel: true, panic: false, reason: 'near-touch' };
+      if (distance <= holdMax) {
+        this.nearTouchHoldUntil.delete(order.order_hash);
+        return { cancel: true, panic: true, reason: 'near-touch-max' };
+      }
+      if (distance <= nearTouch || distance <= softCancel) {
+        const until = this.nearTouchHoldUntil.get(order.order_hash) || 0;
+        if (!until) {
+          this.nearTouchHoldUntil.set(order.order_hash, Date.now() + holdMs);
+          return { cancel: false, panic: false, reason: 'near-touch-hold' };
+        }
+        if (Date.now() >= until) {
+          this.nearTouchHoldUntil.delete(order.order_hash);
+          return { cancel: true, panic: false, reason: 'near-touch' };
+        }
+        return { cancel: false, panic: false, reason: 'near-touch-hold' };
       }
     } else {
       const distance = (price - bestBid) / price;
-      if (distance <= antiFill) {
+      if (distance <= hardCancel || distance <= antiFill) {
+        this.nearTouchHoldUntil.delete(order.order_hash);
         return { cancel: true, panic: true, reason: 'anti-fill' };
       }
-      if (distance <= nearTouch) {
-        return { cancel: true, panic: false, reason: 'near-touch' };
+      if (distance <= holdMax) {
+        this.nearTouchHoldUntil.delete(order.order_hash);
+        return { cancel: true, panic: true, reason: 'near-touch-max' };
+      }
+      if (distance <= nearTouch || distance <= softCancel) {
+        const until = this.nearTouchHoldUntil.get(order.order_hash) || 0;
+        if (!until) {
+          this.nearTouchHoldUntil.set(order.order_hash, Date.now() + holdMs);
+          return { cancel: false, panic: false, reason: 'near-touch-hold' };
+        }
+        if (Date.now() >= until) {
+          this.nearTouchHoldUntil.delete(order.order_hash);
+          return { cancel: true, panic: false, reason: 'near-touch' };
+        }
+        return { cancel: false, panic: false, reason: 'near-touch-hold' };
       }
     }
 
@@ -1147,7 +1183,10 @@ export class MarketMaker {
       const risk = this.evaluateOrderRisk(existingBid, orderbook);
       if (risk.cancel || this.shouldRepriceOrder(existingBid, prices.bidPrice)) {
         await this.cancelOrder(existingBid);
-        const cooldown = this.getAdaptiveCooldown(tokenId, this.config.cooldownAfterCancelMs ?? 4000);
+        const softCooldown = this.config.mmSoftCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
+        const hardCooldown = this.config.mmHardCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
+        const baseCooldown = risk.panic ? hardCooldown : softCooldown;
+        const cooldown = this.getAdaptiveCooldown(tokenId, baseCooldown);
         if (risk.panic) {
           this.pauseForVolatility(tokenId);
           this.markCooldown(tokenId, cooldown + 2000);
@@ -1161,7 +1200,10 @@ export class MarketMaker {
       const risk = this.evaluateOrderRisk(existingAsk, orderbook);
       if (risk.cancel || this.shouldRepriceOrder(existingAsk, prices.askPrice)) {
         await this.cancelOrder(existingAsk);
-        const cooldown = this.getAdaptiveCooldown(tokenId, this.config.cooldownAfterCancelMs ?? 4000);
+        const softCooldown = this.config.mmSoftCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
+        const hardCooldown = this.config.mmHardCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
+        const baseCooldown = risk.panic ? hardCooldown : softCooldown;
+        const cooldown = this.getAdaptiveCooldown(tokenId, baseCooldown);
         if (risk.panic) {
           this.pauseForVolatility(tokenId);
           this.markCooldown(tokenId, cooldown + 2000);

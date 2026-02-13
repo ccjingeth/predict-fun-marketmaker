@@ -46,6 +46,12 @@
 - `MM_SIZE_IMBALANCE_WEIGHT`：盘口不平衡对“挂单份额”的影响权重。
 - `MM_SIZE_MIN_FACTOR`：挂单份额缩放下限（防止缩得过小）。
 - `MM_SIZE_MAX_FACTOR`：挂单份额缩放上限（防止过度放大）。
+- `MM_SOFT_CANCEL_BPS`：软撤单阈值（进入软区，优先重挂而非强制撤单）。
+- `MM_HARD_CANCEL_BPS`：硬撤单阈值（触发强制撤单）。
+- `MM_SOFT_CANCEL_COOLDOWN_MS`：软撤单冷却。
+- `MM_HARD_CANCEL_COOLDOWN_MS`：硬撤单冷却。
+- `MM_HOLD_NEAR_TOUCH_MS`：近触碰保护窗口（短暂观察避免误撤单）。
+- `MM_HOLD_NEAR_TOUCH_MAX_BPS`：近触碰最大容忍（超过立即强撤）。
 
 ### 做市自适应参数（新增）
 
