@@ -618,6 +618,13 @@ export class CrossPlatformExecutionRouter {
     attempts: 0,
     successes: 0,
     failures: 0,
+    failureReasons: {
+      preflight: 0,
+      execution: 0,
+      postTrade: 0,
+      hedge: 0,
+      unknown: 0,
+    },
     emaPreflightMs: 0,
     emaExecMs: 0,
     emaTotalMs: 0,
@@ -767,6 +774,7 @@ export class CrossPlatformExecutionRouter {
           execMs,
           totalMs: Date.now() - attemptStart,
           error,
+          reason: this.classifyFailure(error),
         });
         if (hadSuccess || attempt >= maxRetries) {
           throw error;
@@ -1486,6 +1494,23 @@ export class CrossPlatformExecutionRouter {
     return Math.max(minFactor, Math.min(maxFactor, this.qualityScore));
   }
 
+  private classifyFailure(error: any): 'preflight' | 'execution' | 'postTrade' | 'hedge' | 'unknown' {
+    const message = String(error?.message || error || '').toLowerCase();
+    if (message.includes('preflight')) {
+      return 'preflight';
+    }
+    if (message.includes('post-trade') || message.includes('post trade')) {
+      return 'postTrade';
+    }
+    if (message.includes('hedge')) {
+      return 'hedge';
+    }
+    if (message.includes('execution') || message.includes('submit') || message.includes('order')) {
+      return 'execution';
+    }
+    return 'unknown';
+  }
+
   private recordMetrics(input: {
     success: boolean;
     preflightMs: number;
@@ -1493,6 +1518,7 @@ export class CrossPlatformExecutionRouter {
     totalMs: number;
     error?: any;
     postTradeDriftBps?: number;
+    reason?: 'preflight' | 'execution' | 'postTrade' | 'hedge' | 'unknown';
   }): void {
     const alpha = 0.2;
     this.metrics.attempts += 1;
@@ -1502,6 +1528,11 @@ export class CrossPlatformExecutionRouter {
       this.metrics.failures += 1;
       if (input.error) {
         this.metrics.lastError = String(input.error?.message || input.error);
+      }
+      if (input.reason) {
+        this.metrics.failureReasons[input.reason] += 1;
+      } else {
+        this.metrics.failureReasons.unknown += 1;
       }
     }
     this.metrics.emaPreflightMs = this.updateEma(this.metrics.emaPreflightMs, input.preflightMs, alpha);
@@ -1542,11 +1573,14 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     this.lastMetricsLogAt = now;
+    const reasons = this.metrics.failureReasons;
     console.log(
       `[CrossExec] attempts=${this.metrics.attempts} success=${this.metrics.successes} fail=${this.metrics.failures} ` +
         `preflight=${this.metrics.emaPreflightMs.toFixed(0)}ms exec=${this.metrics.emaExecMs.toFixed(0)}ms ` +
         `total=${this.metrics.emaTotalMs.toFixed(0)}ms postDrift=${this.metrics.emaPostTradeDriftBps.toFixed(1)}bps ` +
-        `alerts=${this.metrics.postTradeAlerts} quality=${this.qualityScore.toFixed(2)} lastError=${this.metrics.lastError || 'none'}`
+        `alerts=${this.metrics.postTradeAlerts} quality=${this.qualityScore.toFixed(2)} ` +
+        `failures=preflight:${reasons.preflight} exec:${reasons.execution} post:${reasons.postTrade} hedge:${reasons.hedge} ` +
+        `lastError=${this.metrics.lastError || 'none'}`
     );
   }
 
