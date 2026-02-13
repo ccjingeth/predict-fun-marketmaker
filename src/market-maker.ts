@@ -249,6 +249,25 @@ export class MarketMaker {
     return (bestBid + bestAsk) / 2;
   }
 
+  private calculateOrderbookImbalance(orderbook: Orderbook): number {
+    const levels = Math.max(1, this.config.mmImbalanceLevels ?? 3);
+    const bids = orderbook.bids.slice(0, levels);
+    const asks = orderbook.asks.slice(0, levels);
+    let bidShares = 0;
+    let askShares = 0;
+    for (const entry of bids) {
+      bidShares += this.parseShares(entry);
+    }
+    for (const entry of asks) {
+      askShares += this.parseShares(entry);
+    }
+    const total = bidShares + askShares;
+    if (total <= 0) {
+      return 0;
+    }
+    return this.clamp((bidShares - askShares) / total, -1, 1);
+  }
+
   private getVolatilityMultiplier(tokenId: string, multiplier: number): number {
     const vol = this.volatilityEma.get(tokenId) ?? 0;
     if (!multiplier || multiplier <= 0) {
@@ -556,6 +575,7 @@ export class MarketMaker {
 
     const inventoryBias = this.calculateInventoryBias(market.token_id);
     let inventorySkewFactor = this.config.inventorySkewFactor ?? 0.15;
+    const imbalance = this.calculateOrderbookImbalance(orderbook);
     if (this.config.mmAdaptiveParams !== false) {
       const volSkewWeight = this.config.mmInventorySkewVolWeight ?? 1.0;
       const liqSkewWeight = this.config.mmInventorySkewDepthWeight ?? 0.4;
@@ -564,6 +584,12 @@ export class MarketMaker {
     }
 
     let fairPrice = microPrice * (1 - inventoryBias * inventorySkewFactor * adaptiveSpread);
+    if (this.config.mmAdaptiveParams !== false) {
+      const imbalanceWeight = this.config.mmImbalanceWeight ?? 0.25;
+      const imbalanceMax = this.config.mmImbalanceMaxSkew ?? 0.6;
+      const skew = this.clamp(imbalance * imbalanceWeight, -imbalanceMax, imbalanceMax);
+      fairPrice = fairPrice * (1 + skew * adaptiveSpread);
+    }
     let valueBias = 0;
     let valueConfidence = 0;
 
@@ -584,7 +610,11 @@ export class MarketMaker {
     }
 
     const inventorySpreadWeight = this.config.mmInventorySpreadWeight ?? 0.2;
-    const spreadBoost = 1 + Math.abs(inventoryBias) * inventorySpreadWeight;
+    const imbalanceSpreadWeight = this.config.mmImbalanceSpreadWeight ?? 0.2;
+    const spreadBoost =
+      1 +
+      Math.abs(inventoryBias) * inventorySpreadWeight +
+      Math.abs(imbalance) * imbalanceSpreadWeight;
     const half = (adaptiveSpread * spreadBoost) / 2;
 
     let bid = fairPrice * (1 - half);
@@ -716,6 +746,14 @@ export class MarketMaker {
     return diff >= threshold;
   }
 
+  private getAdaptiveCooldown(tokenId: string, baseMs: number): number {
+    if (this.config.mmAdaptiveParams === false) {
+      return baseMs;
+    }
+    const mult = this.getVolatilityMultiplier(tokenId, this.config.mmCooldownVolMultiplier ?? 1.2);
+    return Math.round(baseMs * mult);
+  }
+
   private trimExcessOrders(tokenId: string, orders: Order[]): Order[] {
     const maxOrders = this.config.maxOrdersPerMarket ?? 2;
     if (orders.length <= maxOrders) {
@@ -807,7 +845,7 @@ export class MarketMaker {
       const risk = this.evaluateOrderRisk(existingBid, orderbook);
       if (risk.cancel || this.shouldRepriceOrder(existingBid, prices.bidPrice)) {
         await this.cancelOrder(existingBid);
-        const cooldown = this.config.cooldownAfterCancelMs ?? 4000;
+        const cooldown = this.getAdaptiveCooldown(tokenId, this.config.cooldownAfterCancelMs ?? 4000);
         if (risk.panic) {
           this.pauseForVolatility(tokenId);
           this.markCooldown(tokenId, cooldown + 2000);
@@ -821,7 +859,7 @@ export class MarketMaker {
       const risk = this.evaluateOrderRisk(existingAsk, orderbook);
       if (risk.cancel || this.shouldRepriceOrder(existingAsk, prices.askPrice)) {
         await this.cancelOrder(existingAsk);
-        const cooldown = this.config.cooldownAfterCancelMs ?? 4000;
+        const cooldown = this.getAdaptiveCooldown(tokenId, this.config.cooldownAfterCancelMs ?? 4000);
         if (risk.panic) {
           this.pauseForVolatility(tokenId);
           this.markCooldown(tokenId, cooldown + 2000);
@@ -855,8 +893,10 @@ export class MarketMaker {
         ? ` valueBias=${prices.valueBias?.toFixed(4)} conf=${(prices.valueConfidence * 100).toFixed(0)}%`
         : '';
 
+    const imbalance = this.calculateOrderbookImbalance(orderbook);
     console.log(
-      `   bid=${prices.bidPrice.toFixed(4)} ask=${prices.askPrice.toFixed(4)} spread=${(prices.spread * 100).toFixed(2)}% bias=${prices.inventoryBias.toFixed(2)}${valueInfo} ${qualifiesForPoints ? '✨' : ''} profile=${profile}`
+      `   bid=${prices.bidPrice.toFixed(4)} ask=${prices.askPrice.toFixed(4)} spread=${(prices.spread * 100).toFixed(2)}% ` +
+        `bias=${prices.inventoryBias.toFixed(2)} imb=${imbalance.toFixed(2)}${valueInfo} ${qualifiesForPoints ? '✨' : ''} profile=${profile}`
     );
 
     const suppressBuy = prices.inventoryBias > 0.85;

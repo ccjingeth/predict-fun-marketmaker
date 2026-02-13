@@ -69,6 +69,11 @@
 - `MM_CANCEL_VOL_MULTIPLIER`：波动越大，撤单阈值越敏感。
 - `MM_NEAR_TOUCH_VOL_MULTIPLIER`：波动越大，近成交撤单更早触发。
 - `MM_ANTI_FILL_VOL_MULTIPLIER`：波动越大，防吃单撤单更早触发。
+- `MM_COOLDOWN_VOL_MULTIPLIER`：波动越大，撤单后的冷却时间越长。
+- `MM_IMBALANCE_LEVELS`：盘口不平衡计算层数。
+- `MM_IMBALANCE_WEIGHT`：盘口不平衡对报价的影响权重。
+- `MM_IMBALANCE_MAX_SKEW`：盘口不平衡最大偏移幅度。
+- `MM_IMBALANCE_SPREAD_WEIGHT`：盘口不平衡导致价差扩张的权重。
 
 ## 3. 做市商防吃单/对冲
 

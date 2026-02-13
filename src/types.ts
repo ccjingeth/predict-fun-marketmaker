@@ -58,6 +58,11 @@ export interface Config {
   mmCancelVolMultiplier?: number;
   mmNearTouchVolMultiplier?: number;
   mmAntiFillVolMultiplier?: number;
+  mmCooldownVolMultiplier?: number;
+  mmImbalanceLevels?: number;
+  mmImbalanceWeight?: number;
+  mmImbalanceMaxSkew?: number;
+  mmImbalanceSpreadWeight?: number;
   inventorySkewFactor?: number;
   cancelThreshold: number;
   repriceThreshold?: number;
