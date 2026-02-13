@@ -30,9 +30,14 @@ const metricMetricsPath = document.getElementById('metricMetricsPath');
 const metricStatePath = document.getElementById('metricStatePath');
 const metricUpdatedAt = document.getElementById('metricUpdatedAt');
 const refreshMetrics = document.getElementById('refreshMetrics');
+const chartSuccess = document.getElementById('chartSuccess');
+const chartDrift = document.getElementById('chartDrift');
+const metricAlertsList = document.getElementById('metricAlertsList');
 
 const logs = [];
 const MAX_LOGS = 800;
+const METRICS_HISTORY_MAX = 120;
+const metricsHistory = [];
 
 function setGlobalStatus(text, active) {
   globalStatus.textContent = text;
@@ -227,6 +232,89 @@ function setMetricText(el, text) {
   el.textContent = text;
 }
 
+function drawSparkline(canvas, values, color) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const width = canvas.clientWidth || canvas.width;
+  const height = canvas.clientHeight || canvas.height;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
+  ctx.scale(ratio, ratio);
+
+  ctx.clearRect(0, 0, width, height);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  if (!values.length) {
+    ctx.moveTo(0, height / 2);
+    ctx.lineTo(width, height / 2);
+    ctx.stroke();
+    return;
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  values.forEach((value, idx) => {
+    const x = (idx / (values.length - 1 || 1)) * (width - 4) + 2;
+    const y = height - ((value - min) / range) * (height - 8) - 4;
+    if (idx === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.stroke();
+}
+
+function updateCharts() {
+  const successSeries = metricsHistory.map((item) => item.successRate);
+  const driftSeries = metricsHistory.map((item) => item.postTradeDriftBps);
+  drawSparkline(chartSuccess, successSeries, '#6aa3ff');
+  drawSparkline(chartDrift, driftSeries, '#f7c46c');
+}
+
+function updateAlerts({ successRate, postTradeDriftBps, qualityScore, cooldownUntil, metricsAgeMs }) {
+  if (!metricAlertsList) return;
+  const env = parseEnv(envEditor.value || '');
+  const minQuality = Number(env.get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7);
+  const driftLimit = Number(env.get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80);
+  const warnings = [];
+
+  if (metricsAgeMs > 60000) {
+    warnings.push('指标更新超过 60 秒，可能数据过期。');
+  }
+  if (successRate < 60) {
+    warnings.push('成功率偏低，建议提高滑点保护或缩小执行量。');
+  }
+  if (postTradeDriftBps > driftLimit) {
+    warnings.push('Post-trade drift 偏高，建议检查深度与映射准确性。');
+  }
+  if (qualityScore < minQuality) {
+    warnings.push('质量分偏低，系统可能触发降级或冷却。');
+  }
+  if (cooldownUntil && cooldownUntil > Date.now()) {
+    warnings.push('全局冷却中，执行将自动暂停。');
+  }
+
+  metricAlertsList.innerHTML = '';
+  if (!warnings.length) {
+    const ok = document.createElement('div');
+    ok.className = 'alert-item ok';
+    ok.textContent = '运行正常，未发现异常指标。';
+    metricAlertsList.appendChild(ok);
+    return;
+  }
+  warnings.forEach((text) => {
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.textContent = text;
+    metricAlertsList.appendChild(item);
+  });
+}
+
 async function loadMetrics() {
   try {
     const raw = await window.predictBot.readMetrics();
@@ -247,6 +335,9 @@ async function loadMetrics() {
     const successes = Number(metrics.successes || 0);
     const failures = Number(metrics.failures || 0);
     const successRate = attempts > 0 ? (successes / attempts) * 100 : 0;
+    const postTradeDriftBps = Number(metrics.emaPostTradeDriftBps || 0);
+    const updatedAt = Number(data.ts || 0);
+    const metricsAgeMs = updatedAt ? Date.now() - updatedAt : Infinity;
 
     setMetricText(metricSuccessRate, `${formatNumber(successRate, 1)}%`);
     setMetricText(metricSuccessRaw, `${successes}/${attempts} 成功`);
@@ -254,7 +345,7 @@ async function loadMetrics() {
     setMetricText(metricPreflight, formatMs(metrics.emaPreflightMs));
     setMetricText(metricExec, formatMs(metrics.emaExecMs));
     setMetricText(metricTotal, formatMs(metrics.emaTotalMs));
-    setMetricText(metricPostDrift, formatBps(metrics.emaPostTradeDriftBps));
+    setMetricText(metricPostDrift, formatBps(postTradeDriftBps));
     setMetricText(metricQuality, formatNumber(data.qualityScore, 2));
     setMetricText(metricChunkFactor, formatNumber(data.chunkFactor, 2));
     setMetricText(metricChunkDelay, formatMs(data.chunkDelayMs));
@@ -267,8 +358,37 @@ async function loadMetrics() {
       cooldownUntil && cooldownUntil > Date.now() ? `冷却中：${formatTimestamp(cooldownUntil)}` : '未触发'
     );
     setMetricText(metricLastError, metrics.lastError || '无');
-    setMetricText(metricUpdatedAt, formatTimestamp(data.ts));
-    setMetricsStatus('已更新', true);
+    setMetricText(metricUpdatedAt, formatTimestamp(updatedAt));
+
+    if (updatedAt && successRate >= 0) {
+      const last = metricsHistory[metricsHistory.length - 1];
+      if (!last || last.ts !== updatedAt) {
+        metricsHistory.push({
+          ts: updatedAt,
+          successRate,
+          postTradeDriftBps,
+        });
+        if (metricsHistory.length > METRICS_HISTORY_MAX) {
+          metricsHistory.shift();
+        }
+      }
+    }
+
+    updateCharts();
+    updateAlerts({
+      successRate,
+      postTradeDriftBps,
+      qualityScore: Number(data.qualityScore || 0),
+      cooldownUntil,
+      metricsAgeMs,
+    });
+
+    const flushMs = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_METRICS_FLUSH_MS') || 30000);
+    if (metricsAgeMs > flushMs * 2) {
+      setMetricsStatus('数据过期', false);
+    } else {
+      setMetricsStatus('已更新', true);
+    }
   } catch (error) {
     setMetricsStatus('读取失败', false);
   }

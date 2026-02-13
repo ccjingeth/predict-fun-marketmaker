@@ -186,6 +186,25 @@
               <span class="metric-value" id="metricUpdatedAt">--</span>
               <span class="metric-hint">指标文件更新时间</span>
             </div>
+            <div class="metric full">
+              <span class="metric-label">趋势</span>
+              <div class="chart-row">
+                <div class="chart-block">
+                  <div class="chart-title">成功率</div>
+                  <canvas id="chartSuccess" width="320" height="80"></canvas>
+                </div>
+                <div class="chart-block">
+                  <div class="chart-title">Post-trade Drift</div>
+                  <canvas id="chartDrift" width="320" height="80"></canvas>
+                </div>
+              </div>
+            </div>
+            <div class="metric full">
+              <span class="metric-label">告警</span>
+              <div class="alert-list" id="metricAlertsList">
+                <div class="alert-item">暂无告警</div>
+              </div>
+            </div>
           </div>
         </section>
 
