@@ -45,6 +45,9 @@ const weightDriftVal = document.getElementById('weightDriftVal');
 const weightQualityVal = document.getElementById('weightQualityVal');
 const weightStaleVal = document.getElementById('weightStaleVal');
 const resetRiskWeightsBtn = document.getElementById('resetRiskWeights');
+const saveWeightPresetBtn = document.getElementById('saveWeightPreset');
+const weightPresetSelect = document.getElementById('weightPresetSelect');
+const deleteWeightPresetBtn = document.getElementById('deleteWeightPreset');
 const metricRiskScore = document.getElementById('metricRiskScore');
 const metricRiskBar = document.getElementById('metricRiskBar');
 const chartSuccess = document.getElementById('chartSuccess');
@@ -76,6 +79,7 @@ const riskWeights = {
   quality: 1,
   stale: 1,
 };
+const weightPresets = new Map();
 
 function setGlobalStatus(text, active) {
   globalStatus.textContent = text;
@@ -170,6 +174,70 @@ function loadRiskWeights() {
   }
 }
 
+function saveWeightPresets() {
+  try {
+    const payload = Array.from(weightPresets.entries()).map(([name, weights]) => ({ name, weights }));
+    localStorage.setItem('weightPresets', JSON.stringify(payload));
+  } catch {
+    // ignore
+  }
+}
+
+function loadWeightPresets() {
+  weightPresets.clear();
+  try {
+    const raw = localStorage.getItem('weightPresets');
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return;
+    parsed.forEach((item) => {
+      if (!item?.name || !item?.weights) return;
+      weightPresets.set(item.name, item.weights);
+    });
+  } catch {
+    // ignore
+  }
+}
+
+function updateWeightPresetSelect() {
+  if (!weightPresetSelect) return;
+  weightPresetSelect.innerHTML = '';
+  const defaultOption = document.createElement('option');
+  defaultOption.value = 'default';
+  defaultOption.textContent = '默认权重';
+  weightPresetSelect.appendChild(defaultOption);
+  for (const name of weightPresets.keys()) {
+    const option = document.createElement('option');
+    option.value = name;
+    option.textContent = name;
+    weightPresetSelect.appendChild(option);
+  }
+}
+
+function applyWeightPreset(name) {
+  if (!name || name === 'default') {
+    riskWeights.success = 1;
+    riskWeights.drift = 1;
+    riskWeights.quality = 1;
+    riskWeights.stale = 1;
+    updateRiskWeightsUI();
+    saveRiskWeights();
+    loadMetrics();
+    return;
+  }
+  const preset = weightPresets.get(name);
+  if (!preset) return;
+  ['success', 'drift', 'quality', 'stale'].forEach((key) => {
+    const value = Number(preset[key]);
+    if (Number.isFinite(value)) {
+      riskWeights[key] = Math.max(0, Math.min(2, value));
+    }
+  });
+  updateRiskWeightsUI();
+  saveRiskWeights();
+  loadMetrics();
+}
+
 function bindRiskWeightInputs() {
   if (!weightSuccess) return;
   const bind = (input, key, label) => {
@@ -198,6 +266,34 @@ function bindRiskWeightInputs() {
       saveRiskWeights();
       loadMetrics();
       pushLog({ type: 'system', level: 'system', message: '已重置风险权重' });
+    });
+  }
+  if (saveWeightPresetBtn) {
+    saveWeightPresetBtn.addEventListener('click', () => {
+      const name = prompt('给这套权重起个名字：');
+      if (!name) return;
+      weightPresets.set(name, { ...riskWeights });
+      saveWeightPresets();
+      updateWeightPresetSelect();
+      weightPresetSelect.value = name;
+      pushLog({ type: 'system', level: 'system', message: `已保存权重预设：${name}` });
+    });
+  }
+  if (weightPresetSelect) {
+    weightPresetSelect.addEventListener('change', () => {
+      applyWeightPreset(weightPresetSelect.value);
+    });
+  }
+  if (deleteWeightPresetBtn) {
+    deleteWeightPresetBtn.addEventListener('click', () => {
+      const name = weightPresetSelect?.value;
+      if (!name || name === 'default') return;
+      weightPresets.delete(name);
+      saveWeightPresets();
+      updateWeightPresetSelect();
+      weightPresetSelect.value = 'default';
+      applyWeightPreset('default');
+      pushLog({ type: 'system', level: 'system', message: `已删除权重预设：${name}` });
     });
   }
 }
@@ -1245,7 +1341,9 @@ async function init() {
   updateStatusDisplay(status);
   setGlobalStatus('已连接', false);
   loadRiskWeights();
+  loadWeightPresets();
   updateRiskWeightsUI();
+  updateWeightPresetSelect();
   bindRiskWeightInputs();
   await loadMetrics();
   await runDiagnostics();

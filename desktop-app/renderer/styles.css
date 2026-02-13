@@ -455,6 +455,13 @@ canvas {
   flex: 1;
 }
 
+.weight-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 select {
   background: #0f1328;
   border: 1px solid rgba(255, 255, 255, 0.12);
