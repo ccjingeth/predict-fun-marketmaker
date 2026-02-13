@@ -32,6 +32,8 @@ const metricUpdatedAt = document.getElementById('metricUpdatedAt');
 const refreshMetrics = document.getElementById('refreshMetrics');
 const riskLevel = document.getElementById('riskLevel');
 const downgradeProfileBtn = document.getElementById('downgradeProfile');
+const downgradeSafeBtn = document.getElementById('downgradeSafe');
+const downgradeUltraBtn = document.getElementById('downgradeUltra');
 const metricRiskScore = document.getElementById('metricRiskScore');
 const metricRiskBar = document.getElementById('metricRiskBar');
 const chartSuccess = document.getElementById('chartSuccess');
@@ -42,6 +44,7 @@ const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
 const healthAdviceList = document.getElementById('healthAdviceList');
 const healthFailureList = document.getElementById('healthFailureList');
+const healthFailureCategories = document.getElementById('healthFailureCategories');
 const healthExportHint = document.getElementById('healthExportHint');
 const runDiagnosticsBtn = document.getElementById('runDiagnostics');
 const exportDiagnosticsBtn = document.getElementById('exportDiagnostics');
@@ -206,6 +209,52 @@ function normalizeFailureLine(text) {
     .slice(0, 140);
 }
 
+function classifyFailure(line) {
+  const text = (line || '').toLowerCase();
+  if (/insufficient depth|min depth|depth/.test(text)) return '深度不足';
+  if (/vwap/.test(text)) return 'VWAP 偏离';
+  if (/drift/.test(text)) return '价格漂移';
+  if (/volatility/.test(text)) return '高波动';
+  if (/open orders remain/.test(text)) return '未成交订单';
+  if (/credentials|api key|private key|jwt/.test(text)) return '权限/密钥';
+  if (/circuit breaker/.test(text)) return '熔断触发';
+  if (/cooldown/.test(text)) return '冷却触发';
+  if (/mapping|dependency/.test(text)) return '映射/依赖';
+  if (/network|timeout|fetch/.test(text)) return '网络/请求';
+  return '其他';
+}
+
+function renderFailureCategories() {
+  if (!healthFailureCategories) return;
+  const counts = new Map();
+  for (const [line, count] of failureCounts.entries()) {
+    const category = classifyFailure(line);
+    counts.set(category, (counts.get(category) || 0) + count);
+  }
+  const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  healthFailureCategories.innerHTML = '';
+  if (!entries.length) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无分类。';
+    healthFailureCategories.appendChild(item);
+    return;
+  }
+  entries.forEach(([category, count]) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = `${category}`;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.textContent = `${count} 次`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    healthFailureCategories.appendChild(row);
+  });
+}
+
 function updateFailureCounts(line) {
   const normalized = normalizeFailureLine(line);
   if (!normalized) return;
@@ -318,6 +367,7 @@ function pushLog(entry) {
   if (entry.level === 'stderr' || /error|failed|失败|异常/i.test(entry.message || '')) {
     updateFailureCounts(entry.message || '');
     renderFailureTopN();
+    renderFailureCategories();
   }
   renderLogs();
 }
@@ -389,28 +439,51 @@ function applyToggles() {
   updateMetricsPaths();
 }
 
-function applyDowngradeProfile() {
+function applyDowngradeProfile(level = 'safe') {
   let text = envEditor.value || '';
-  const updates = {
-    AUTO_CONFIRM: 'false',
-    ARB_AUTO_EXECUTE: 'false',
-    CROSS_PLATFORM_AUTO_EXECUTE: 'false',
-    CROSS_PLATFORM_EXECUTION_VWAP_CHECK: 'true',
-    CROSS_PLATFORM_ADAPTIVE_SIZE: 'true',
-    CROSS_PLATFORM_DEPTH_USAGE: '0.3',
-    CROSS_PLATFORM_RECHECK_MS: '300',
-    CROSS_PLATFORM_STABILITY_SAMPLES: '3',
-    CROSS_PLATFORM_STABILITY_INTERVAL_MS: '120',
-    CROSS_PLATFORM_CHUNK_MAX_SHARES: '10',
-    CROSS_PLATFORM_CHUNK_DELAY_MIN_MS: '200',
-    CROSS_PLATFORM_CHUNK_DELAY_MAX_MS: '1200',
-    CROSS_PLATFORM_VOLATILITY_BPS: '60',
-    CROSS_PLATFORM_POST_TRADE_DRIFT_BPS: '60',
-    CROSS_PLATFORM_AUTO_TUNE: 'true',
-    CROSS_PLATFORM_CHUNK_AUTO_TUNE: 'true',
-    CROSS_PLATFORM_USE_FOK: 'true',
-    CROSS_PLATFORM_PARALLEL_SUBMIT: 'true',
+  const profiles = {
+    safe: {
+      AUTO_CONFIRM: 'false',
+      ARB_AUTO_EXECUTE: 'false',
+      CROSS_PLATFORM_AUTO_EXECUTE: 'false',
+      CROSS_PLATFORM_EXECUTION_VWAP_CHECK: 'true',
+      CROSS_PLATFORM_ADAPTIVE_SIZE: 'true',
+      CROSS_PLATFORM_DEPTH_USAGE: '0.3',
+      CROSS_PLATFORM_RECHECK_MS: '300',
+      CROSS_PLATFORM_STABILITY_SAMPLES: '3',
+      CROSS_PLATFORM_STABILITY_INTERVAL_MS: '120',
+      CROSS_PLATFORM_CHUNK_MAX_SHARES: '10',
+      CROSS_PLATFORM_CHUNK_DELAY_MIN_MS: '200',
+      CROSS_PLATFORM_CHUNK_DELAY_MAX_MS: '1200',
+      CROSS_PLATFORM_VOLATILITY_BPS: '60',
+      CROSS_PLATFORM_POST_TRADE_DRIFT_BPS: '60',
+      CROSS_PLATFORM_AUTO_TUNE: 'true',
+      CROSS_PLATFORM_CHUNK_AUTO_TUNE: 'true',
+      CROSS_PLATFORM_USE_FOK: 'true',
+      CROSS_PLATFORM_PARALLEL_SUBMIT: 'true',
+    },
+    ultra: {
+      AUTO_CONFIRM: 'false',
+      ARB_AUTO_EXECUTE: 'false',
+      CROSS_PLATFORM_AUTO_EXECUTE: 'false',
+      CROSS_PLATFORM_EXECUTION_VWAP_CHECK: 'true',
+      CROSS_PLATFORM_ADAPTIVE_SIZE: 'true',
+      CROSS_PLATFORM_DEPTH_USAGE: '0.2',
+      CROSS_PLATFORM_RECHECK_MS: '500',
+      CROSS_PLATFORM_STABILITY_SAMPLES: '4',
+      CROSS_PLATFORM_STABILITY_INTERVAL_MS: '180',
+      CROSS_PLATFORM_CHUNK_MAX_SHARES: '6',
+      CROSS_PLATFORM_CHUNK_DELAY_MIN_MS: '300',
+      CROSS_PLATFORM_CHUNK_DELAY_MAX_MS: '1800',
+      CROSS_PLATFORM_VOLATILITY_BPS: '50',
+      CROSS_PLATFORM_POST_TRADE_DRIFT_BPS: '50',
+      CROSS_PLATFORM_AUTO_TUNE: 'true',
+      CROSS_PLATFORM_CHUNK_AUTO_TUNE: 'true',
+      CROSS_PLATFORM_USE_FOK: 'true',
+      CROSS_PLATFORM_PARALLEL_SUBMIT: 'true',
+    },
   };
+  const updates = profiles[level] || profiles.safe;
   Object.entries(updates).forEach(([key, value]) => {
     text = setEnvValue(text, key, value);
   });
@@ -418,7 +491,7 @@ function applyDowngradeProfile() {
   detectTradingMode(text);
   syncTogglesFromEnv(text);
   updateMetricsPaths();
-  pushLog({ type: 'system', level: 'system', message: '已应用安全降级参数（请保存生效）' });
+  pushLog({ type: 'system', level: 'system', message: `已应用${level === 'ultra' ? '极保守' : '保守'}参数（请保存生效）` });
 }
 
 function formatNumber(value, digits = 0) {
@@ -509,6 +582,17 @@ function renderAdvice(items, metricsSnapshot) {
     }
     if (metricsSnapshot.qualityScore < metricsSnapshot.minQuality) {
       advice.push('质量分偏低：建议开启自动降级或暂时降低频率。');
+    }
+  }
+  if (failureCounts.size > 0) {
+    const categories = new Map();
+    for (const [line, count] of failureCounts.entries()) {
+      const category = classifyFailure(line);
+      categories.set(category, (categories.get(category) || 0) + count);
+    }
+    const topCategory = Array.from(categories.entries()).sort((a, b) => b[1] - a[1])[0];
+    if (topCategory) {
+      advice.push(`当前高频问题：${topCategory[0]}（${topCategory[1]}次），建议优先排查。`);
     }
   }
   if (!advice.length) {
@@ -858,7 +942,9 @@ refreshMetrics.addEventListener('click', loadMetrics);
 runDiagnosticsBtn.addEventListener('click', runDiagnostics);
 exportDiagnosticsBtn.addEventListener('click', exportDiagnostics);
 copyFailuresBtn.addEventListener('click', copyFailures);
-downgradeProfileBtn.addEventListener('click', applyDowngradeProfile);
+downgradeProfileBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
+downgradeSafeBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
+downgradeUltraBtn.addEventListener('click', () => applyDowngradeProfile('ultra'));
 
 init().catch((err) => {
   pushLog({ type: 'system', level: 'stderr', message: err?.message || '初始化失败' });

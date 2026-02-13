@@ -544,6 +544,7 @@ function exportDiagnosticsBundle() {
       keyLogs: keyLogs.length,
       cutoff,
     },
+    metricsSnapshot: readJsonFile(metricsPath) || null,
   };
 
   fs.writeFileSync(path.join(outputDir, 'diagnostics.json'), JSON.stringify(report, null, 2), 'utf8');

@@ -102,6 +102,8 @@
               <span class="badge" id="metricsStatus">未加载</span>
               <button class="btn ghost" id="refreshMetrics">刷新</button>
               <button class="btn ghost" id="downgradeProfile">一键降级</button>
+              <button class="btn ghost" id="downgradeSafe">保守档</button>
+              <button class="btn ghost" id="downgradeUltra">极保守</button>
             </div>
           </div>
           <div class="metrics-grid">
@@ -242,6 +244,10 @@
           <div class="health-subtitle">最近失败原因 TopN</div>
           <div class="health-list" id="healthFailureList">
             <div class="health-item ok">暂无失败原因。</div>
+          </div>
+          <div class="health-subtitle">失败分类</div>
+          <div class="health-list" id="healthFailureCategories">
+            <div class="health-item ok">暂无分类。</div>
           </div>
           <p class="hint" id="healthExportHint"></p>
         </section>
