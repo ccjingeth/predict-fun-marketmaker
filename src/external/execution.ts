@@ -749,6 +749,7 @@ export class CrossPlatformExecutionRouter {
         return;
       } catch (error: any) {
         const hadSuccess = Boolean(error?.hadSuccess);
+        const reason = this.classifyFailure(error);
         this.onFailure();
         this.recordTokenFailure(preparedLegs.length ? preparedLegs : plannedLegs);
         this.recordPlatformFailure(preparedLegs.length ? preparedLegs : plannedLegs);
@@ -768,13 +769,14 @@ export class CrossPlatformExecutionRouter {
         this.adjustDynamicStability(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
+        this.applyFailureReasonPenalty(reason);
         this.recordMetrics({
           success: false,
           preflightMs,
           execMs,
           totalMs: Date.now() - attemptStart,
           error,
-          reason: this.classifyFailure(error),
+          reason,
         });
         if (hadSuccess || attempt >= maxRetries) {
           throw error;
@@ -1509,6 +1511,34 @@ export class CrossPlatformExecutionRouter {
       return 'execution';
     }
     return 'unknown';
+  }
+
+  private applyFailureReasonPenalty(
+    reason: 'preflight' | 'execution' | 'postTrade' | 'hedge' | 'unknown'
+  ): void {
+    if (this.config.crossPlatformAutoTune === false) {
+      return;
+    }
+    let multiplier = 0;
+    switch (reason) {
+      case 'preflight':
+        multiplier = Math.max(0, this.config.crossPlatformReasonPreflightPenalty || 0);
+        break;
+      case 'execution':
+        multiplier = Math.max(0, this.config.crossPlatformReasonExecutionPenalty || 0);
+        break;
+      case 'postTrade':
+        multiplier = Math.max(0, this.config.crossPlatformReasonPostTradePenalty || 0);
+        break;
+      case 'hedge':
+        multiplier = Math.max(0, this.config.crossPlatformReasonHedgePenalty || 0);
+        break;
+      default:
+        multiplier = 0;
+    }
+    if (multiplier > 0) {
+      this.applyQualityPenalty(multiplier);
+    }
   }
 
   private recordMetrics(input: {

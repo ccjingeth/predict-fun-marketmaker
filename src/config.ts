@@ -198,6 +198,10 @@ export function loadConfig(): Config {
     crossPlatformFailurePauseMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_PAUSE_MS || '0'),
     crossPlatformFailurePauseMaxMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_PAUSE_MAX_MS || '0'),
     crossPlatformFailurePauseBackoff: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PAUSE_BACKOFF || '1.5'),
+    crossPlatformReasonPreflightPenalty: parseFloat(process.env.CROSS_PLATFORM_REASON_PREFLIGHT_PENALTY || '0.4'),
+    crossPlatformReasonExecutionPenalty: parseFloat(process.env.CROSS_PLATFORM_REASON_EXECUTION_PENALTY || '0.7'),
+    crossPlatformReasonPostTradePenalty: parseFloat(process.env.CROSS_PLATFORM_REASON_POSTTRADE_PENALTY || '1.2'),
+    crossPlatformReasonHedgePenalty: parseFloat(process.env.CROSS_PLATFORM_REASON_HEDGE_PENALTY || '0.5'),
     crossPlatformAutoTune: process.env.CROSS_PLATFORM_AUTO_TUNE !== 'false',
     crossPlatformAutoTuneMinFactor: parseFloat(process.env.CROSS_PLATFORM_AUTO_TUNE_MIN_FACTOR || '0.5'),
     crossPlatformAutoTuneMaxFactor: parseFloat(process.env.CROSS_PLATFORM_AUTO_TUNE_MAX_FACTOR || '1.2'),
@@ -496,6 +500,18 @@ export function loadConfig(): Config {
   if ((config.crossPlatformFailurePauseBackoff ?? 0) < 1) {
     config.crossPlatformFailurePauseBackoff = 1.2;
   }
+  if ((config.crossPlatformReasonPreflightPenalty ?? 0) < 0) {
+    config.crossPlatformReasonPreflightPenalty = 0.4;
+  }
+  if ((config.crossPlatformReasonExecutionPenalty ?? 0) < 0) {
+    config.crossPlatformReasonExecutionPenalty = 0.7;
+  }
+  if ((config.crossPlatformReasonPostTradePenalty ?? 0) < 0) {
+    config.crossPlatformReasonPostTradePenalty = 1.2;
+  }
+  if ((config.crossPlatformReasonHedgePenalty ?? 0) < 0) {
+    config.crossPlatformReasonHedgePenalty = 0.5;
+  }
   if ((config.crossPlatformRetryFactorMin ?? 0) <= 0 || (config.crossPlatformRetryFactorMin ?? 0) > 1) {
     config.crossPlatformRetryFactorMin = 0.4;
   }
@@ -709,6 +725,9 @@ export function printConfig(config: Config): void {
       `Cross-Platform Failure Pause: base=${config.crossPlatformFailurePauseMs} max=${config.crossPlatformFailurePauseMaxMs} backoff=${config.crossPlatformFailurePauseBackoff}`
     );
   }
+  console.log(
+    `Cross-Platform Failure Penalties: preflight=${config.crossPlatformReasonPreflightPenalty} exec=${config.crossPlatformReasonExecutionPenalty} post=${config.crossPlatformReasonPostTradePenalty} hedge=${config.crossPlatformReasonHedgePenalty}`
+  );
   console.log(
     `Cross-Platform Retry Factor: ${config.crossPlatformRetryFactorMin}-${config.crossPlatformRetryFactorMax} up=${config.crossPlatformRetryFactorUp} down=${config.crossPlatformRetryFactorDown}`
   );

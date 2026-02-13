@@ -173,6 +173,10 @@ export interface Config {
   crossPlatformFailurePauseMs?: number;
   crossPlatformFailurePauseMaxMs?: number;
   crossPlatformFailurePauseBackoff?: number;
+  crossPlatformReasonPreflightPenalty?: number;
+  crossPlatformReasonExecutionPenalty?: number;
+  crossPlatformReasonPostTradePenalty?: number;
+  crossPlatformReasonHedgePenalty?: number;
   crossPlatformAutoTune?: boolean;
   crossPlatformAutoTuneMinFactor?: number;
   crossPlatformAutoTuneMaxFactor?: number;
