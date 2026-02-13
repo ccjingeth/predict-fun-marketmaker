@@ -193,6 +193,7 @@ export function loadConfig(): Config {
     crossPlatformStabilityIntervalMs: parseInt(process.env.CROSS_PLATFORM_STABILITY_INTERVAL_MS || '0'),
     crossPlatformStabilityBps: parseInt(process.env.CROSS_PLATFORM_STABILITY_BPS || '0'),
     crossPlatformPostTradeDriftBps: parseInt(process.env.CROSS_PLATFORM_POST_TRADE_DRIFT_BPS || '0'),
+    crossPlatformAbortPostTradeDriftBps: parseInt(process.env.CROSS_PLATFORM_ABORT_POST_TRADE_BPS || '0'),
     crossPlatformAutoTune: process.env.CROSS_PLATFORM_AUTO_TUNE !== 'false',
     crossPlatformAutoTuneMinFactor: parseFloat(process.env.CROSS_PLATFORM_AUTO_TUNE_MIN_FACTOR || '0.5'),
     crossPlatformAutoTuneMaxFactor: parseFloat(process.env.CROSS_PLATFORM_AUTO_TUNE_MAX_FACTOR || '1.2'),
@@ -446,6 +447,9 @@ export function loadConfig(): Config {
   if ((config.crossPlatformMetricsLogMs ?? 0) < 0) {
     config.crossPlatformMetricsLogMs = 0;
   }
+  if ((config.crossPlatformAbortPostTradeDriftBps ?? 0) < 0) {
+    config.crossPlatformAbortPostTradeDriftBps = 0;
+  }
 
   if ((config.mmDepthEmaAlpha ?? 0) <= 0 || (config.mmDepthEmaAlpha ?? 0) >= 1) {
     config.mmDepthEmaAlpha = 0.2;
@@ -588,6 +592,7 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Circuit Cooldown Ms: ${config.crossPlatformCircuitCooldownMs}`);
   console.log(`Cross-Platform Retry Size Factor: ${config.crossPlatformRetrySizeFactor}`);
   console.log(`Cross-Platform Retry Aggressive Bps: ${config.crossPlatformRetryAggressiveBps}`);
+  console.log(`Cross-Platform Abort Drift Bps: ${config.crossPlatformAbortPostTradeDriftBps}`);
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
   console.log(`Dependency Arb: ${config.dependencyEnabled ? '✅' : '❌'}`);

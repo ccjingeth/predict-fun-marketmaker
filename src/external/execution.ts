@@ -841,6 +841,13 @@ export class CrossPlatformExecutionRouter {
       this.mergeLegs(penalizedLegs, post.penalizedLegs);
       this.mergeLegs(spreadPenalizedLegs, post.spreadPenalizedLegs);
       post.penalizedTokenIds.forEach((id) => penalizedTokenIds.add(id));
+      const abortBps = Math.max(0, this.config.crossPlatformAbortPostTradeDriftBps || 0);
+      if (abortBps > 0 && post.maxDriftBps >= abortBps) {
+        throw new ExecutionAttemptError(
+          `Post-trade drift ${post.maxDriftBps.toFixed(1)} bps >= abort ${abortBps}`,
+          true
+        );
+      }
 
       const delayMs = Math.max(0, this.chunkDelayMs || 0);
       if (delayMs > 0 && i < chunks.length - 1) {

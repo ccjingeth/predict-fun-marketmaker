@@ -168,6 +168,7 @@ export interface Config {
   crossPlatformStabilityIntervalMs?: number;
   crossPlatformStabilityBps?: number;
   crossPlatformPostTradeDriftBps?: number;
+  crossPlatformAbortPostTradeDriftBps?: number;
   crossPlatformAutoTune?: boolean;
   crossPlatformAutoTuneMinFactor?: number;
   crossPlatformAutoTuneMaxFactor?: number;
