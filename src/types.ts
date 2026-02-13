@@ -244,6 +244,12 @@ export interface Config {
   crossPlatformSlippageCeilBps?: number;
   crossPlatformFailureSlippageBumpBps?: number;
   crossPlatformSuccessSlippageTightenBps?: number;
+  crossPlatformFailureStabilityBps?: number;
+  crossPlatformSuccessStabilityBps?: number;
+  crossPlatformFailureChunkDelayBumpMs?: number;
+  crossPlatformSuccessChunkDelayTightenMs?: number;
+  crossPlatformFailureChunkFactorDown?: number;
+  crossPlatformSuccessChunkFactorUp?: number;
   autoConfirmAll?: boolean;
   crossPlatformRequireWs?: boolean;
   crossPlatformMappingPath?: string;

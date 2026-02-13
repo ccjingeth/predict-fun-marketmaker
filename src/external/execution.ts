@@ -607,6 +607,7 @@ export class CrossPlatformExecutionRouter {
   private lastStateFlush = 0;
   private retryFactor = 1;
   private slippageBpsDynamic = 0;
+  private stabilityBpsDynamic = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -636,6 +637,7 @@ export class CrossPlatformExecutionRouter {
     const maxRetry = Math.max(minRetry, config.crossPlatformRetryFactorMax || 1);
     this.retryFactor = maxRetry;
     this.slippageBpsDynamic = this.resolveDynamicSlippage();
+    this.stabilityBpsDynamic = this.resolveDynamicStability();
     this.restoreState().catch((error) => {
       console.warn('Cross-platform state restore failed:', error);
     });
@@ -699,6 +701,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustChunkFactor(true);
         this.adjustRetryFactor(true);
         this.adjustDynamicSlippage(true);
+        this.adjustDynamicStability(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -753,6 +756,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustChunkFactor(false);
         this.adjustRetryFactor(false);
         this.adjustDynamicSlippage(false);
+        this.adjustDynamicStability(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.recordMetrics({
@@ -1035,6 +1039,26 @@ export class CrossPlatformExecutionRouter {
         this.getSlippageBps() + Math.max(1, stepUp)
       );
     }
+  }
+
+  private resolveDynamicStability(): number {
+    const base = this.config.crossPlatformStabilityBps || 0;
+    return Math.max(0, base);
+  }
+
+  private adjustDynamicStability(success: boolean): void {
+    const base = this.getStabilityBps();
+    const up = Math.max(0, this.config.crossPlatformFailureStabilityBps || 0);
+    const down = Math.max(0, this.config.crossPlatformSuccessStabilityBps || 0);
+    if (success) {
+      this.stabilityBpsDynamic = Math.max(0, base - down);
+    } else {
+      this.stabilityBpsDynamic = base + up;
+    }
+  }
+
+  private getStabilityBps(): number {
+    return Math.max(0, this.stabilityBpsDynamic || this.resolveDynamicStability());
   }
 
   private getSlippageBps(): number {
@@ -1378,6 +1402,12 @@ export class CrossPlatformExecutionRouter {
     } else {
       this.chunkFactor = Math.max(minFactor, this.chunkFactor - down);
     }
+    if (success && this.config.crossPlatformSuccessChunkFactorUp) {
+      this.chunkFactor = Math.min(maxFactor, this.chunkFactor + this.config.crossPlatformSuccessChunkFactorUp);
+    }
+    if (!success && this.config.crossPlatformFailureChunkFactorDown) {
+      this.chunkFactor = Math.max(minFactor, this.chunkFactor - this.config.crossPlatformFailureChunkFactorDown);
+    }
   }
 
   private adjustChunkDelay(success: boolean): void {
@@ -1392,6 +1422,12 @@ export class CrossPlatformExecutionRouter {
       this.chunkDelayMs = Math.max(minMs, this.chunkDelayMs - down);
     } else {
       this.chunkDelayMs = Math.min(maxMs, this.chunkDelayMs + up);
+    }
+    if (success && this.config.crossPlatformSuccessChunkDelayTightenMs) {
+      this.chunkDelayMs = Math.max(minMs, this.chunkDelayMs - this.config.crossPlatformSuccessChunkDelayTightenMs);
+    }
+    if (!success && this.config.crossPlatformFailureChunkDelayBumpMs) {
+      this.chunkDelayMs = Math.min(maxMs, this.chunkDelayMs + this.config.crossPlatformFailureChunkDelayBumpMs);
     }
   }
 
@@ -1827,7 +1863,7 @@ export class CrossPlatformExecutionRouter {
   private async stabilityCheck(legs: PlatformLeg[]): Promise<void> {
     const samples = Math.max(1, this.config.crossPlatformStabilitySamples || 1);
     const intervalMs = Math.max(0, this.config.crossPlatformStabilityIntervalMs || 0);
-    const threshold = Math.max(0, (this.config.crossPlatformStabilityBps || 0) * this.getAutoTuneFactor());
+    const threshold = Math.max(0, this.getStabilityBps() * this.getAutoTuneFactor());
     if (samples <= 1 || threshold <= 0) {
       return;
     }
