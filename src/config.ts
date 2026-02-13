@@ -195,6 +195,9 @@ export function loadConfig(): Config {
     crossPlatformPostTradeDriftBps: parseInt(process.env.CROSS_PLATFORM_POST_TRADE_DRIFT_BPS || '0'),
     crossPlatformAbortPostTradeDriftBps: parseInt(process.env.CROSS_PLATFORM_ABORT_POST_TRADE_BPS || '0'),
     crossPlatformAbortCooldownMs: parseInt(process.env.CROSS_PLATFORM_ABORT_COOLDOWN_MS || '0'),
+    crossPlatformFailurePauseMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_PAUSE_MS || '0'),
+    crossPlatformFailurePauseMaxMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_PAUSE_MAX_MS || '0'),
+    crossPlatformFailurePauseBackoff: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PAUSE_BACKOFF || '1.5'),
     crossPlatformAutoTune: process.env.CROSS_PLATFORM_AUTO_TUNE !== 'false',
     crossPlatformAutoTuneMinFactor: parseFloat(process.env.CROSS_PLATFORM_AUTO_TUNE_MIN_FACTOR || '0.5'),
     crossPlatformAutoTuneMaxFactor: parseFloat(process.env.CROSS_PLATFORM_AUTO_TUNE_MAX_FACTOR || '1.2'),
@@ -484,6 +487,15 @@ export function loadConfig(): Config {
   if ((config.crossPlatformAbortCooldownMs ?? 0) < 0) {
     config.crossPlatformAbortCooldownMs = 0;
   }
+  if ((config.crossPlatformFailurePauseMs ?? 0) < 0) {
+    config.crossPlatformFailurePauseMs = 0;
+  }
+  if ((config.crossPlatformFailurePauseMaxMs ?? 0) < 0) {
+    config.crossPlatformFailurePauseMaxMs = 0;
+  }
+  if ((config.crossPlatformFailurePauseBackoff ?? 0) < 1) {
+    config.crossPlatformFailurePauseBackoff = 1.2;
+  }
   if ((config.crossPlatformRetryFactorMin ?? 0) <= 0 || (config.crossPlatformRetryFactorMin ?? 0) > 1) {
     config.crossPlatformRetryFactorMin = 0.4;
   }
@@ -692,6 +704,11 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Retry Aggressive Bps: ${config.crossPlatformRetryAggressiveBps}`);
   console.log(`Cross-Platform Abort Drift Bps: ${config.crossPlatformAbortPostTradeDriftBps}`);
   console.log(`Cross-Platform Abort Cooldown Ms: ${config.crossPlatformAbortCooldownMs}`);
+  if (config.crossPlatformFailurePauseMs && config.crossPlatformFailurePauseMs > 0) {
+    console.log(
+      `Cross-Platform Failure Pause: base=${config.crossPlatformFailurePauseMs} max=${config.crossPlatformFailurePauseMaxMs} backoff=${config.crossPlatformFailurePauseBackoff}`
+    );
+  }
   console.log(
     `Cross-Platform Retry Factor: ${config.crossPlatformRetryFactorMin}-${config.crossPlatformRetryFactorMax} up=${config.crossPlatformRetryFactorUp} down=${config.crossPlatformRetryFactorDown}`
   );

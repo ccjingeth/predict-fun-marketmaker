@@ -601,6 +601,8 @@ export class CrossPlatformExecutionRouter {
   private blockedTokens = new Map<string, number>();
   private blockedPlatforms = new Map<ExternalPlatform, number>();
   private globalCooldownUntil = 0;
+  private failurePauseUntil = 0;
+  private failurePauseMs = 0;
   private chunkFactor = 1;
   private chunkDelayMs = 0;
   private lastMetricsFlush = 0;
@@ -1104,12 +1106,39 @@ export class CrossPlatformExecutionRouter {
 
   private onFailure(): void {
     this.circuitFailures += 1;
+    this.applyFailurePause();
   }
 
   private onSuccess(): void {
     this.lastSuccessAt = Date.now();
     this.circuitFailures = 0;
     this.circuitOpenedAt = 0;
+    this.resetFailurePause();
+  }
+
+  private applyFailurePause(): void {
+    const base = Math.max(0, this.config.crossPlatformFailurePauseMs || 0);
+    if (!base) {
+      return;
+    }
+    const backoff = Math.max(1, this.config.crossPlatformFailurePauseBackoff || 1.5);
+    const maxMs = Math.max(base, this.config.crossPlatformFailurePauseMaxMs || 0);
+    if (this.failurePauseMs <= 0) {
+      this.failurePauseMs = base;
+    } else {
+      this.failurePauseMs = Math.max(base, Math.round(this.failurePauseMs * backoff));
+    }
+    if (maxMs > 0) {
+      this.failurePauseMs = Math.min(maxMs, this.failurePauseMs);
+    }
+    this.failurePauseUntil = Date.now() + this.failurePauseMs;
+  }
+
+  private resetFailurePause(): void {
+    if (this.failurePauseMs > 0) {
+      this.failurePauseMs = 0;
+    }
+    this.failurePauseUntil = 0;
   }
 
   private assertTokenHealthy(legs: PlatformLeg[]): void {
@@ -1321,6 +1350,9 @@ export class CrossPlatformExecutionRouter {
     const now = Date.now();
     if (this.globalCooldownUntil > now) {
       throw new Error(`Global cooldown active until ${new Date(this.globalCooldownUntil).toISOString()}`);
+    }
+    if (this.failurePauseUntil > now) {
+      throw new Error(`Failure pause active until ${new Date(this.failurePauseUntil).toISOString()}`);
     }
   }
 
