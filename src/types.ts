@@ -242,6 +242,8 @@ export interface Config {
   crossPlatformSlippageDynamic?: boolean;
   crossPlatformSlippageFloorBps?: number;
   crossPlatformSlippageCeilBps?: number;
+  crossPlatformFailureSlippageBumpBps?: number;
+  crossPlatformSuccessSlippageTightenBps?: number;
   autoConfirmAll?: boolean;
   crossPlatformRequireWs?: boolean;
   crossPlatformMappingPath?: string;

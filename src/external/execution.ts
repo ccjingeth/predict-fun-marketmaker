@@ -1025,14 +1025,15 @@ export class CrossPlatformExecutionRouter {
     }
     const floor = Math.max(0, this.config.crossPlatformSlippageFloorBps || 0);
     const ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
-    const up = Math.max(0, this.config.crossPlatformRetryFactorUp || 0.02);
-    const down = Math.max(0, this.config.crossPlatformRetryFactorDown || 0.08);
-    const stepUp = Math.max(1, Math.round(this.getSlippageBps() * up));
-    const stepDown = Math.max(1, Math.round(this.getSlippageBps() * down));
+    const stepUp = Math.max(0, this.config.crossPlatformFailureSlippageBumpBps || 0);
+    const stepDown = Math.max(0, this.config.crossPlatformSuccessSlippageTightenBps || 0);
     if (success) {
-      this.slippageBpsDynamic = Math.max(floor, this.getSlippageBps() - stepDown);
+      this.slippageBpsDynamic = Math.max(floor, this.getSlippageBps() - Math.max(1, stepDown));
     } else {
-      this.slippageBpsDynamic = Math.min(ceil || Number.MAX_SAFE_INTEGER, this.getSlippageBps() + stepUp);
+      this.slippageBpsDynamic = Math.min(
+        ceil || Number.MAX_SAFE_INTEGER,
+        this.getSlippageBps() + Math.max(1, stepUp)
+      );
     }
   }
 

@@ -267,6 +267,8 @@ export function loadConfig(): Config {
     crossPlatformSlippageDynamic: process.env.CROSS_PLATFORM_SLIPPAGE_DYNAMIC !== 'false',
     crossPlatformSlippageFloorBps: parseInt(process.env.CROSS_PLATFORM_SLIPPAGE_FLOOR_BPS || '40'),
     crossPlatformSlippageCeilBps: parseInt(process.env.CROSS_PLATFORM_SLIPPAGE_CEIL_BPS || '400'),
+    crossPlatformFailureSlippageBumpBps: parseInt(process.env.CROSS_PLATFORM_FAILURE_SLIPPAGE_BUMP_BPS || '25'),
+    crossPlatformSuccessSlippageTightenBps: parseInt(process.env.CROSS_PLATFORM_SUCCESS_SLIPPAGE_TIGHTEN_BPS || '10'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformRequireWs: process.env.CROSS_PLATFORM_REQUIRE_WS === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
@@ -505,6 +507,12 @@ export function loadConfig(): Config {
       config.crossPlatformSlippageFloorBps = temp;
     }
   }
+  if ((config.crossPlatformFailureSlippageBumpBps ?? 0) < 0) {
+    config.crossPlatformFailureSlippageBumpBps = 0;
+  }
+  if ((config.crossPlatformSuccessSlippageTightenBps ?? 0) < 0) {
+    config.crossPlatformSuccessSlippageTightenBps = 0;
+  }
 
   if ((config.mmDepthEmaAlpha ?? 0) <= 0 || (config.mmDepthEmaAlpha ?? 0) >= 1) {
     config.mmDepthEmaAlpha = 0.2;
@@ -654,6 +662,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `Cross-Platform Slippage Dynamic: ${config.crossPlatformSlippageDynamic ? '✅' : '❌'} floor=${config.crossPlatformSlippageFloorBps} ceil=${config.crossPlatformSlippageCeilBps}`
+  );
+  console.log(
+    `Cross-Platform Slippage Steps: fail+${config.crossPlatformFailureSlippageBumpBps} success-${config.crossPlatformSuccessSlippageTightenBps}`
   );
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);
