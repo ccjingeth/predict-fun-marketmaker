@@ -479,18 +479,22 @@ class ArbitrageBot {
     }
     const minCount = Math.max(1, this.config.arbStabilityMinCount || 2);
     const windowMs = Math.max(0, this.config.arbStabilityWindowMs || 2000);
+    const scanInterval = Math.max(0, this.config.arbScanIntervalMs || 10000);
+    const effectiveWindow =
+      windowMs > 0 && scanInterval > 0 ? Math.max(windowMs, Math.floor(scanInterval * 1.1)) : windowMs;
     const key = `${opp.type}-${opp.marketId}`;
     const entry = this.oppStability.get(key);
 
-    if (!entry || (windowMs > 0 && now - entry.lastSeen > windowMs)) {
+    if (!entry || (effectiveWindow > 0 && now - entry.lastSeen > effectiveWindow)) {
       this.oppStability.set(key, { count: 1, lastSeen: now });
       return minCount <= 1;
     }
 
     const nextCount = entry.count + 1;
     this.oppStability.set(key, { count: nextCount, lastSeen: now });
-    if (windowMs > 0 && this.oppStability.size > 2000) {
-      const cutoff = now - windowMs * 3;
+    const cleanupWindow = effectiveWindow > 0 ? effectiveWindow : Math.max(1, scanInterval * 3);
+    if (this.oppStability.size > 2000) {
+      const cutoff = now - cleanupWindow * 3;
       for (const [k, v] of this.oppStability.entries()) {
         if (v.lastSeen < cutoff) {
           this.oppStability.delete(k);
