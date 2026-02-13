@@ -264,6 +264,9 @@ export function loadConfig(): Config {
     crossPlatformRetryFactorMax: parseFloat(process.env.CROSS_PLATFORM_RETRY_FACTOR_MAX || '1'),
     crossPlatformRetryFactorUp: parseFloat(process.env.CROSS_PLATFORM_RETRY_FACTOR_UP || '0.02'),
     crossPlatformRetryFactorDown: parseFloat(process.env.CROSS_PLATFORM_RETRY_FACTOR_DOWN || '0.08'),
+    crossPlatformSlippageDynamic: process.env.CROSS_PLATFORM_SLIPPAGE_DYNAMIC !== 'false',
+    crossPlatformSlippageFloorBps: parseInt(process.env.CROSS_PLATFORM_SLIPPAGE_FLOOR_BPS || '40'),
+    crossPlatformSlippageCeilBps: parseInt(process.env.CROSS_PLATFORM_SLIPPAGE_CEIL_BPS || '400'),
     autoConfirmAll: process.env.AUTO_CONFIRM === 'true',
     crossPlatformRequireWs: process.env.CROSS_PLATFORM_REQUIRE_WS === 'true',
     crossPlatformMappingPath: process.env.CROSS_PLATFORM_MAPPING_PATH || 'cross-platform-mapping.json',
@@ -480,6 +483,20 @@ export function loadConfig(): Config {
   if ((config.crossPlatformRetryFactorDown ?? 0) < 0) {
     config.crossPlatformRetryFactorDown = 0.08;
   }
+  if ((config.crossPlatformSlippageFloorBps ?? 0) < 0) {
+    config.crossPlatformSlippageFloorBps = 0;
+  }
+  if ((config.crossPlatformSlippageCeilBps ?? 0) < 0) {
+    config.crossPlatformSlippageCeilBps = 0;
+  }
+  if ((config.crossPlatformSlippageCeilBps ?? 0) > 0) {
+    const floor = config.crossPlatformSlippageFloorBps ?? 0;
+    if (config.crossPlatformSlippageCeilBps < floor) {
+      const temp = config.crossPlatformSlippageCeilBps;
+      config.crossPlatformSlippageCeilBps = floor;
+      config.crossPlatformSlippageFloorBps = temp;
+    }
+  }
 
   if ((config.mmDepthEmaAlpha ?? 0) <= 0 || (config.mmDepthEmaAlpha ?? 0) >= 1) {
     config.mmDepthEmaAlpha = 0.2;
@@ -626,6 +643,9 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Abort Cooldown Ms: ${config.crossPlatformAbortCooldownMs}`);
   console.log(
     `Cross-Platform Retry Factor: ${config.crossPlatformRetryFactorMin}-${config.crossPlatformRetryFactorMax} up=${config.crossPlatformRetryFactorUp} down=${config.crossPlatformRetryFactorDown}`
+  );
+  console.log(
+    `Cross-Platform Slippage Dynamic: ${config.crossPlatformSlippageDynamic ? '✅' : '❌'} floor=${config.crossPlatformSlippageFloorBps} ceil=${config.crossPlatformSlippageCeilBps}`
   );
   console.log(`Auto Confirm: ${config.autoConfirmAll ? '✅' : '❌'}`);
   console.log(`Alerts: ${config.alertWebhookUrl ? '✅' : '❌'}`);

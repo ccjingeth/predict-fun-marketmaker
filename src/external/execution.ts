@@ -606,6 +606,7 @@ export class CrossPlatformExecutionRouter {
   private lastMetricsFlush = 0;
   private lastStateFlush = 0;
   private retryFactor = 1;
+  private slippageBpsDynamic = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -634,6 +635,7 @@ export class CrossPlatformExecutionRouter {
     const minRetry = Math.max(0.1, config.crossPlatformRetryFactorMin || 0.4);
     const maxRetry = Math.max(minRetry, config.crossPlatformRetryFactorMax || 1);
     this.retryFactor = maxRetry;
+    this.slippageBpsDynamic = this.resolveDynamicSlippage();
     this.restoreState().catch((error) => {
       console.warn('Cross-platform state restore failed:', error);
     });
@@ -696,6 +698,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustTokenScores(preparedLegs, this.config.crossPlatformTokenScoreOnSuccess || 2);
         this.adjustChunkFactor(true);
         this.adjustRetryFactor(true);
+        this.adjustDynamicSlippage(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -749,6 +752,7 @@ export class CrossPlatformExecutionRouter {
         this.updateQualityScore(false);
         this.adjustChunkFactor(false);
         this.adjustRetryFactor(false);
+        this.adjustDynamicSlippage(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.recordMetrics({
@@ -932,7 +936,7 @@ export class CrossPlatformExecutionRouter {
       return;
     }
 
-    const slippage = this.config.crossPlatformHedgeSlippageBps || this.config.crossPlatformSlippageBps || 400;
+    const slippage = this.config.crossPlatformHedgeSlippageBps || this.getSlippageBps() || 400;
 
     const hedgePromises: Promise<void>[] = [];
     for (const result of results) {
@@ -966,7 +970,7 @@ export class CrossPlatformExecutionRouter {
 
     const factor = this.config.crossPlatformRetrySizeFactor ?? 0.6;
     const aggressiveBps = (this.config.crossPlatformRetryAggressiveBps ?? 0) * attempt;
-    const maxBps = this.config.crossPlatformSlippageBps || 250;
+    const maxBps = this.getSlippageBps() || 250;
     const adjBps = Math.min(Math.max(0, aggressiveBps), maxBps);
 
     return legs
@@ -1000,6 +1004,49 @@ export class CrossPlatformExecutionRouter {
     } else {
       this.retryFactor = Math.max(minFactor, this.retryFactor - down);
     }
+  }
+
+  private resolveDynamicSlippage(): number {
+    if (this.config.crossPlatformSlippageDynamic === false) {
+      return this.config.crossPlatformSlippageBps || 0;
+    }
+    const floor = Math.max(0, this.config.crossPlatformSlippageFloorBps || 0);
+    const ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
+    const base = this.config.crossPlatformSlippageBps || 0;
+    if (ceil > 0) {
+      return Math.max(floor, Math.min(ceil, base));
+    }
+    return Math.max(floor, base);
+  }
+
+  private adjustDynamicSlippage(success: boolean): void {
+    if (this.config.crossPlatformSlippageDynamic === false) {
+      return;
+    }
+    const floor = Math.max(0, this.config.crossPlatformSlippageFloorBps || 0);
+    const ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
+    const up = Math.max(0, this.config.crossPlatformRetryFactorUp || 0.02);
+    const down = Math.max(0, this.config.crossPlatformRetryFactorDown || 0.08);
+    const stepUp = Math.max(1, Math.round(this.getSlippageBps() * up));
+    const stepDown = Math.max(1, Math.round(this.getSlippageBps() * down));
+    if (success) {
+      this.slippageBpsDynamic = Math.max(floor, this.getSlippageBps() - stepDown);
+    } else {
+      this.slippageBpsDynamic = Math.min(ceil || Number.MAX_SAFE_INTEGER, this.getSlippageBps() + stepUp);
+    }
+  }
+
+  private getSlippageBps(): number {
+    if (this.config.crossPlatformSlippageDynamic === false) {
+      return this.config.crossPlatformSlippageBps || 0;
+    }
+    const floor = Math.max(0, this.config.crossPlatformSlippageFloorBps || 0);
+    const ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
+    const value = this.slippageBpsDynamic || this.resolveDynamicSlippage();
+    if (ceil > 0) {
+      return Math.max(floor, Math.min(ceil, value));
+    }
+    return Math.max(floor, value);
   }
 
   private assertCircuitHealthy(): void {
@@ -1703,7 +1750,7 @@ export class CrossPlatformExecutionRouter {
       }
 
       const driftBase = this.config.crossPlatformPriceDriftBps ?? 40;
-      const driftBps = Math.max(1, driftBase * this.getAutoTuneFactor());
+        const driftBps = Math.max(1, driftBase * this.getAutoTuneFactor());
       const bestRef = leg.side === 'BUY' ? book.bestAsk : book.bestBid;
       if (bestRef && Number.isFinite(bestRef) && bestRef > 0) {
         const drift = Math.abs((bestRef - limit) / limit) * 10000;
@@ -1722,7 +1769,7 @@ export class CrossPlatformExecutionRouter {
           ? ((vwap.avgPrice - limit) / limit) * 10000
           : ((limit - vwap.avgPrice) / limit) * 10000;
 
-      const maxDeviation = Math.max(1, (this.config.crossPlatformSlippageBps || 250) * this.getAutoTuneFactor());
+      const maxDeviation = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor());
       if (deviationBps > maxDeviation) {
         throw new Error(
           `Preflight failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${maxDeviation}) for ${leg.platform}:${leg.tokenId}`
@@ -1824,8 +1871,8 @@ export class CrossPlatformExecutionRouter {
     legs: PlatformLeg[],
     cache: Map<string, Promise<OrderbookSnapshot | null>>
   ): Promise<number> {
-    const maxDeviation = Math.max(1, (this.config.crossPlatformSlippageBps || 250) * this.getAutoTuneFactor());
-    const slippageBps = this.config.crossPlatformSlippageBps || 0;
+    const maxDeviation = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor());
+    const slippageBps = this.getSlippageBps();
     const usage = Math.max(0.05, Math.min(1, (this.config.crossPlatformDepthUsage ?? 0.5) * this.getAutoTuneFactor()));
     const depths = await Promise.all(
       legs.map(async (leg) => {
@@ -1905,7 +1952,7 @@ export class CrossPlatformExecutionRouter {
       return;
     }
 
-    const slippage = (this.config.crossPlatformSlippageBps || 0) / 10000;
+    const slippage = this.getSlippageBps() / 10000;
     let totalCostPerShare = 0;
     let totalProceedsPerShare = 0;
     let hasBuy = false;

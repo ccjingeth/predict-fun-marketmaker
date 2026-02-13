@@ -239,6 +239,9 @@ export interface Config {
   crossPlatformRetryFactorMax?: number;
   crossPlatformRetryFactorUp?: number;
   crossPlatformRetryFactorDown?: number;
+  crossPlatformSlippageDynamic?: boolean;
+  crossPlatformSlippageFloorBps?: number;
+  crossPlatformSlippageCeilBps?: number;
   autoConfirmAll?: boolean;
   crossPlatformRequireWs?: boolean;
   crossPlatformMappingPath?: string;
