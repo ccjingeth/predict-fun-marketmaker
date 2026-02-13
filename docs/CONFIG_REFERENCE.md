@@ -178,6 +178,8 @@
 - `ARB_STABILITY_WINDOW_MS`：连续出现的时间窗口（毫秒）。
 - `ARB_REQUIRE_WS_HEALTH`：自动执行前强制 WS 健康检查。
 - `ARB_WS_HEALTH_MAX_AGE_MS`：WS 健康检查允许的最大延迟（0=使用 ARB_WS_MAX_AGE_MS）。
+- `ARB_WS_HEALTH_FAILURE_BUMP_MS`：检测到 WS 不健康时临时加严的最大延迟。
+- `ARB_WS_HEALTH_RECOVERY_MS`：加严状态持续时间（毫秒）。
 
 ## 6. 站内套利
 

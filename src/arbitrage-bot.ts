@@ -37,6 +37,7 @@ class ArbitrageBot {
   private arbPausedUntil = 0;
   private wsHealthTimer?: NodeJS.Timeout;
   private wsHealthWarned = false;
+  private wsHealthPenaltyUntil = 0;
   private oppStability: Map<string, { count: number; lastSeen: number }> = new Map();
 
   constructor() {
@@ -551,7 +552,7 @@ class ArbitrageBot {
     if (this.config.arbRequireWsHealth !== true) {
       return true;
     }
-    const maxAge = this.config.arbWsHealthMaxAgeMs || this.config.arbWsMaxAgeMs || 0;
+    const maxAge = this.getWsHealthMaxAge();
     if (!this.predictWs) {
       return this.config.arbRequireWs !== true;
     }
@@ -560,6 +561,7 @@ class ArbitrageBot {
       return false;
     }
     if (maxAge > 0 && now - status.lastMessageAt > maxAge) {
+      this.applyWsHealthPenalty(now);
       return false;
     }
     return true;
@@ -578,27 +580,51 @@ class ArbitrageBot {
     if (this.config.crossPlatformRequireWs !== true) {
       return true;
     }
-    const maxAge = this.config.arbWsHealthMaxAgeMs || this.config.arbWsMaxAgeMs || 0;
+    const maxAge = this.getWsHealthMaxAge();
     const status = this.crossAggregator.getWsStatus();
     if (this.config.polymarketWsEnabled) {
       const poly = status.polymarket;
       if (!poly || !poly.connected) {
+        this.applyWsHealthPenalty(now);
         return false;
       }
       if (maxAge > 0 && now - poly.lastMessageAt > maxAge) {
+        this.applyWsHealthPenalty(now);
         return false;
       }
     }
     if (this.config.opinionWsEnabled) {
       const opn = status.opinion;
       if (!opn || !opn.connected) {
+        this.applyWsHealthPenalty(now);
         return false;
       }
       if (maxAge > 0 && now - opn.lastMessageAt > maxAge) {
+        this.applyWsHealthPenalty(now);
         return false;
       }
     }
     return true;
+  }
+
+  private getWsHealthMaxAge(): number {
+    const base = this.config.arbWsHealthMaxAgeMs || this.config.arbWsMaxAgeMs || 0;
+    if (!this.wsHealthPenaltyUntil || Date.now() > this.wsHealthPenaltyUntil) {
+      return base;
+    }
+    const bump = Math.max(0, this.config.arbWsHealthFailureBumpMs || 0);
+    if (bump <= 0) {
+      return base;
+    }
+    return Math.max(0, base - bump);
+  }
+
+  private applyWsHealthPenalty(now: number): void {
+    const recovery = Math.max(0, this.config.arbWsHealthRecoveryMs || 0);
+    if (recovery <= 0) {
+      return;
+    }
+    this.wsHealthPenaltyUntil = Math.max(this.wsHealthPenaltyUntil, now + recovery);
   }
 
   private warnWsHealth(message: string): void {

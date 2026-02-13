@@ -291,6 +291,8 @@ export interface Config {
   arbStabilityWindowMs?: number;
   arbRequireWsHealth?: boolean;
   arbWsHealthMaxAgeMs?: number;
+  arbWsHealthFailureBumpMs?: number;
+  arbWsHealthRecoveryMs?: number;
   predictFeeBps?: number;
   polymarketGammaUrl?: string;
   polymarketClobUrl?: string;

@@ -316,6 +316,8 @@ export function loadConfig(): Config {
     arbStabilityWindowMs: parseInt(process.env.ARB_STABILITY_WINDOW_MS || '2000'),
     arbRequireWsHealth: process.env.ARB_REQUIRE_WS_HEALTH === 'true',
     arbWsHealthMaxAgeMs: parseInt(process.env.ARB_WS_HEALTH_MAX_AGE_MS || '0'),
+    arbWsHealthFailureBumpMs: parseInt(process.env.ARB_WS_HEALTH_FAILURE_BUMP_MS || '1500'),
+    arbWsHealthRecoveryMs: parseInt(process.env.ARB_WS_HEALTH_RECOVERY_MS || '30000'),
     predictFeeBps: parseFloat(process.env.PREDICT_FEE_BPS || '100'),
     polymarketGammaUrl: process.env.POLYMARKET_GAMMA_URL || 'https://gamma-api.polymarket.com',
     polymarketClobUrl: process.env.POLYMARKET_CLOB_URL || 'https://clob.polymarket.com',
@@ -411,6 +413,12 @@ export function loadConfig(): Config {
   }
   if ((config.arbWsHealthMaxAgeMs ?? 0) < 0) {
     config.arbWsHealthMaxAgeMs = 0;
+  }
+  if ((config.arbWsHealthFailureBumpMs ?? 0) < 0) {
+    config.arbWsHealthFailureBumpMs = 0;
+  }
+  if ((config.arbWsHealthRecoveryMs ?? 0) < 0) {
+    config.arbWsHealthRecoveryMs = 0;
   }
 
   if (
@@ -673,6 +681,11 @@ export function printConfig(config: Config): void {
     console.log(`Arb WS Health Required: ✅ maxAge=${maxAge}ms`);
   } else {
     console.log('Arb WS Health Required: ❌');
+  }
+  if (config.arbRequireWsHealth) {
+    console.log(
+      `Arb WS Health Adaptive: bump=${config.arbWsHealthFailureBumpMs} recovery=${config.arbWsHealthRecoveryMs}ms`
+    );
   }
   console.log(`Refresh Interval: ${config.refreshInterval}ms`);
   console.log(`Trading Enabled: ${config.enableTrading ? '✅' : '❌ (Dry Run)'}`);
