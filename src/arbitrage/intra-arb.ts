@@ -14,19 +14,28 @@ export class InPlatformArbitrageDetector {
   private estimatedSlippage: number;
   private allowShorting: boolean;
   private maxRecommendedShares: number;
+  private depthUsage: number;
+  private minNotionalUsd: number;
+  private minProfitUsd: number;
 
   constructor(
     minProfitThreshold: number = 0.02,
     estimatedFee: number = 0.01,
     allowShorting: boolean = false,
     estimatedSlippage: number = 0.002,
-    maxRecommendedShares: number = 500
+    maxRecommendedShares: number = 500,
+    depthUsage: number = 0.6,
+    minNotionalUsd: number = 0,
+    minProfitUsd: number = 0
   ) {
     this.minProfitThreshold = minProfitThreshold;
     this.estimatedFee = estimatedFee;
     this.allowShorting = allowShorting;
     this.estimatedSlippage = estimatedSlippage;
     this.maxRecommendedShares = maxRecommendedShares;
+    this.depthUsage = Math.max(0.05, Math.min(1, depthUsage));
+    this.minNotionalUsd = Math.max(0, minNotionalUsd);
+    this.minProfitUsd = Math.max(0, minProfitUsd);
   }
 
 
@@ -76,8 +85,8 @@ export class InPlatformArbitrageDetector {
     const buyDepth = Math.min(sumDepth(yesBook.asks), sumDepth(noBook.asks));
     const sellDepth = Math.min(sumDepth(yesBook.bids), sumDepth(noBook.bids));
 
-    const buySize = Math.floor(Math.min(buyDepth, this.maxRecommendedShares));
-    const sellSize = Math.floor(Math.min(sellDepth, this.maxRecommendedShares));
+    const buySize = Math.floor(Math.min(buyDepth * this.depthUsage, this.maxRecommendedShares));
+    const sellSize = Math.floor(Math.min(sellDepth * this.depthUsage, this.maxRecommendedShares));
     const buyCandidate = this.findBestBuySize(
       yesBook,
       noBook,
@@ -109,6 +118,14 @@ export class InPlatformArbitrageDetector {
 
     if (useSell && sellCandidate) {
       const { yes: sellYes, no: sellNo, size: recommendedSize } = sellCandidate;
+      const proceedsUsd = sellYes.totalAllIn + sellNo.totalAllIn;
+      const profitUsd = Math.max(0, sellNetEdge * recommendedSize);
+      if (this.minNotionalUsd > 0 && proceedsUsd < this.minNotionalUsd) {
+        return null;
+      }
+      if (this.minProfitUsd > 0 && profitUsd < this.minProfitUsd) {
+        return null;
+      }
       return {
         marketId: yesMarket.condition_id || yesMarket.event_id || yesMarket.token_id,
         yesTokenId: yesMarket.token_id,
@@ -137,6 +154,14 @@ export class InPlatformArbitrageDetector {
     }
 
     const { yes: buyYes, no: buyNo, size: recommendedSize } = buyCandidate;
+    const totalCostUsd = buyYes.totalAllIn + buyNo.totalAllIn;
+    const profitUsd = Math.max(0, buyNetEdge * recommendedSize);
+    if (this.minNotionalUsd > 0 && totalCostUsd < this.minNotionalUsd) {
+      return null;
+    }
+    if (this.minProfitUsd > 0 && profitUsd < this.minProfitUsd) {
+      return null;
+    }
     return {
       marketId: yesMarket.condition_id || yesMarket.event_id || yesMarket.token_id,
       yesTokenId: yesMarket.token_id,

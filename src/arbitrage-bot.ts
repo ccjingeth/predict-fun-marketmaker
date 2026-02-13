@@ -78,6 +78,9 @@ class ArbitrageBot {
       alertWebhookUrl: this.config.alertWebhookUrl,
       alertMinIntervalMs: this.config.alertMinIntervalMs,
       alertOnNewOpportunity: true,
+      arbDepthUsage: this.config.arbDepthUsage || 0.6,
+      arbMinNotionalUsd: this.config.arbMinNotionalUsd || 0,
+      arbMinProfitUsd: this.config.arbMinProfitUsd || 0,
     }, this.config.crossPlatformEnabled ? new CrossPlatformAggregator(this.config) : undefined);
 
     this.executor = new ArbitrageExecutor({
@@ -414,7 +417,16 @@ class ArbitrageBot {
       this.config.arbPreflightMaxAgeMs || this.config.arbWsMaxAgeMs
     );
     const minProfit = this.config.crossPlatformMinProfit || 0.02;
-    const detector = new InPlatformArbitrageDetector(minProfit, (this.config.predictFeeBps || 0) / 10000);
+    const detector = new InPlatformArbitrageDetector(
+      minProfit,
+      (this.config.predictFeeBps || 0) / 10000,
+      false,
+      undefined,
+      undefined,
+      this.config.arbDepthUsage || 0.6,
+      this.config.arbMinNotionalUsd || 0,
+      this.config.arbMinProfitUsd || 0
+    );
     const refreshed = detector.scanMarkets([yesMarket, noMarket], orderbooks);
     if (refreshed.length === 0) {
       return false;
@@ -442,6 +454,9 @@ class ArbitrageBot {
       minOutcomes: this.config.multiOutcomeMinOutcomes || 3,
       maxRecommendedShares: this.config.multiOutcomeMaxShares || 500,
       feeBps: this.config.predictFeeBps || 100,
+      depthUsage: this.config.arbDepthUsage || 0.6,
+      minNotionalUsd: this.config.arbMinNotionalUsd || 0,
+      minProfitUsd: this.config.arbMinProfitUsd || 0,
     });
     const refreshed = detector.scanMarkets(group, orderbooks);
     if (refreshed.length === 0) {

@@ -29,6 +29,9 @@ export interface MultiOutcomeConfig {
   slippageBps: number;
   maxRecommendedShares: number;
   minOutcomes: number;
+  depthUsage: number;
+  minNotionalUsd: number;
+  minProfitUsd: number;
 }
 
 export class MultiOutcomeArbitrageDetector {
@@ -41,8 +44,14 @@ export class MultiOutcomeArbitrageDetector {
       slippageBps: 20,
       maxRecommendedShares: 500,
       minOutcomes: 3,
+      depthUsage: 0.6,
+      minNotionalUsd: 0,
+      minProfitUsd: 0,
       ...config,
     };
+    this.config.depthUsage = Math.max(0.05, Math.min(1, this.config.depthUsage));
+    this.config.minNotionalUsd = Math.max(0, this.config.minNotionalUsd);
+    this.config.minProfitUsd = Math.max(0, this.config.minProfitUsd);
   }
 
   scanMarkets(markets: Market[], orderbooks: Map<string, Orderbook>): ArbitrageOpportunity[] {
@@ -82,7 +91,10 @@ export class MultiOutcomeArbitrageDetector {
         continue;
       }
 
-      const startSize = Math.max(1, Math.floor(Math.min(minDepth, this.config.maxRecommendedShares)));
+      const startSize = Math.max(
+        1,
+        Math.floor(Math.min(minDepth * this.config.depthUsage, this.config.maxRecommendedShares))
+      );
       const candidate = this.findBestSize(group, orderbooks, startSize);
       if (!candidate) {
         continue;
@@ -94,6 +106,13 @@ export class MultiOutcomeArbitrageDetector {
       const totalSlippage = candidate.totalSlippage;
       const totalAllIn = candidate.totalAllIn;
       const guaranteedProfit = candidate.edge;
+      const profitUsd = Math.max(0, guaranteedProfit * recommendedSize);
+      if (this.config.minNotionalUsd > 0 && totalAllIn < this.config.minNotionalUsd) {
+        continue;
+      }
+      if (this.config.minProfitUsd > 0 && profitUsd < this.config.minProfitUsd) {
+        continue;
+      }
 
       const marketId = group[0].condition_id || group[0].event_id || group[0].token_id;
       const question = group[0].question;
@@ -162,6 +181,13 @@ export class MultiOutcomeArbitrageDetector {
         const edge = 1 - allInPerShare;
         if (!best || edge > best.edge) {
           best = { size, totalCost, totalFees, totalSlippage, totalAllIn, edge };
+        }
+        const profitUsd = Math.max(0, edge * size);
+        if (this.config.minNotionalUsd > 0 && totalAllIn < this.config.minNotionalUsd) {
+          return null;
+        }
+        if (this.config.minProfitUsd > 0 && profitUsd < this.config.minProfitUsd) {
+          return null;
         }
         if (edge >= this.config.minProfitThreshold) {
           return { size, totalCost, totalFees, totalSlippage, totalAllIn, edge };

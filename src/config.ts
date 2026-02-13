@@ -296,6 +296,9 @@ export function loadConfig(): Config {
     arbWsHealthLogMs: parseInt(process.env.ARB_WS_HEALTH_LOG_MS || '0'),
     arbPreflightEnabled: process.env.ARB_PREFLIGHT_ENABLED !== 'false',
     arbPreflightMaxAgeMs: parseInt(process.env.ARB_PREFLIGHT_MAX_AGE_MS || '3000'),
+    arbDepthUsage: parseFloat(process.env.ARB_DEPTH_USAGE || '0.6'),
+    arbMinNotionalUsd: parseFloat(process.env.ARB_MIN_NOTIONAL_USD || '0'),
+    arbMinProfitUsd: parseFloat(process.env.ARB_MIN_PROFIT_USD || '0'),
     predictFeeBps: parseFloat(process.env.PREDICT_FEE_BPS || '100'),
     polymarketGammaUrl: process.env.POLYMARKET_GAMMA_URL || 'https://gamma-api.polymarket.com',
     polymarketClobUrl: process.env.POLYMARKET_CLOB_URL || 'https://clob.polymarket.com',
@@ -372,6 +375,16 @@ export function loadConfig(): Config {
 
   if ((config.crossPlatformMinProfit ?? 0) < 0) {
     throw new Error('CROSS_PLATFORM_MIN_PROFIT must be >= 0');
+  }
+
+  if ((config.arbDepthUsage ?? 0) <= 0 || (config.arbDepthUsage ?? 0) > 1) {
+    config.arbDepthUsage = 0.6;
+  }
+  if ((config.arbMinNotionalUsd ?? 0) < 0) {
+    config.arbMinNotionalUsd = 0;
+  }
+  if ((config.arbMinProfitUsd ?? 0) < 0) {
+    config.arbMinProfitUsd = 0;
   }
 
   if (
@@ -566,6 +579,9 @@ export function printConfig(config: Config): void {
   console.log(`Arb WS Max Age: ${config.arbWsMaxAgeMs}ms`);
   console.log(`Arb WS Health Log: ${config.arbWsHealthLogMs}ms`);
   console.log(`Arb Preflight: ${config.arbPreflightEnabled ? '✅' : '❌'} maxAge=${config.arbPreflightMaxAgeMs}ms`);
+  console.log(
+    `Arb Depth Usage: ${config.arbDepthUsage} minNotional=$${config.arbMinNotionalUsd} minProfit=$${config.arbMinProfitUsd}`
+  );
   console.log(`Refresh Interval: ${config.refreshInterval}ms`);
   console.log(`Trading Enabled: ${config.enableTrading ? '✅' : '❌ (Dry Run)'}`);
   if (config.marketTokenIds && config.marketTokenIds.length > 0) {

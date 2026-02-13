@@ -170,6 +170,9 @@
 - `ARB_WS_HEALTH_LOG_MS`：WS 健康日志间隔，0=关闭。
 - `ARB_PREFLIGHT_ENABLED`：自动执行前二次确认机会是否仍有效。
 - `ARB_PREFLIGHT_MAX_AGE_MS`：预检时允许的 WS 最大延迟。
+- `ARB_DEPTH_USAGE`：套利计算使用的深度比例（降低吃深度滑点）。
+- `ARB_MIN_NOTIONAL_USD`：套利最小成交金额过滤。
+- `ARB_MIN_PROFIT_USD`：套利最小收益金额过滤。
 
 ## 6. 站内套利
 

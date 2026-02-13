@@ -271,6 +271,9 @@ export interface Config {
   arbWsHealthLogMs?: number;
   arbPreflightEnabled?: boolean;
   arbPreflightMaxAgeMs?: number;
+  arbDepthUsage?: number;
+  arbMinNotionalUsd?: number;
+  arbMinProfitUsd?: number;
   predictFeeBps?: number;
   polymarketGammaUrl?: string;
   polymarketClobUrl?: string;

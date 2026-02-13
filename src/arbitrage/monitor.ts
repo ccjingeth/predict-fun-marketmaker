@@ -49,6 +49,9 @@ export interface ArbitrageConfig {
   alertWebhookUrl?: string;
   alertMinIntervalMs?: number;
   alertOnNewOpportunity: boolean;
+  arbDepthUsage: number;
+  arbMinNotionalUsd: number;
+  arbMinProfitUsd: number;
 }
 
 export class ArbitrageMonitor {
@@ -100,19 +103,31 @@ export class ArbitrageMonitor {
       alertWebhookUrl: undefined,
       alertMinIntervalMs: 60000,
       alertOnNewOpportunity: true,
+      arbDepthUsage: 0.6,
+      arbMinNotionalUsd: 0,
+      arbMinProfitUsd: 0,
       ...config,
     };
 
     this.valueDetector = new ValueMismatchDetector();
     this.intraArbDetector = new InPlatformArbitrageDetector(
       this.config.minProfitThreshold,
-      (this.config.predictFeeBps || 0) / 10000
+      (this.config.predictFeeBps || 0) / 10000,
+      false,
+      undefined,
+      undefined,
+      this.config.arbDepthUsage,
+      this.config.arbMinNotionalUsd,
+      this.config.arbMinProfitUsd
     );
     this.multiOutcomeDetector = new MultiOutcomeArbitrageDetector({
       minProfitThreshold: this.config.minProfitThreshold,
       minOutcomes: this.config.multiOutcomeMinOutcomes,
       maxRecommendedShares: this.config.multiOutcomeMaxShares,
       feeBps: this.config.predictFeeBps,
+      depthUsage: this.config.arbDepthUsage,
+      minNotionalUsd: this.config.arbMinNotionalUsd,
+      minProfitUsd: this.config.arbMinProfitUsd,
     });
     this.crossArbDetector = new CrossPlatformArbitrageDetector(
       ['Predict', 'Polymarket', 'Opinion'],
