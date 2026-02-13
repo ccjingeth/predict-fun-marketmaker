@@ -129,6 +129,16 @@ export function loadConfig(): Config {
     mmHardCancelCooldownMs: parseInt(process.env.MM_HARD_CANCEL_COOLDOWN_MS || '4500'),
     mmHoldNearTouchMs: parseInt(process.env.MM_HOLD_NEAR_TOUCH_MS || '800'),
     mmHoldNearTouchMaxBps: parseFloat(process.env.MM_HOLD_NEAR_TOUCH_MAX_BPS || '0.0010'),
+    mmRepriceBufferBps: parseFloat(process.env.MM_REPRICE_BUFFER_BPS || '0.0015'),
+    mmRepriceConfirmMs: parseInt(process.env.MM_REPRICE_CONFIRM_MS || '900'),
+    mmCancelBufferBps: parseFloat(process.env.MM_CANCEL_BUFFER_BPS || '0.004'),
+    mmCancelConfirmMs: parseInt(process.env.MM_CANCEL_CONFIRM_MS || '1200'),
+    mmPartialFillShares: parseFloat(process.env.MM_PARTIAL_FILL_SHARES || '5'),
+    mmPartialFillPenalty: parseFloat(process.env.MM_PARTIAL_FILL_PENALTY || '0.6'),
+    mmPartialFillPenaltyDecayMs: parseInt(process.env.MM_PARTIAL_FILL_PENALTY_DECAY_MS || '60000'),
+    mmPartialFillHedge: process.env.MM_PARTIAL_FILL_HEDGE === 'true',
+    mmPartialFillHedgeMaxShares: parseFloat(process.env.MM_PARTIAL_FILL_HEDGE_MAX_SHARES || '20'),
+    mmPartialFillHedgeSlippageBps: parseInt(process.env.MM_PARTIAL_FILL_HEDGE_SLIPPAGE_BPS || '300'),
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -432,6 +442,14 @@ export function loadConfig(): Config {
     config.mmSizeMaxFactor = config.mmSizeMinFactor ?? 0.3;
   }
 
+  if ((config.mmPartialFillPenalty ?? 0) <= 0 || (config.mmPartialFillPenalty ?? 0) > 1) {
+    config.mmPartialFillPenalty = 0.6;
+  }
+
+  if ((config.mmPartialFillPenaltyDecayMs ?? 0) < 0) {
+    config.mmPartialFillPenaltyDecayMs = 0;
+  }
+
   return config;
 }
 
@@ -470,6 +488,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `MM Cancel Bands: soft=${(config.mmSoftCancelBps ?? 0) * 100}% hard=${(config.mmHardCancelBps ?? 0) * 100}%`
+  );
+  console.log(
+    `MM Cancel Confirm: reprice=${config.mmRepriceConfirmMs}ms cancel=${config.mmCancelConfirmMs}ms`
   );
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);

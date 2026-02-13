@@ -104,6 +104,16 @@ export interface Config {
   mmHardCancelCooldownMs?: number;
   mmHoldNearTouchMs?: number;
   mmHoldNearTouchMaxBps?: number;
+  mmRepriceBufferBps?: number;
+  mmRepriceConfirmMs?: number;
+  mmCancelBufferBps?: number;
+  mmCancelConfirmMs?: number;
+  mmPartialFillShares?: number;
+  mmPartialFillPenalty?: number;
+  mmPartialFillPenaltyDecayMs?: number;
+  mmPartialFillHedge?: boolean;
+  mmPartialFillHedgeMaxShares?: number;
+  mmPartialFillHedgeSlippageBps?: number;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;

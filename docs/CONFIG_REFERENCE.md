@@ -52,6 +52,16 @@
 - `MM_HARD_CANCEL_COOLDOWN_MS`：硬撤单冷却。
 - `MM_HOLD_NEAR_TOUCH_MS`：近触碰保护窗口（短暂观察避免误撤单）。
 - `MM_HOLD_NEAR_TOUCH_MAX_BPS`：近触碰最大容忍（超过立即强撤）。
+- `MM_REPRICE_BUFFER_BPS`：重报价缓冲带（扩大二次确认区间）。
+- `MM_REPRICE_CONFIRM_MS`：重报价二次确认时间。
+- `MM_CANCEL_BUFFER_BPS`：全市场撤单缓冲带（价格偏离）。
+- `MM_CANCEL_CONFIRM_MS`：全市场撤单二次确认时间。
+- `MM_PARTIAL_FILL_SHARES`：触发“部分成交保护”的最小份额。
+- `MM_PARTIAL_FILL_PENALTY`：部分成交后挂单缩放惩罚（0-1）。
+- `MM_PARTIAL_FILL_PENALTY_DECAY_MS`：缩放惩罚恢复时间（毫秒）。
+- `MM_PARTIAL_FILL_HEDGE`：部分成交时是否轻度对冲。
+- `MM_PARTIAL_FILL_HEDGE_MAX_SHARES`：轻度对冲最大份额。
+- `MM_PARTIAL_FILL_HEDGE_SLIPPAGE_BPS`：轻度对冲允许滑点。
 
 ### 做市自适应参数（新增）
 

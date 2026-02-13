@@ -64,6 +64,9 @@ export class MarketMaker {
   private lastProfileAt: Map<string, number> = new Map();
   private icebergPenalty: Map<string, { value: number; ts: number }> = new Map();
   private nearTouchHoldUntil: Map<string, number> = new Map();
+  private repriceHoldUntil: Map<string, number> = new Map();
+  private cancelHoldUntil: Map<string, number> = new Map();
+  private sizePenalty: Map<string, { value: number; ts: number }> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -185,9 +188,29 @@ export class MarketMaker {
     const base = this.config.cancelThreshold;
     const mult = this.getVolatilityMultiplier(tokenId, this.config.mmCancelVolMultiplier ?? 2);
     const threshold = base / mult;
-    if (priceChange > threshold) {
+    const buffer = Math.max(0, this.config.mmCancelBufferBps ?? 0);
+    const hard = threshold * (1 + buffer);
+    if (priceChange > hard) {
+      this.cancelHoldUntil.delete(tokenId);
       return true;
     }
+    if (priceChange > threshold) {
+      const confirmMs = Math.max(0, this.config.mmCancelConfirmMs ?? 0);
+      if (confirmMs <= 0) {
+        return true;
+      }
+      const until = this.cancelHoldUntil.get(tokenId) || 0;
+      if (!until) {
+        this.cancelHoldUntil.set(tokenId, Date.now() + confirmMs);
+        return false;
+      }
+      if (Date.now() >= until) {
+        this.cancelHoldUntil.delete(tokenId);
+        return true;
+      }
+      return false;
+    }
+    this.cancelHoldUntil.delete(tokenId);
 
     const depthDropRatio = this.config.mmDepthDropRatio ?? 0;
     if (depthDropRatio > 0) {
@@ -653,6 +676,34 @@ export class MarketMaker {
     this.icebergPenalty.set('global', { value: this.clamp(penalty, 0.2, 1), ts: Date.now() });
   }
 
+  private applySizePenalty(tokenId: string, penalty: number): void {
+    const value = this.clamp(penalty, 0.2, 1);
+    const current = this.sizePenalty.get(tokenId);
+    if (!current) {
+      this.sizePenalty.set(tokenId, { value, ts: Date.now() });
+      return;
+    }
+    const next = Math.min(current.value, value);
+    this.sizePenalty.set(tokenId, { value: next, ts: Date.now() });
+  }
+
+  private getSizePenalty(tokenId: string): number {
+    const entry = this.sizePenalty.get(tokenId);
+    if (!entry) {
+      return 1;
+    }
+    const decayMs = this.config.mmPartialFillPenaltyDecayMs ?? 60000;
+    if (!decayMs || decayMs <= 0) {
+      return entry.value;
+    }
+    const elapsed = Date.now() - entry.ts;
+    if (elapsed <= 0) {
+      return entry.value;
+    }
+    const recovered = entry.value + (1 - entry.value) * Math.min(1, elapsed / decayMs);
+    return this.clamp(recovered, entry.value, 1);
+  }
+
   private async flushMmMetrics(): Promise<void> {
     const target = this.config.mmMetricsPath;
     const interval = this.config.mmMetricsFlushMs ?? 0;
@@ -992,7 +1043,8 @@ export class MarketMaker {
       sizeFactor *= 1 - imbalance * sizeImbWeight;
     }
     sizeFactor = this.clamp(sizeFactor, sizeMin, sizeMax);
-    shares = Math.floor(shares * sizeFactor);
+    const penalty = this.getSizePenalty(market.token_id);
+    shares = Math.floor(shares * sizeFactor * penalty);
 
     const minShares = market.liquidity_activation?.min_shares || 0;
     if (minShares > 0 && shares < minShares) {
@@ -1077,7 +1129,30 @@ export class MarketMaker {
     const base = this.config.repriceThreshold ?? 0.003;
     const mult = this.getVolatilityMultiplier(order.token_id, this.config.mmRepriceVolMultiplier ?? 1.5);
     const threshold = base / mult;
-    return diff >= threshold;
+    const buffer = Math.max(0, this.config.mmRepriceBufferBps ?? 0);
+    const hard = threshold * (1 + buffer);
+    if (diff >= hard) {
+      this.repriceHoldUntil.delete(order.order_hash);
+      return true;
+    }
+    if (diff < threshold) {
+      this.repriceHoldUntil.delete(order.order_hash);
+      return false;
+    }
+    const confirmMs = Math.max(0, this.config.mmRepriceConfirmMs ?? 0);
+    if (confirmMs <= 0) {
+      return true;
+    }
+    const until = this.repriceHoldUntil.get(order.order_hash) || 0;
+    if (!until) {
+      this.repriceHoldUntil.set(order.order_hash, Date.now() + confirmMs);
+      return false;
+    }
+    if (Date.now() >= until) {
+      this.repriceHoldUntil.delete(order.order_hash);
+      return true;
+    }
+    return false;
   }
 
   private getAdaptiveCooldown(tokenId: string, baseMs: number): number {
@@ -1373,9 +1448,21 @@ export class MarketMaker {
       const net = position.yes_amount - position.no_amount;
       const prev = this.lastNetShares.get(tokenId) ?? 0;
       const delta = net - prev;
-      if (Math.abs(delta) >= triggerShares) {
+      const absDelta = Math.abs(delta);
+      const partialThreshold = this.config.mmPartialFillShares ?? 5;
+      if (absDelta >= partialThreshold) {
+        const penalty = this.config.mmPartialFillPenalty ?? 0.6;
+        this.applySizePenalty(tokenId, penalty);
+      }
+      if (absDelta >= triggerShares) {
         this.applyIcebergPenalty(tokenId);
         await this.handleFillHedge(tokenId, delta, position.question);
+      } else if (absDelta >= partialThreshold && this.config.mmPartialFillHedge) {
+        const maxShares = this.config.mmPartialFillHedgeMaxShares ?? 20;
+        const hedgeShares = Math.min(absDelta, maxShares);
+        if (hedgeShares > 0) {
+          await this.flattenOnPredict(tokenId, delta, hedgeShares, this.config.mmPartialFillHedgeSlippageBps);
+        }
       }
       this.lastNetShares.set(tokenId, net);
     }
@@ -1492,7 +1579,12 @@ export class MarketMaker {
     };
   }
 
-  private async flattenOnPredict(tokenId: string, delta: number, shares: number): Promise<void> {
+  private async flattenOnPredict(
+    tokenId: string,
+    delta: number,
+    shares: number,
+    slippageOverride?: number
+  ): Promise<void> {
     if (!this.orderManager) {
       return;
     }
@@ -1505,7 +1597,7 @@ export class MarketMaker {
       side,
       shares,
       orderbook,
-      slippageBps: String(this.config.hedgeMaxSlippageBps ?? 250),
+      slippageBps: String(slippageOverride ?? this.config.hedgeMaxSlippageBps ?? 250),
     });
     await this.api.createOrder(payload);
     console.log(`🛡️ Flattened position on Predict (${side} ${shares})`);
