@@ -547,8 +547,10 @@ export class MarketMaker {
     if (configured === 'CALM' || configured === 'NORMAL' || configured === 'VOLATILE') {
       return configured;
     }
-    const calm = this.config.mmVolatilityCalmBps ?? 0.004;
-    const volatile = this.config.mmVolatilityVolatileBps ?? 0.02;
+    const overrideLow = this.config.mmVolatilityLowBps ?? 0;
+    const overrideHigh = this.config.mmVolatilityHighBps ?? 0;
+    const calm = overrideLow > 0 ? overrideLow : this.config.mmVolatilityCalmBps ?? 0.004;
+    const volatile = overrideHigh > 0 ? overrideHigh : this.config.mmVolatilityVolatileBps ?? 0.02;
     const hysteresis = this.config.mmProfileVolHysteresisBps ?? 0.002;
     const depthRef = this.config.mmDepthRefShares ?? 200;
     const depthRatio = depthRef > 0 ? depthEma / depthRef : 1;
