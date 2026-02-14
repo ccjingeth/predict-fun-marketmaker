@@ -926,12 +926,6 @@ export class MarketMaker {
     const volatilityComponent =
       lastMid && lastMid > 0 ? Math.abs(microPrice - lastMid) / lastMid : 0;
 
-    const depthMetrics = this.updateDepthMetrics(market.token_id, orderbook);
-    const minDepth = this.config.mmDepthMinShares ?? 0;
-    if (minDepth > 0 && depthMetrics.totalDepth < minDepth) {
-      return null;
-    }
-
     const volEma = this.volatilityEma.get(market.token_id) ?? volatilityComponent;
     const depthRef = this.config.mmDepthRefShares ?? 200;
     const depthEma = this.depthEma.get(market.token_id) ?? 0;

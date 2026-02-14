@@ -537,10 +537,10 @@ export function loadConfig(): Config {
   }
   if ((config.crossPlatformSlippageCeilBps ?? 0) > 0) {
     const floor = config.crossPlatformSlippageFloorBps ?? 0;
-    if (config.crossPlatformSlippageCeilBps < floor) {
-      const temp = config.crossPlatformSlippageCeilBps;
+    const ceil = config.crossPlatformSlippageCeilBps ?? 0;
+    if (ceil < floor) {
       config.crossPlatformSlippageCeilBps = floor;
-      config.crossPlatformSlippageFloorBps = temp;
+      config.crossPlatformSlippageFloorBps = ceil;
     }
   }
   if ((config.crossPlatformFailureSlippageBumpBps ?? 0) < 0) {

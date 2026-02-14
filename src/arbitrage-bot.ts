@@ -368,7 +368,7 @@ class ArbitrageBot {
     const orderbooks = new Map<string, Orderbook>();
     const limit = Math.max(1, this.config.arbOrderbookConcurrency || 8);
     let index = 0;
-    const wsMaxAgeMs = maxAgeOverrideMs ?? this.config.arbWsMaxAgeMs || 10000;
+    const wsMaxAgeMs = maxAgeOverrideMs ?? this.config.arbWsMaxAgeMs ?? 10000;
 
     if (this.predictWs && markets.length > 0) {
       this.predictWs.subscribeMarkets(markets);

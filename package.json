@@ -25,17 +25,18 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@polymarket/clob-client": "^1.0.0",
+    "@polymarket/clob-client": "^5.2.3",
+    "@polymarket/order-utils": "^3.0.1",
     "@predictdotfun/sdk": "^1.0.0",
-    "ethers": "^6.13.0",
-    "dotenv": "^16.4.5",
     "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.0",
     "ws": "^8.17.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
     "@types/ws": "^8.5.10",
-    "typescript": "^5.5.0",
-    "tsx": "^4.15.0"
+    "tsx": "^4.15.0",
+    "typescript": "^5.5.0"
   }
 }
