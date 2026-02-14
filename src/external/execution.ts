@@ -2034,6 +2034,24 @@ export class CrossPlatformExecutionRouter {
       const nextHour = new Date(now);
       nextHour.setMinutes(0, 0, 0);
       nextHour.setHours(hour + 1);
+      const mode = (this.config.crossPlatformAvoidHoursMode || 'BLOCK').toUpperCase();
+      if (mode === 'TEMPLATE') {
+        if (this.config.crossPlatformConsistencyTemplateEnabled) {
+          this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, nextHour.getTime());
+          if (this.lastAvoidAlertHour !== hour) {
+            this.lastAvoidAlertHour = hour;
+            if (this.config.alertWebhookUrl) {
+              const label = String(hour).padStart(2, '0');
+              void sendAlert(
+                this.config.alertWebhookUrl,
+                `⚠️ 避开时段 ${label}:00 生效，已启用一致性模板（不强制暂停）。`,
+                this.config.alertMinIntervalMs
+              );
+            }
+          }
+          return;
+        }
+      }
       this.globalCooldownUntil = Math.max(this.globalCooldownUntil, nextHour.getTime());
       if (this.lastAvoidAlertHour !== hour) {
         this.lastAvoidAlertHour = hour;

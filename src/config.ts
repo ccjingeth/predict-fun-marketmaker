@@ -45,6 +45,11 @@ const parseOrderTypeList = (value?: string): string[] | undefined => {
  */
 export function loadConfig(): Config {
   const crossPlatformOrderTypeRaw = (process.env.CROSS_PLATFORM_ORDER_TYPE || '').toUpperCase();
+  const crossPlatformAvoidModeRaw = (process.env.CROSS_PLATFORM_AVOID_HOURS_MODE || 'BLOCK').toUpperCase();
+  const crossPlatformAvoidMode =
+    crossPlatformAvoidModeRaw === 'TEMPLATE' || crossPlatformAvoidModeRaw === 'BLOCK'
+      ? (crossPlatformAvoidModeRaw as Config['crossPlatformAvoidHoursMode'])
+      : 'BLOCK';
   const config: Config = {
     apiBaseUrl: process.env.API_BASE_URL || 'https://api.predict.fun',
     privateKey: process.env.PRIVATE_KEY || '',
@@ -353,6 +358,7 @@ export function loadConfig(): Config {
     crossPlatformAvoidHours: parseNumberList(process.env.CROSS_PLATFORM_AVOID_HOURS),
     crossPlatformAvoidHoursAuto: process.env.CROSS_PLATFORM_AVOID_HOURS_AUTO === 'true',
     crossPlatformAvoidHoursDecayDays: parseFloat(process.env.CROSS_PLATFORM_AVOID_HOURS_DECAY_DAYS || '3'),
+    crossPlatformAvoidHoursMode: crossPlatformAvoidMode,
     crossPlatformConsistencyCooldownMs: parseInt(process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_MS || '0'),
     crossPlatformConsistencyCooldownThreshold: parseInt(
       process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_THRESHOLD || '0'

@@ -275,6 +275,7 @@ export interface Config {
   crossPlatformAvoidHours?: number[];
   crossPlatformAvoidHoursAuto?: boolean;
   crossPlatformAvoidHoursDecayDays?: number;
+  crossPlatformAvoidHoursMode?: 'BLOCK' | 'TEMPLATE';
   crossPlatformConsistencyCooldownMs?: number;
   crossPlatformConsistencyCooldownThreshold?: number;
   crossPlatformConsistencyCooldownWindowMs?: number;

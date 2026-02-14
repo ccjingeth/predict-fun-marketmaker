@@ -37,6 +37,7 @@ const metricConsistencyOverride = document.getElementById('metricConsistencyOver
 const metricConsistencyRateLimit = document.getElementById('metricConsistencyRateLimit');
 const metricConsistencyTighten = document.getElementById('metricConsistencyTighten');
 const metricAvoidHours = document.getElementById('metricAvoidHours');
+const metricAvoidMode = document.getElementById('metricAvoidMode');
 const metricAvoidDecay = document.getElementById('metricAvoidDecay');
 const metricConsistencyCooldown = document.getElementById('metricConsistencyCooldown');
 let lastAutoAvoidHours = '';
@@ -1841,7 +1842,9 @@ function getAvoidHourState() {
     .map((val) => Number(val))
     .filter((val) => Number.isFinite(val));
   const hour = new Date().getHours();
-  return { hours, hour, active: hours.includes(hour) };
+  const modeRaw = String(env.get('CROSS_PLATFORM_AVOID_HOURS_MODE') || 'BLOCK').toUpperCase();
+  const mode = modeRaw === 'TEMPLATE' ? 'TEMPLATE' : 'BLOCK';
+  return { hours, hour, active: hours.includes(hour), mode };
 }
 
 function getConsistencyHotspotHours() {
@@ -1889,7 +1892,13 @@ function maybeAutoApplyAvoidHours() {
 
 function maybeToggleCrossPlatformAutoExecute() {
   const env = parseEnv(envEditor.value || '');
-  const { hours: avoidHours, hour, active } = getAvoidHourState();
+  const { hours: avoidHours, hour, active, mode } = getAvoidHourState();
+  if (mode !== 'BLOCK') {
+    if (autoDisabledCrossPlatform) {
+      autoDisabledCrossPlatform = false;
+    }
+    return;
+  }
   if (!avoidHours.length) {
     if (autoDisabledCrossPlatform) {
       let text = envEditor.value || '';
@@ -1937,18 +1946,19 @@ function maybeToggleCrossPlatformAutoExecute() {
 }
 
 function notifyAvoidHourStatus() {
-  const { hours, hour, active } = getAvoidHourState();
+  const { hours, hour, active, mode } = getAvoidHourState();
   if (!hours.length) {
     lastAvoidNoticeActive = false;
     lastAvoidNoticeHour = -1;
     return;
   }
   if (active && (!lastAvoidNoticeActive || lastAvoidNoticeHour !== hour)) {
-    pushLog({
-      type: 'system',
-      level: 'system',
-      message: `避开时段 ${String(hour).padStart(2, '0')}:00 生效，跨平台将暂停。`,
-    });
+    const label = String(hour).padStart(2, '0');
+    const message =
+      mode === 'TEMPLATE'
+        ? `避开时段 ${label}:00 生效，已启用一致性模板（不强制暂停）。`
+        : `避开时段 ${label}:00 生效，跨平台将暂停。`;
+    pushLog({ type: 'system', level: 'system', message });
     lastAvoidNoticeActive = true;
     lastAvoidNoticeHour = hour;
     return;
@@ -2515,9 +2525,13 @@ function updateAlerts({
   if (consistencyFailureRate >= 25) {
     warnings.push('一致性失败率偏高，建议启用一致性模板或提升一致性阈值。');
   }
-  const { hours: avoidHours, hour } = getAvoidHourState();
+  const { hours: avoidHours, hour, mode: avoidMode } = getAvoidHourState();
   if (avoidHours.length > 0 && avoidActive) {
-    warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
+    if (avoidMode === 'TEMPLATE') {
+      warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），已启用一致性模板。`);
+    } else {
+      warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
+    }
   }
   const autoEnabled = String(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_AVOID_HOURS_AUTO') || '').toLowerCase() === 'true';
   if (autoEnabled) {
@@ -2731,17 +2745,21 @@ async function loadMetrics() {
       const factor = Number(data.consistencyTemplateFactor || 1);
       metricConsistencyTighten.textContent = formatNumber(factor, 2);
     }
+    const avoidState = getAvoidHourState();
     if (metricAvoidHours) {
       const env = parseEnv(envEditor.value || '');
       const value = env.get('CROSS_PLATFORM_AVOID_HOURS') || '';
       metricAvoidHours.textContent = value ? String(value) : '未设置';
+    }
+    if (metricAvoidMode) {
+      metricAvoidMode.textContent = avoidState.mode === 'TEMPLATE' ? '模板保守' : 'BLOCK';
     }
     if (metricAvoidDecay) {
       const env = parseEnv(envEditor.value || '');
       const decay = Number(env.get('CROSS_PLATFORM_AVOID_HOURS_DECAY_DAYS') || 3);
       metricAvoidDecay.textContent = Number.isFinite(decay) ? `${decay} 天` : '未设置';
     }
-    const { hour: avoidHour, active: avoidActive } = getAvoidHourState();
+    const { hour: avoidHour, active: avoidActive, mode: avoidMode } = avoidState;
     const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
     const overrideUntil = Number(data.consistencyOverrideUntil || 0);
     const cooldownUntil = Number(data.consistencyCooldownUntil || 0);
@@ -2750,7 +2768,10 @@ async function loadMetrics() {
     const consistencyRateLimitActive = rateLimitUntil > Date.now();
     if (consistencyBadge) {
       if (avoidActive) {
-        setConsistencyBadge(`避开时段 ${String(avoidHour).padStart(2, '0')}:00`, 'error');
+        const label = String(avoidHour).padStart(2, '0');
+        const text = avoidMode === 'TEMPLATE' ? `避开时段 ${label}:00（模板）` : `避开时段 ${label}:00`;
+        const tone = avoidMode === 'TEMPLATE' ? 'warn' : 'error';
+        setConsistencyBadge(text, tone);
       } else if (consistencyCooldownActive) {
         setConsistencyBadge('一致性冷却', 'error');
       } else if (templateUntil > Date.now()) {
