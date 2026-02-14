@@ -101,6 +101,37 @@ const riskWeights = {
   quality: 1,
   stale: 1,
 };
+const FIX_HINTS = {
+  CROSS_PLATFORM_ADAPTIVE_SIZE: '根据深度自动缩放下单量',
+  CROSS_PLATFORM_DEPTH_USAGE: '使用的盘口深度比例',
+  CROSS_PLATFORM_CHUNK_MAX_SHARES: '单次分块最大数量',
+  CROSS_PLATFORM_CHUNK_FACTOR_MIN: '分块系数下限（越低越保守）',
+  CROSS_PLATFORM_MIN_PROFIT_USD: '最低利润门槛（USD）',
+  CROSS_PLATFORM_MIN_NOTIONAL_USD: '最低下单名义金额',
+  CROSS_PLATFORM_SLIPPAGE_BPS: '允许滑点（bps）',
+  CROSS_PLATFORM_EXECUTION_VWAP_CHECK: '执行前做 VWAP 保护',
+  CROSS_PLATFORM_RECHECK_MS: '执行前复核间隔',
+  CROSS_PLATFORM_PRICE_DRIFT_BPS: '价格漂移阈值（bps）',
+  CROSS_PLATFORM_POST_TRADE_DRIFT_BPS: '成交后漂移阈值（bps）',
+  CROSS_PLATFORM_STABILITY_BPS: '稳定窗口阈值（bps）',
+  CROSS_PLATFORM_STABILITY_SAMPLES: '稳定采样次数',
+  CROSS_PLATFORM_STABILITY_INTERVAL_MS: '稳定采样间隔',
+  CROSS_PLATFORM_MAX_RETRIES: '最大重试次数',
+  CROSS_PLATFORM_RETRY_DELAY_MS: '重试间隔',
+  CROSS_PLATFORM_ABORT_COOLDOWN_MS: '失败冷却时间',
+  CROSS_PLATFORM_VOLATILITY_BPS: '高波动阈值（bps）',
+  CROSS_PLATFORM_USE_FOK: 'FOK 快速成交/撤单',
+  CROSS_PLATFORM_POST_FILL_CHECK: '成交后检查未完成订单',
+  CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD: '对冲最低利润（USD）',
+  CROSS_PLATFORM_HEDGE_MIN_EDGE: '对冲最小价差',
+  CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS: '对冲滑点限制',
+  CROSS_PLATFORM_GLOBAL_MIN_QUALITY: '全局质量分门槛',
+  CROSS_PLATFORM_GLOBAL_COOLDOWN_MS: '全局冷却时间',
+  CROSS_PLATFORM_CIRCUIT_MAX_FAILURES: '熔断失败次数阈值',
+  CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS: '熔断冷却时间',
+  ARB_WS_HEALTH_LOG_MS: 'WS 健康采样周期',
+  PREDICT_WS_STALE_MS: '行情源过期阈值',
+};
 const weightPresets = new Map();
 const logFilterPresets = new Map();
 
@@ -1071,9 +1102,10 @@ function updateFixPreview() {
     const normalizedValue = String(value || '').trim();
     const isSame = normalizedCurrent === normalizedValue;
     row.className = `health-item ${isSame ? 'ok' : 'warn'}`;
+    const description = FIX_HINTS[key] ? `｜${FIX_HINTS[key]}` : '';
     hint.textContent = isSame
-      ? `当前: ${current ?? '未设置'}（已匹配）`
-      : `当前: ${current ?? '未设置'} → 建议: ${value}`;
+      ? `当前: ${current ?? '未设置'}（已匹配）${description}`
+      : `当前: ${current ?? '未设置'} → 建议: ${value}${description}`;
     row.appendChild(label);
     row.appendChild(hint);
     fixPreviewList.appendChild(row);
@@ -1121,9 +1153,10 @@ function renderFixSelect(entries, env) {
     const normalizedValue = String(entry.value || '').trim();
     const isSame = normalizedCurrent === normalizedValue;
     checkbox.checked = !isSame;
+    const description = FIX_HINTS[entry.key] ? `｜${FIX_HINTS[entry.key]}` : '';
     hint.textContent = isSame
-      ? `当前: ${current ?? '未设置'}（已匹配）`
-      : `当前: ${current ?? '未设置'} → 建议: ${entry.value}`;
+      ? `当前: ${current ?? '未设置'}（已匹配）${description}`
+      : `当前: ${current ?? '未设置'} → 建议: ${entry.value}${description}`;
 
     row.appendChild(checkboxWrap);
     row.appendChild(hint);
