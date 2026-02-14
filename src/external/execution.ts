@@ -2748,6 +2748,8 @@ export class CrossPlatformExecutionRouter {
       }
     }
 
+    await this.consistencyCheck(adjustedLegs);
+
     if (this.config.crossPlatformExecutionVwapCheck !== false) {
       const preflight = await this.preflightVwapWithCache(adjustedLegs, cache);
       const finalPreflight = await this.maybeRecheckPreflight(adjustedLegs, preflight);
@@ -2756,6 +2758,130 @@ export class CrossPlatformExecutionRouter {
     }
 
     return adjustedLegs;
+  }
+
+  private async consistencyCheck(legs: PlatformLeg[]): Promise<void> {
+    const samples = Math.max(0, this.config.crossPlatformConsistencySamples || 0);
+    if (samples <= 1) {
+      return;
+    }
+    const intervalMs = Math.max(0, this.config.crossPlatformConsistencyIntervalMs || 0);
+    const vwapMaxBps = Math.max(0, (this.config.crossPlatformConsistencyVwapBps || 0) * this.getAutoTuneFactor());
+    const vwapDriftBps = Math.max(0, (this.config.crossPlatformConsistencyVwapDriftBps || 0) * this.getAutoTuneFactor());
+    const ratioMin = Math.max(
+      0,
+      Math.min(
+        1,
+        (this.config.crossPlatformConsistencyDepthRatioMin || 0) *
+          this.getAutoTuneFactor() *
+          this.getDepthRatioPenaltyFactor()
+      )
+    );
+    const ratioDrift = Math.max(
+      0,
+      Math.min(1, (this.config.crossPlatformConsistencyDepthRatioDrift || 0) * this.getAutoTuneFactor())
+    );
+    const depthLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
+    const deviationSamples = new Map<string, number[]>();
+    const ratioSamples: number[] = [];
+
+    for (let i = 0; i < samples; i += 1) {
+      const depthByLeg = new Map<string, number>();
+      for (const leg of legs) {
+        const book = await this.fetchOrderbookInternal(leg);
+        if (!book) {
+          throw new Error(`Consistency failed: missing orderbook for ${leg.platform}:${leg.tokenId}`);
+        }
+        const levels = leg.side === 'BUY' ? book.asks : book.bids;
+        const capped = depthLevels > 0 ? levels.slice(0, depthLevels) : levels;
+        const depthUsd = capped.reduce((sum, entry) => {
+          const price = Number(entry.price);
+          const shares = Number(entry.shares);
+          if (!Number.isFinite(price) || !Number.isFinite(shares) || price <= 0 || shares <= 0) {
+            return sum;
+          }
+          return sum + price * shares;
+        }, 0);
+        if (!Number.isFinite(depthUsd) || depthUsd <= 0) {
+          throw new Error(`Consistency failed: invalid depth for ${leg.platform}:${leg.tokenId}`);
+        }
+        const legKey = `${leg.platform}:${leg.tokenId}:${leg.side}`;
+        depthByLeg.set(legKey, depthUsd);
+
+        const feeBps = this.getFeeBps(leg.platform);
+        const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
+        const slippageBps = this.getSlippageBps();
+        const vwap =
+          leg.side === 'BUY'
+            ? estimateBuy(book.asks, leg.shares, feeBps, curveRate, curveExponent, slippageBps)
+            : estimateSell(book.bids, leg.shares, feeBps, curveRate, curveExponent, slippageBps);
+        if (!vwap) {
+          throw new Error(`Consistency failed: insufficient VWAP depth for ${leg.platform}:${leg.tokenId}`);
+        }
+        const limit = leg.price;
+        if (!Number.isFinite(limit) || limit <= 0) {
+          throw new Error(`Consistency failed: invalid price for ${leg.platform}:${leg.tokenId}`);
+        }
+        const vwapAllIn = Number.isFinite(vwap.avgAllIn) ? vwap.avgAllIn : vwap.avgPrice;
+        const deviationBps =
+          leg.side === 'BUY'
+            ? ((vwapAllIn - limit) / limit) * 10000
+            : ((limit - vwapAllIn) / limit) * 10000;
+        if (vwapMaxBps > 0 && deviationBps > vwapMaxBps) {
+          throw new Error(
+            `Consistency failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${vwapMaxBps}) for ${leg.platform}:${leg.tokenId}`
+          );
+        }
+        const list = deviationSamples.get(legKey) || [];
+        list.push(deviationBps);
+        deviationSamples.set(legKey, list);
+      }
+
+      if (depthByLeg.size >= 2) {
+        const depths = Array.from(depthByLeg.values()).filter((val) => Number.isFinite(val) && val > 0);
+        if (depths.length >= 2) {
+          const minDepth = Math.min(...depths);
+          const maxDepth = Math.max(...depths);
+          const ratio = maxDepth > 0 ? minDepth / maxDepth : 1;
+          ratioSamples.push(ratio);
+          if (ratioMin > 0 && ratio < ratioMin) {
+            throw new Error(
+              `Consistency failed: leg depth ratio ${(ratio * 100).toFixed(1)}% < min ${(ratioMin * 100).toFixed(1)}%`
+            );
+          }
+        }
+      }
+
+      if (i < samples - 1 && intervalMs > 0) {
+        await this.sleep(intervalMs);
+      }
+    }
+
+    if (vwapDriftBps > 0) {
+      for (const [legKey, list] of deviationSamples.entries()) {
+        if (list.length <= 1) {
+          continue;
+        }
+        const minDev = Math.min(...list);
+        const maxDev = Math.max(...list);
+        const drift = maxDev - minDev;
+        if (drift > vwapDriftBps) {
+          throw new Error(
+            `Consistency failed: VWAP drift ${drift.toFixed(1)} bps (max ${vwapDriftBps}) for ${legKey}`
+          );
+        }
+      }
+    }
+    if (ratioDrift > 0 && ratioSamples.length > 1) {
+      const minRatio = Math.min(...ratioSamples);
+      const maxRatio = Math.max(...ratioSamples);
+      const drift = maxRatio - minRatio;
+      if (drift > ratioDrift) {
+        throw new Error(
+          `Consistency failed: leg depth ratio drift ${(drift * 100).toFixed(1)}% (max ${(ratioDrift * 100).toFixed(1)}%)`
+        );
+      }
+    }
   }
 
   private async stabilityCheck(legs: PlatformLeg[]): Promise<void> {
@@ -3050,16 +3176,23 @@ export class CrossPlatformExecutionRouter {
     if (bpsCap > 0) {
       requiredBps = Math.min(requiredBps, bpsCap);
     }
-    const required =
+    const qualityFactor = this.getQualityProfitFactor(legs);
+    let required =
       baseProfit +
       failureUsd * failureMult +
       this.failureProfitUsdBump +
       notional * (requiredBps / 10000) +
       notional * (impactBps / 10000) * impactMult;
+    if (qualityFactor > 1) {
+      required *= qualityFactor;
+    }
     if (hasMissingVwap) {
       const penaltyBps = Math.max(0, this.config.crossPlatformMissingVwapPenaltyBps || 0);
       if (penaltyBps > 0) {
-        const vwapPenalty = notional * (penaltyBps / 10000);
+        let vwapPenalty = notional * (penaltyBps / 10000);
+        if (qualityFactor > 1) {
+          vwapPenalty *= qualityFactor;
+        }
         if (profit < required + vwapPenalty) {
           throw new Error(
             `Preflight failed: missing VWAP coverage, profit $${profit.toFixed(2)} < min ${(required + vwapPenalty).toFixed(2)}`
@@ -3072,6 +3205,21 @@ export class CrossPlatformExecutionRouter {
         `Preflight failed: profit $${profit.toFixed(2)} < min ${required.toFixed(2)} (impact ${impactBps.toFixed(1)} bps)`
       );
     }
+  }
+
+  private getQualityProfitFactor(legs: PlatformLeg[]): number {
+    const mult = Math.max(0, this.config.crossPlatformQualityProfitMult || 0);
+    if (!mult) {
+      return 1;
+    }
+    const score = this.groupQualityScore(legs);
+    const quality = Math.max(0, Math.min(1, score / 100));
+    let factor = 1 + (1 - quality) * mult;
+    const maxFactor = Math.max(0, this.config.crossPlatformQualityProfitMax || 0);
+    if (maxFactor > 1) {
+      factor = Math.min(factor, maxFactor);
+    }
+    return Math.max(1, factor);
   }
 
   private async postTradeCheck(legs: PlatformLeg[]): Promise<{

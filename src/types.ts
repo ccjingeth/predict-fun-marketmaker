@@ -238,6 +238,14 @@ export interface Config {
   crossPlatformDepthRatioPenaltyUp?: number;
   crossPlatformDepthRatioPenaltyDown?: number;
   crossPlatformDepthRatioPenaltyMax?: number;
+  crossPlatformConsistencySamples?: number;
+  crossPlatformConsistencyIntervalMs?: number;
+  crossPlatformConsistencyVwapBps?: number;
+  crossPlatformConsistencyVwapDriftBps?: number;
+  crossPlatformConsistencyDepthRatioMin?: number;
+  crossPlatformConsistencyDepthRatioDrift?: number;
+  crossPlatformQualityProfitMult?: number;
+  crossPlatformQualityProfitMax?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
