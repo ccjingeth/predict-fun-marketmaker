@@ -666,6 +666,7 @@ export class CrossPlatformExecutionRouter {
   private lastConsistencyFailureAt = 0;
   private lastConsistencyFailureReason = '';
   private consistencyOverrideUntil = 0;
+  private consistencyTemplateActiveUntil = 0;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -1512,6 +1513,12 @@ export class CrossPlatformExecutionRouter {
         return base + bump;
       }
     }
+    if (this.isConsistencyTemplateActive()) {
+      const template = Math.max(0, this.config.crossPlatformConsistencyTemplateSlippageBps || 0);
+      if (template > 0) {
+        return Math.min(base, template);
+      }
+    }
     if (this.isDegraded()) {
       const override = Math.max(0, this.config.crossPlatformDegradeStabilityBps || 0);
       if (override > 0) {
@@ -1524,6 +1531,12 @@ export class CrossPlatformExecutionRouter {
   private getSlippageBps(): number {
     if (this.config.crossPlatformSlippageDynamic === false) {
       const base = this.config.crossPlatformSlippageBps || 0;
+      if (this.isConsistencyTemplateActive()) {
+        const template = Math.max(0, this.config.crossPlatformConsistencyTemplateSlippageBps || 0);
+        if (template > 0) {
+          return Math.min(base, template);
+        }
+      }
       if (this.isDegraded()) {
         const override = Math.max(0, this.config.crossPlatformDegradeSlippageBps || 0);
         if (override > 0) {
@@ -1537,6 +1550,12 @@ export class CrossPlatformExecutionRouter {
     const value = this.slippageBpsDynamic || this.resolveDynamicSlippage();
     if (ceil > 0) {
       const base = Math.max(floor, Math.min(ceil, value));
+      if (this.isConsistencyTemplateActive()) {
+        const template = Math.max(0, this.config.crossPlatformConsistencyTemplateSlippageBps || 0);
+        if (template > 0) {
+          return Math.min(base, template);
+        }
+      }
       if (this.isDegraded()) {
         const override = Math.max(0, this.config.crossPlatformDegradeSlippageBps || 0);
         if (override > 0) {
@@ -1546,6 +1565,12 @@ export class CrossPlatformExecutionRouter {
       return base;
     }
     const base = Math.max(floor, value);
+    if (this.isConsistencyTemplateActive()) {
+      const template = Math.max(0, this.config.crossPlatformConsistencyTemplateSlippageBps || 0);
+      if (template > 0) {
+        return Math.min(base, template);
+      }
+    }
     if (this.isDegraded()) {
       const override = Math.max(0, this.config.crossPlatformDegradeSlippageBps || 0);
       if (override > 0) {
@@ -1563,6 +1588,12 @@ export class CrossPlatformExecutionRouter {
         factor *= degrade;
       }
     }
+    if (this.isConsistencyTemplateActive()) {
+      const template = Math.max(0, this.config.crossPlatformConsistencyTemplateChunkFactor || 0);
+      if (template > 0) {
+        factor *= template;
+      }
+    }
     return Math.max(0.05, factor);
   }
 
@@ -1570,6 +1601,10 @@ export class CrossPlatformExecutionRouter {
     const base = Math.max(0, this.chunkDelayMs || 0);
     if (this.isDegraded()) {
       const extra = Math.max(0, this.config.crossPlatformDegradeChunkDelayMs || 0);
+      return base + extra;
+    }
+    if (this.isConsistencyTemplateActive()) {
+      const extra = Math.max(0, this.config.crossPlatformConsistencyTemplateChunkDelayMs || 0);
       return base + extra;
     }
     return base;
@@ -1683,6 +1718,9 @@ export class CrossPlatformExecutionRouter {
     if (this.isDegraded() && this.config.crossPlatformDegradeForceSequential) {
       return false;
     }
+    if (this.isConsistencyTemplateActive() && this.config.crossPlatformConsistencyTemplateForceSequential) {
+      return false;
+    }
     return true;
   }
 
@@ -1690,21 +1728,34 @@ export class CrossPlatformExecutionRouter {
     const fallback = this.getOrderTypeFallback(attempt);
     const degradeOrderType = this.isDegraded() ? this.config.crossPlatformDegradeOrderType : undefined;
     const consistencyOrderType =
-      this.consistencyOverrideUntil > Date.now() ? this.config.crossPlatformConsistencyOrderType : undefined;
-    const orderType = consistencyOrderType || degradeOrderType || fallback || this.config.crossPlatformOrderType;
+      this.consistencyOverrideUntil > Date.now() || this.isConsistencyTemplateActive()
+        ? this.config.crossPlatformConsistencyOrderType
+        : undefined;
+    const templateOrderType = this.isConsistencyTemplateActive() ? 'FOK' : undefined;
+    const orderType =
+      consistencyOrderType || templateOrderType || degradeOrderType || fallback || this.config.crossPlatformOrderType;
 
     let useFok = this.config.crossPlatformUseFok;
     if (this.isDegraded() && this.config.crossPlatformDegradeUseFok !== undefined) {
       useFok = this.config.crossPlatformDegradeUseFok;
+    }
+    if (this.isConsistencyTemplateActive() && this.config.crossPlatformConsistencyTemplateUseFok) {
+      useFok = true;
     }
 
     let useLimit = this.config.crossPlatformLimitOrders;
     if (this.isDegraded() && this.config.crossPlatformDegradeLimitOrders !== undefined) {
       useLimit = this.config.crossPlatformDegradeLimitOrders;
     }
+    if (this.isConsistencyTemplateActive() && this.config.crossPlatformConsistencyTemplateLimitOrders) {
+      useLimit = true;
+    }
 
     let batch = this.config.crossPlatformBatchOrders;
     if (this.isDegraded() && this.config.crossPlatformDegradeDisableBatch) {
+      batch = false;
+    }
+    if (this.isConsistencyTemplateActive() && this.config.crossPlatformConsistencyTemplateDisableBatch) {
       batch = false;
     }
 
@@ -2175,12 +2226,22 @@ export class CrossPlatformExecutionRouter {
         } else {
           this.consistencyOverrideUntil = Math.max(this.consistencyOverrideUntil, now + extraMs);
         }
+        if (this.config.crossPlatformConsistencyTemplateEnabled) {
+          this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, now + extraMs);
+        }
       }
       const penalty = Math.max(0, this.config.crossPlatformConsistencyPenalty || 0);
       if (penalty > 0) {
         this.applyQualityPenalty(penalty);
       }
     }
+  }
+
+  private isConsistencyTemplateActive(): boolean {
+    return (
+      this.config.crossPlatformConsistencyTemplateEnabled === true &&
+      this.consistencyTemplateActiveUntil > Date.now()
+    );
   }
 
   private applyFailureReasonPenalty(
@@ -2337,6 +2398,7 @@ export class CrossPlatformExecutionRouter {
       lastConsistencyFailureAt: this.lastConsistencyFailureAt,
       lastConsistencyFailureReason: this.lastConsistencyFailureReason,
       consistencyOverrideUntil: this.consistencyOverrideUntil,
+      consistencyTemplateActiveUntil: this.consistencyTemplateActiveUntil,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2356,6 +2418,7 @@ export class CrossPlatformExecutionRouter {
       lastConsistencyFailureAt: this.lastConsistencyFailureAt,
       lastConsistencyFailureReason: this.lastConsistencyFailureReason,
       consistencyOverrideUntil: this.consistencyOverrideUntil,
+      consistencyTemplateActiveUntil: this.consistencyTemplateActiveUntil,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2450,6 +2513,9 @@ export class CrossPlatformExecutionRouter {
     }
     if (Number.isFinite(data?.consistencyOverrideUntil)) {
       this.consistencyOverrideUntil = Number(data.consistencyOverrideUntil);
+    }
+    if (Number.isFinite(data?.consistencyTemplateActiveUntil)) {
+      this.consistencyTemplateActiveUntil = Number(data.consistencyTemplateActiveUntil);
     }
 
     const platformSet = new Set<ExternalPlatform>(['Predict', 'Polymarket', 'Opinion']);
@@ -2642,6 +2708,12 @@ export class CrossPlatformExecutionRouter {
         });
       }
       let maxLevels = this.config.crossPlatformMaxVwapLevels ?? 0;
+      if (this.isConsistencyTemplateActive()) {
+        const templateLevels = Math.max(0, this.config.crossPlatformConsistencyTemplateMaxVwapLevels || 0);
+        if (templateLevels > 0) {
+          maxLevels = maxLevels > 0 ? Math.min(maxLevels, templateLevels) : templateLevels;
+        }
+      }
       if ((this.circuitFailures > 0 || this.isDegraded()) && maxLevels > 0) {
         const cut = Math.max(0, this.config.crossPlatformFailureMaxVwapLevelsCut || 0);
         if (cut > 0) {
@@ -3014,7 +3086,13 @@ export class CrossPlatformExecutionRouter {
   ): Promise<number> {
     const maxDeviation = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor());
     const slippageBps = this.getSlippageBps();
-    const usage = Math.max(0.05, Math.min(1, (this.config.crossPlatformDepthUsage ?? 0.5) * this.getAutoTuneFactor()));
+    let usage = Math.max(0.05, Math.min(1, (this.config.crossPlatformDepthUsage ?? 0.5) * this.getAutoTuneFactor()));
+    if (this.isConsistencyTemplateActive()) {
+      const templateUsage = Math.max(0, this.config.crossPlatformConsistencyTemplateDepthUsage || 0);
+      if (templateUsage > 0) {
+        usage = Math.min(usage, templateUsage);
+      }
+    }
     const depths = await Promise.all(
       legs.map(async (leg) => {
         const book = await this.fetchOrderbook(leg, cache);
@@ -3165,8 +3243,17 @@ export class CrossPlatformExecutionRouter {
   }
 
   private assertMinNotionalAndProfit(legs: PlatformLeg[]): void {
-    const minNotional = Math.max(0, this.config.crossPlatformMinNotionalUsd || 0);
-    const baseProfit = Math.max(0, this.config.crossPlatformMinProfitUsd || 0);
+    let minNotional = Math.max(0, this.config.crossPlatformMinNotionalUsd || 0);
+    let baseProfit = Math.max(0, this.config.crossPlatformMinProfitUsd || 0);
+    let baseBps = Math.max(0, this.config.crossPlatformMinProfitBps || 0);
+    if (this.isConsistencyTemplateActive()) {
+      const templateNotional = Math.max(0, this.config.crossPlatformConsistencyTemplateMinNotionalUsd || 0);
+      const templateProfit = Math.max(0, this.config.crossPlatformConsistencyTemplateMinProfitUsd || 0);
+      const templateBps = Math.max(0, this.config.crossPlatformConsistencyTemplateMinProfitBps || 0);
+      minNotional = Math.max(minNotional, templateNotional);
+      baseProfit = Math.max(baseProfit, templateProfit);
+      baseBps = Math.max(baseBps, templateBps);
+    }
     if (!minNotional && !baseProfit) {
       return;
     }
@@ -3234,7 +3321,6 @@ export class CrossPlatformExecutionRouter {
     if (requiredNotional > 0 && notional < requiredNotional) {
       throw new Error(`Preflight failed: notional $${notional.toFixed(2)} < min ${requiredNotional}`);
     }
-    const baseBps = Math.max(0, this.config.crossPlatformMinProfitBps || 0);
     const failureBps = Math.max(0, this.config.crossPlatformFailureProfitBps || 0);
     const failureUsd = Math.max(0, this.config.crossPlatformFailureProfitUsd || 0);
     const impactMult = Math.max(0, this.config.crossPlatformMinProfitImpactMult || 0);

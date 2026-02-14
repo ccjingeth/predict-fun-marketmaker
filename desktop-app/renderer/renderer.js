@@ -53,10 +53,12 @@ const applyFixTemplateBtn = document.getElementById('applyFixTemplate');
 const weightSuccess = document.getElementById('weightSuccess');
 const weightDrift = document.getElementById('weightDrift');
 const weightQuality = document.getElementById('weightQuality');
+const weightConsistency = document.getElementById('weightConsistency');
 const weightStale = document.getElementById('weightStale');
 const weightSuccessVal = document.getElementById('weightSuccessVal');
 const weightDriftVal = document.getElementById('weightDriftVal');
 const weightQualityVal = document.getElementById('weightQualityVal');
+const weightConsistencyVal = document.getElementById('weightConsistencyVal');
 const weightStaleVal = document.getElementById('weightStaleVal');
 const resetRiskWeightsBtn = document.getElementById('resetRiskWeights');
 const saveWeightPresetBtn = document.getElementById('saveWeightPreset');
@@ -110,6 +112,7 @@ const riskWeights = {
   success: 1,
   drift: 1,
   quality: 1,
+  consistency: 1,
   stale: 1,
 };
 const FIX_HINTS = {
@@ -208,6 +211,19 @@ const FIX_HINTS = {
   CROSS_PLATFORM_CONSISTENCY_PENALTY: '一致性失败惩罚系数',
   CROSS_PLATFORM_CONSISTENCY_USE_DEGRADE_PROFILE: '一致性失败强制降级配置',
   CROSS_PLATFORM_CONSISTENCY_ORDER_TYPE: '一致性失败强制订单类型',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_ENABLED: '一致性失败启用保守模板',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_DEPTH_USAGE: '一致性模板深度使用比例',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_SLIPPAGE_BPS: '一致性模板滑点上限',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MAX_VWAP_LEVELS: '一致性模板 VWAP 档位上限',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_PROFIT_BPS: '一致性模板最小收益（bps）',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_PROFIT_USD: '一致性模板最小收益（USD）',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_NOTIONAL_USD: '一致性模板最小名义金额（USD）',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_CHUNK_FACTOR: '一致性模板分块系数',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_CHUNK_DELAY_MS: '一致性模板分块延迟',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_FORCE_SEQUENTIAL: '一致性模板强制顺序下单',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_USE_FOK: '一致性模板强制 FOK',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_LIMIT_ORDERS: '一致性模板强制限价单',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_DISABLE_BATCH: '一致性模板禁用批量下单',
   CROSS_PLATFORM_QUALITY_PROFIT_MULT: '质量分收益门槛放大系数',
   CROSS_PLATFORM_QUALITY_PROFIT_MAX: '质量分收益门槛放大上限',
   CROSS_PLATFORM_MAX_VWAP_LEVELS: '跨平台 VWAP 档位数上限',
@@ -353,14 +369,16 @@ function setRiskLevel(level, tone) {
 }
 
 function updateRiskWeightsUI() {
-  if (!weightSuccess || !weightDrift || !weightQuality || !weightStale) return;
+  if (!weightSuccess || !weightDrift || !weightQuality || !weightConsistency || !weightStale) return;
   weightSuccess.value = riskWeights.success.toFixed(1);
   weightDrift.value = riskWeights.drift.toFixed(1);
   weightQuality.value = riskWeights.quality.toFixed(1);
+  weightConsistency.value = riskWeights.consistency.toFixed(1);
   weightStale.value = riskWeights.stale.toFixed(1);
   if (weightSuccessVal) weightSuccessVal.textContent = riskWeights.success.toFixed(1);
   if (weightDriftVal) weightDriftVal.textContent = riskWeights.drift.toFixed(1);
   if (weightQualityVal) weightQualityVal.textContent = riskWeights.quality.toFixed(1);
+  if (weightConsistencyVal) weightConsistencyVal.textContent = riskWeights.consistency.toFixed(1);
   if (weightStaleVal) weightStaleVal.textContent = riskWeights.stale.toFixed(1);
 }
 
@@ -377,7 +395,7 @@ function loadRiskWeights() {
     const raw = localStorage.getItem('riskWeights');
     if (!raw) return;
     const parsed = JSON.parse(raw);
-    ['success', 'drift', 'quality', 'stale'].forEach((key) => {
+    ['success', 'drift', 'quality', 'consistency', 'stale'].forEach((key) => {
       const value = Number(parsed?.[key]);
       if (Number.isFinite(value)) {
         riskWeights[key] = Math.max(0, Math.min(2, value));
@@ -492,6 +510,7 @@ function applyWeightPreset(name) {
     riskWeights.success = 1;
     riskWeights.drift = 1;
     riskWeights.quality = 1;
+    riskWeights.consistency = 1;
     riskWeights.stale = 1;
     updateRiskWeightsUI();
     saveRiskWeights();
@@ -500,7 +519,7 @@ function applyWeightPreset(name) {
   }
   const preset = weightPresets.get(name);
   if (!preset) return;
-  ['success', 'drift', 'quality', 'stale'].forEach((key) => {
+  ['success', 'drift', 'quality', 'consistency', 'stale'].forEach((key) => {
     const value = Number(preset[key]);
     if (Number.isFinite(value)) {
       riskWeights[key] = Math.max(0, Math.min(2, value));
@@ -528,12 +547,14 @@ function bindRiskWeightInputs() {
   bind(weightSuccess, 'success', weightSuccessVal);
   bind(weightDrift, 'drift', weightDriftVal);
   bind(weightQuality, 'quality', weightQualityVal);
+  bind(weightConsistency, 'consistency', weightConsistencyVal);
   bind(weightStale, 'stale', weightStaleVal);
   if (resetRiskWeightsBtn) {
     resetRiskWeightsBtn.addEventListener('click', () => {
       riskWeights.success = 1;
       riskWeights.drift = 1;
       riskWeights.quality = 1;
+      riskWeights.consistency = 1;
       riskWeights.stale = 1;
       updateRiskWeightsUI();
       saveRiskWeights();
@@ -2172,6 +2193,7 @@ function computeRiskLevel({
   postTradeDriftBps,
   qualityScore,
   depthPenalty,
+  consistencyOverrideActive,
   metricsAgeMs,
 }) {
   let score = 0;
@@ -2241,6 +2263,11 @@ function computeRiskLevel({
     score += weighted;
     breakdown.push({ label: `深度惩罚上升 x${riskWeights.quality.toFixed(1)}`, score: weighted.toFixed(1) });
   }
+  if (consistencyOverrideActive) {
+    const weighted = 25 * riskWeights.consistency;
+    score += weighted;
+    breakdown.push({ label: `一致性降级 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
+  }
 
   score = Math.max(0, Math.min(100, score));
 
@@ -2307,7 +2334,9 @@ async function loadMetrics() {
       metricConsistencyReason.textContent = reason || '暂无记录';
     }
     if (metricConsistencyOverride) {
-      const until = Number(data.consistencyOverrideUntil || 0);
+      const overrideUntil = Number(data.consistencyOverrideUntil || 0);
+      const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
+      const until = Math.max(overrideUntil, templateUntil);
       metricConsistencyOverride.textContent = until && until > Date.now() ? `保守中：${formatTimestamp(until)}` : '未触发';
     }
     setMetricText(metricChunkFactor, formatNumber(data.chunkFactor, 2));
@@ -2357,8 +2386,8 @@ async function loadMetrics() {
       driftLimit: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80),
       minQuality: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7),
       consistencyOverrideActive:
-        Number(data.consistencyOverrideUntil || 0) > Date.now() ||
-        Number(data.consistencyOverrideUntil || 0) > Number(data.globalCooldownUntil || 0),
+        Math.max(Number(data.consistencyOverrideUntil || 0), Number(data.consistencyTemplateActiveUntil || 0)) >
+        Date.now(),
     };
     updateAlerts(metricsSnapshot);
     renderAdvice(null, metricsSnapshot);

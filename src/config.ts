@@ -292,6 +292,33 @@ export function loadConfig(): Config {
       | 'GTC'
       | 'GTD'
       | '',
+    crossPlatformConsistencyTemplateEnabled: process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_ENABLED === 'true',
+    crossPlatformConsistencyTemplateDepthUsage: parseFloat(process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_DEPTH_USAGE || '0'),
+    crossPlatformConsistencyTemplateSlippageBps: parseInt(process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_SLIPPAGE_BPS || '0'),
+    crossPlatformConsistencyTemplateMaxVwapLevels: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MAX_VWAP_LEVELS || '0'
+    ),
+    crossPlatformConsistencyTemplateMinProfitBps: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_PROFIT_BPS || '0'
+    ),
+    crossPlatformConsistencyTemplateMinProfitUsd: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_PROFIT_USD || '0'
+    ),
+    crossPlatformConsistencyTemplateMinNotionalUsd: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_NOTIONAL_USD || '0'
+    ),
+    crossPlatformConsistencyTemplateChunkFactor: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_CHUNK_FACTOR || '0'
+    ),
+    crossPlatformConsistencyTemplateChunkDelayMs: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_CHUNK_DELAY_MS || '0'
+    ),
+    crossPlatformConsistencyTemplateForceSequential:
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_FORCE_SEQUENTIAL === 'true',
+    crossPlatformConsistencyTemplateUseFok: process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_USE_FOK === 'true',
+    crossPlatformConsistencyTemplateLimitOrders: process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_LIMIT_ORDERS === 'true',
+    crossPlatformConsistencyTemplateDisableBatch:
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_DISABLE_BATCH === 'true',
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),
