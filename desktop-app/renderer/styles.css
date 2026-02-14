@@ -405,6 +405,10 @@ canvas {
   color: #ffe1a3;
 }
 
+.health-item.related {
+  box-shadow: 0 0 0 1px rgba(106, 163, 255, 0.35), 0 0 20px rgba(106, 163, 255, 0.18);
+}
+
 .health-item.error {
   border-color: rgba(255, 107, 107, 0.5);
   color: #ffb3b3;

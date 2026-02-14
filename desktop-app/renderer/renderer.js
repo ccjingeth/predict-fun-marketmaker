@@ -827,6 +827,7 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
       });
       detail.appendChild(more);
     }
+    detail.dataset.keys = list.join(',');
     metricFailureAdviceList.appendChild(mapRow);
     metricFailureAdviceList.appendChild(detail);
   }
@@ -1249,6 +1250,15 @@ function updateFixPreview() {
   const entries = parseFixTemplate(template);
   const env = parseEnv(envEditor.value || '');
   fixPreviewList.innerHTML = '';
+  const relatedKeys = new Set();
+  if (metricFailureAdviceList) {
+    const detailRow = metricFailureAdviceList.querySelector('[data-keys]');
+    if (detailRow && detailRow.dataset.keys) {
+      detailRow.dataset.keys.split(',').forEach((key) => {
+        if (key) relatedKeys.add(key.trim());
+      });
+    }
+  }
   if (!template || !entries.length) {
     const item = document.createElement('div');
     item.className = 'health-item ok';
@@ -1284,7 +1294,8 @@ function updateFixPreview() {
     const normalizedCurrent = current === undefined ? '' : String(current).trim();
     const normalizedValue = String(value || '').trim();
     const isSame = normalizedCurrent === normalizedValue;
-    row.className = `health-item ${isSame ? 'ok' : 'warn'}`;
+    const isRelated = relatedKeys.has(key);
+    row.className = `health-item ${isSame ? 'ok' : 'warn'}${isRelated ? ' related' : ''}`;
     const description = FIX_HINTS[key] ? `｜${FIX_HINTS[key]}` : '';
     hint.textContent = isSame
       ? `当前: ${current ?? '未设置'}（已匹配）${description}`
