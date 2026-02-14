@@ -275,6 +275,7 @@ def main() -> None:
 
     min_profit = _safe_float(settings.get("minProfit", 0.0))
     min_depth = _safe_float(settings.get("minDepth", 0.0))
+    min_depth_usd = _safe_float(settings.get("minDepthUsd", 0.0))
     allow_sells = bool(settings.get("allowSells", True))
 
     filtered_tokens = []
@@ -287,6 +288,11 @@ def main() -> None:
             ask_size = 0.0
         if bid_size < min_depth or not allow_sells:
             bid_size = 0.0
+        if min_depth_usd > 0:
+            if ask * ask_size < min_depth_usd:
+                ask_size = 0.0
+            if bid * bid_size < min_depth_usd:
+                bid_size = 0.0
         tok["askSize"] = ask_size
         tok["bidSize"] = bid_size
         if ask > 0 or bid > 0:

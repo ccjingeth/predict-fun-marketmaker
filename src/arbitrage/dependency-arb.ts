@@ -48,6 +48,8 @@ export interface DependencyArbConfig {
   maxLegs: number;
   maxNotional: number;
   minDepth: number;
+  minDepthUsd: number;
+  depthUsage: number;
   feeBps: number;
   feeCurveRate: number;
   feeCurveExponent: number;
@@ -89,6 +91,8 @@ export class DependencyArbitrageDetector {
       maxLegs: 6,
       maxNotional: 200,
       minDepth: 1,
+      minDepthUsd: 0,
+      depthUsage: 1,
       feeBps: 100,
       feeCurveRate: 0,
       feeCurveExponent: 0,
@@ -117,6 +121,7 @@ export class DependencyArbitrageDetector {
     }
 
     const tokens: any[] = [];
+    const depthUsage = Math.max(0.05, Math.min(1, this.config.depthUsage || 1));
     for (const cond of constraints.conditions) {
       const yesTokenId = cond.yesTokenId;
       const noTokenId = cond.noTokenId;
@@ -124,14 +129,16 @@ export class DependencyArbitrageDetector {
         const yesMarket = tokenMap.get(yesTokenId);
         const yesBook = orderbooks.get(yesTokenId);
         const yesTop = this.topOfBook(yesBook);
+        const askSize = (yesTop?.askSize ?? 0) * depthUsage;
+        const bidSize = (yesTop?.bidSize ?? 0) * depthUsage;
         tokens.push({
           tokenId: yesTokenId,
           conditionId: cond.id,
           outcome: 'YES',
           ask: yesTop?.ask ?? yesMarket?.best_ask ?? 0,
           bid: yesTop?.bid ?? yesMarket?.best_bid ?? 0,
-          askSize: yesTop?.askSize ?? 0,
-          bidSize: yesTop?.bidSize ?? 0,
+          askSize,
+          bidSize,
           feeBps: yesMarket?.fee_rate_bps ?? this.config.feeBps,
           label: cond.label || yesMarket?.question,
           question: yesMarket?.question,
@@ -142,14 +149,16 @@ export class DependencyArbitrageDetector {
         const noMarket = tokenMap.get(noTokenId);
         const noBook = orderbooks.get(noTokenId);
         const noTop = this.topOfBook(noBook);
+        const askSize = (noTop?.askSize ?? 0) * depthUsage;
+        const bidSize = (noTop?.bidSize ?? 0) * depthUsage;
         tokens.push({
           tokenId: noTokenId,
           conditionId: cond.id,
           outcome: 'NO',
           ask: noTop?.ask ?? noMarket?.best_ask ?? 0,
           bid: noTop?.bid ?? noMarket?.best_bid ?? 0,
-          askSize: noTop?.askSize ?? 0,
-          bidSize: noTop?.bidSize ?? 0,
+          askSize,
+          bidSize,
           feeBps: noMarket?.fee_rate_bps ?? this.config.feeBps,
           label: cond.label || noMarket?.question,
           question: noMarket?.question,
@@ -167,6 +176,7 @@ export class DependencyArbitrageDetector {
         maxLegs: this.config.maxLegs,
         maxNotional: this.config.maxNotional,
         minDepth: this.config.minDepth,
+        minDepthUsd: this.config.minDepthUsd,
         feeBps: this.config.feeBps,
         feeCurveRate: this.config.feeCurveRate,
         feeCurveExponent: this.config.feeCurveExponent,

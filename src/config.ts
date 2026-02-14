@@ -425,6 +425,8 @@ export function loadConfig(): Config {
     dependencyMaxLegs: parseInt(process.env.DEPENDENCY_MAX_LEGS || '6'),
     dependencyMaxNotional: parseFloat(process.env.DEPENDENCY_MAX_NOTIONAL || '200'),
     dependencyMinDepth: parseFloat(process.env.DEPENDENCY_MIN_DEPTH || '1'),
+    dependencyMinDepthUsd: parseFloat(process.env.DEPENDENCY_MIN_DEPTH_USD || '0'),
+    dependencyDepthUsage: parseFloat(process.env.DEPENDENCY_DEPTH_USAGE || '1'),
     dependencyFeeBps: parseFloat(process.env.DEPENDENCY_FEE_BPS || '100'),
     dependencyFeeCurveRate: parseFloat(process.env.DEPENDENCY_FEE_CURVE_RATE || '0'),
     dependencyFeeCurveExponent: parseFloat(process.env.DEPENDENCY_FEE_CURVE_EXPONENT || '0'),
@@ -607,6 +609,12 @@ export function loadConfig(): Config {
   }
   if ((config.arbDegradeTopNMin ?? 0) < 1) {
     config.arbDegradeTopNMin = 1;
+  }
+  if ((config.dependencyDepthUsage ?? 0) <= 0 || (config.dependencyDepthUsage ?? 0) > 1) {
+    config.dependencyDepthUsage = 1;
+  }
+  if ((config.dependencyMinDepthUsd ?? 0) < 0) {
+    config.dependencyMinDepthUsd = 0;
   }
   if ((config.arbRecheckBumpMs ?? 0) < 0) {
     config.arbRecheckBumpMs = 0;

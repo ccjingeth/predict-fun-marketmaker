@@ -147,6 +147,8 @@ const FIX_HINTS = {
   ARB_RECHECK_BUMP_MS: '预检失败增加复核间隔',
   ARB_RECHECK_BUMP_MAX_MS: '复核间隔最大增量',
   ARB_RECHECK_BUMP_RECOVER: '复核增量回撤系数',
+  DEPENDENCY_MIN_DEPTH_USD: '依赖套利最小深度（USD）',
+  DEPENDENCY_DEPTH_USAGE: '依赖套利深度使用比例（0-1）',
   PREDICT_WS_STALE_MS: '行情源过期阈值',
   MM_TOUCH_BUFFER_BPS: '盘口保护缓冲（越大越不易成交）',
   MM_FILL_RISK_SPREAD_BPS: '成交压力越高，自动放大价差',

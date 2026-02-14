@@ -376,6 +376,8 @@ export interface Config {
   dependencyMaxLegs?: number;
   dependencyMaxNotional?: number;
   dependencyMinDepth?: number;
+  dependencyMinDepthUsd?: number;
+  dependencyDepthUsage?: number;
   dependencyFeeBps?: number;
   dependencyFeeCurveRate?: number;
   dependencyFeeCurveExponent?: number;
