@@ -233,6 +233,8 @@ export interface Config {
   crossPlatformLegDeviationSpreadBps?: number;
   crossPlatformLegDepthUsageMax?: number;
   crossPlatformLegDepthRatioMin?: number;
+  crossPlatformLegDepthRatioSoft?: number;
+  crossPlatformLegDepthRatioShrinkMinFactor?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];

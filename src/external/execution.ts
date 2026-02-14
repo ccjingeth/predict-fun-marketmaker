@@ -2668,6 +2668,11 @@ export class CrossPlatformExecutionRouter {
       }
     }
 
+    const ratioShrink = await this.getLegDepthRatioShrinkFactor(adjustedLegs, cache);
+    if (ratioShrink !== null && ratioShrink < 1) {
+      adjustedLegs = adjustedLegs.map((leg) => ({ ...leg, shares: Math.max(1, leg.shares * ratioShrink) }));
+    }
+
     const usageCap = await this.getMaxLegDepthUsageShares(adjustedLegs, cache);
     if (usageCap !== null) {
       if (usageCap <= 0) {
@@ -2840,6 +2845,51 @@ export class CrossPlatformExecutionRouter {
       return null;
     }
     return cap;
+  }
+
+  private async getLegDepthRatioShrinkFactor(
+    legs: PlatformLeg[],
+    cache: Map<string, Promise<OrderbookSnapshot | null>>
+  ): Promise<number | null> {
+    const soft = Math.max(0, Math.min(1, this.config.crossPlatformLegDepthRatioSoft || 0));
+    if (!soft) {
+      return null;
+    }
+    const depthLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
+    let minDepth = Number.POSITIVE_INFINITY;
+    let maxDepth = 0;
+    let found = false;
+    for (const leg of legs) {
+      const book = await this.fetchOrderbook(leg, cache);
+      if (!book) {
+        continue;
+      }
+      const levels = leg.side === 'BUY' ? book.asks : book.bids;
+      const capped = depthLevels > 0 ? levels.slice(0, depthLevels) : levels;
+      const depthUsd = capped.reduce((sum, entry) => {
+        const price = Number(entry.price);
+        const shares = Number(entry.shares);
+        if (!Number.isFinite(price) || !Number.isFinite(shares) || price <= 0 || shares <= 0) {
+          return sum;
+        }
+        return sum + price * shares;
+      }, 0);
+      if (!Number.isFinite(depthUsd) || depthUsd <= 0) {
+        continue;
+      }
+      found = true;
+      minDepth = Math.min(minDepth, depthUsd);
+      maxDepth = Math.max(maxDepth, depthUsd);
+    }
+    if (!found || !Number.isFinite(minDepth) || !Number.isFinite(maxDepth) || maxDepth <= 0) {
+      return null;
+    }
+    const ratio = minDepth / maxDepth;
+    if (ratio >= soft) {
+      return 1;
+    }
+    const minFactor = Math.max(0.1, Math.min(1, this.config.crossPlatformLegDepthRatioShrinkMinFactor || 0.3));
+    return Math.max(minFactor, ratio / soft);
   }
 
   private async maybeRecheckPreflight(
