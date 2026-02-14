@@ -29,6 +29,12 @@ interface PlatformExecuteOptions {
   batch?: boolean;
 }
 
+interface PreflightResult {
+  maxDeviationBps: number;
+  maxDriftBps: number;
+  vwapByLeg?: Map<string, { avgAllIn: number; totalAllIn: number; filledShares: number }>;
+}
+
 class ExecutionAttemptError extends Error {
   hadSuccess: boolean;
   constructor(message: string, hadSuccess: boolean) {
@@ -647,7 +653,7 @@ export class CrossPlatformExecutionRouter {
     lastError: '',
   };
   private lastMetricsLogAt = 0;
-  private lastPreflight?: { maxDeviationBps: number; maxDriftBps: number };
+  private lastPreflight?: PreflightResult;
   private degradedUntil = 0;
   private degradedReason = '';
   private degradedAt = 0;
@@ -2428,9 +2434,10 @@ export class CrossPlatformExecutionRouter {
   private async preflightVwapWithCache(
     legs: PlatformLeg[],
     cache: Map<string, Promise<OrderbookSnapshot | null>>
-  ): Promise<{ maxDeviationBps: number; maxDriftBps: number }> {
+  ): Promise<PreflightResult> {
     let maxDeviationBps = 0;
     let maxDriftBps = 0;
+    const vwapByLeg = new Map<string, { avgAllIn: number; totalAllIn: number; filledShares: number }>();
     const extraDeviation =
       this.circuitFailures > 0 || this.isDegraded()
         ? Math.max(0, this.config.crossPlatformFailureVwapDeviationBps || 0)
@@ -2482,6 +2489,15 @@ export class CrossPlatformExecutionRouter {
 
       if (!vwap) {
         throw new Error(`Preflight failed: insufficient depth for ${leg.platform}:${leg.tokenId}`);
+      }
+
+      const legKey = `${leg.platform}:${leg.tokenId}:${leg.side}`;
+      if (Number.isFinite(vwap.avgAllIn) && Number.isFinite(vwap.totalAllIn)) {
+        vwapByLeg.set(legKey, {
+          avgAllIn: vwap.avgAllIn,
+          totalAllIn: vwap.totalAllIn,
+          filledShares: vwap.filledShares,
+        });
       }
       let maxLevels = this.config.crossPlatformMaxVwapLevels ?? 0;
       if ((this.circuitFailures > 0 || this.isDegraded()) && maxLevels > 0) {
@@ -2540,7 +2556,7 @@ export class CrossPlatformExecutionRouter {
     });
 
     await Promise.all(checks);
-    return { maxDeviationBps, maxDriftBps };
+    return { maxDeviationBps, maxDriftBps, vwapByLeg };
   }
 
   private async prepareLegs(legs: PlatformLeg[]): Promise<PlatformLeg[]> {
@@ -2730,17 +2746,28 @@ export class CrossPlatformExecutionRouter {
     let totalProceedsPerShare = 0;
     let hasBuy = false;
     let hasSell = false;
+    const vwapByLeg = this.lastPreflight?.vwapByLeg;
 
     for (const leg of legs) {
       const feeBps = this.getFeeBps(leg.platform);
       const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
       const fee = calcFeeCost(leg.price, feeBps, curveRate, curveExponent);
+      const legKey = `${leg.platform}:${leg.tokenId}:${leg.side}`;
+      const vwap = vwapByLeg?.get(legKey);
+      const useVwap =
+        vwap &&
+        Number.isFinite(vwap.avgAllIn) &&
+        Number.isFinite(vwap.filledShares) &&
+        vwap.filledShares > 0 &&
+        Math.abs(vwap.filledShares - leg.shares) / leg.shares < 0.01;
+      const unitAllIn = useVwap ? vwap.avgAllIn : leg.price + fee + leg.price * slippage;
+      const unitAllInSell = useVwap ? vwap.avgAllIn : leg.price - fee - leg.price * slippage;
       if (leg.side === 'BUY') {
         hasBuy = true;
-        totalCostPerShare += leg.price + fee + leg.price * slippage;
+        totalCostPerShare += unitAllIn;
       } else {
         hasSell = true;
-        totalProceedsPerShare += leg.price - fee - leg.price * slippage;
+        totalProceedsPerShare += unitAllInSell;
       }
     }
 
