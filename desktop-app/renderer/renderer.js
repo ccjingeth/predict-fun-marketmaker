@@ -917,6 +917,11 @@ function updateFailureCounts(line) {
   }
 }
 
+function recordHardGateEvent(reason) {
+  const message = String(reason || '硬门控触发');
+  updateFailureCounts(`hard gate: ${message}`);
+}
+
 function renderFailureTopN() {
   if (!healthFailureList) return;
   const entries = Array.from(failureCounts.entries())
@@ -3023,6 +3028,9 @@ async function loadMetrics() {
       consistencyFailureRate,
       consistencyHigh: consistencyFailureRate >= 25,
     };
+    if (metricsSnapshot.hardGateActiveUntil && metricsSnapshot.hardGateActiveUntil > Date.now()) {
+      recordHardGateEvent(metricsSnapshot.hardGateReason);
+    }
     if (applyConsistencyTemplateBtn) {
       const env = parseEnv(envEditor.value || '');
       const templateEnabled = String(env.get('CROSS_PLATFORM_CONSISTENCY_TEMPLATE_ENABLED') || '').toLowerCase() === 'true';
