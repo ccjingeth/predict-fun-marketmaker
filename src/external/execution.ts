@@ -672,6 +672,8 @@ export class CrossPlatformExecutionRouter {
   private consistencyRateLimitUntil = 0;
   private consistencyCooldownUntil = 0;
   private lastAvoidAlertHour = -1;
+  private wsHealthScore = 100;
+  private wsHealthTightenFactor = 1;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -2255,13 +2257,33 @@ export class CrossPlatformExecutionRouter {
     this.qualityScore = Math.max(minFactor, this.qualityScore - down * Math.max(0, multiplier));
   }
 
+  setWsHealthScore(score: number): void {
+    if (!Number.isFinite(score)) {
+      return;
+    }
+    this.wsHealthScore = Math.max(0, Math.min(100, Number(score)));
+    this.wsHealthTightenFactor = this.computeWsHealthTightenFactor();
+  }
+
+  private computeWsHealthTightenFactor(): number {
+    const maxTighten = Math.max(1, this.config.crossPlatformWsHealthTightenMax || 1);
+    if (maxTighten <= 1) {
+      return 1;
+    }
+    const ratio = Math.max(0, Math.min(1, 1 - this.wsHealthScore / 100));
+    const tighten = 1 + ratio * (maxTighten - 1);
+    return 1 / tighten;
+  }
+
   private getAutoTuneFactor(): number {
     if (this.config.crossPlatformAutoTune === false) {
       return 1;
     }
     const minFactor = Math.max(0.1, this.config.crossPlatformAutoTuneMinFactor || 0.5);
     const maxFactor = Math.max(minFactor, this.config.crossPlatformAutoTuneMaxFactor || 1.2);
-    return Math.max(minFactor, Math.min(maxFactor, this.qualityScore));
+    const base = Math.max(minFactor, Math.min(maxFactor, this.qualityScore));
+    const tightened = base * (this.wsHealthTightenFactor || 1);
+    return Math.max(0.1, Math.min(maxFactor, tightened));
   }
 
   private classifyFailure(error: any): 'preflight' | 'execution' | 'postTrade' | 'hedge' | 'unknown' {
@@ -2539,6 +2561,8 @@ export class CrossPlatformExecutionRouter {
       consistencyTemplateFactor: this.consistencyTemplateTightenFactor,
       consistencyRateLimitUntil: this.consistencyRateLimitUntil,
       consistencyCooldownUntil: this.consistencyCooldownUntil,
+      wsHealthScore: this.wsHealthScore,
+      wsHealthTightenFactor: this.wsHealthTightenFactor,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2562,6 +2586,8 @@ export class CrossPlatformExecutionRouter {
       consistencyTemplateFactor: this.consistencyTemplateTightenFactor,
       consistencyRateLimitUntil: this.consistencyRateLimitUntil,
       consistencyCooldownUntil: this.consistencyCooldownUntil,
+      wsHealthScore: this.wsHealthScore,
+      wsHealthTightenFactor: this.wsHealthTightenFactor,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2668,6 +2694,10 @@ export class CrossPlatformExecutionRouter {
     }
     if (Number.isFinite(data?.consistencyCooldownUntil)) {
       this.consistencyCooldownUntil = Number(data.consistencyCooldownUntil);
+    }
+    if (Number.isFinite(data?.wsHealthScore)) {
+      this.wsHealthScore = Math.max(0, Math.min(100, Number(data.wsHealthScore)));
+      this.wsHealthTightenFactor = this.computeWsHealthTightenFactor();
     }
 
     const platformSet = new Set<ExternalPlatform>(['Predict', 'Polymarket', 'Opinion']);

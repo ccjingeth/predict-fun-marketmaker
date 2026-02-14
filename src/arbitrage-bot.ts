@@ -38,6 +38,7 @@ class ArbitrageBot {
   private wsHealthTimer?: NodeJS.Timeout;
   private wsHealthWarned = false;
   private wsHealthPenaltyUntil = 0;
+  private lastCrossWsHealthScore = 100;
   private oppStability: Map<string, { count: number; lastSeen: number }> = new Map();
   private wsDirtyTokens: Set<string> = new Set();
   private wsRealtimeTimer?: NodeJS.Timeout;
@@ -430,6 +431,7 @@ class ArbitrageBot {
       shares: leg.shares > 0 ? leg.shares : this.config.orderSize || 50,
     }));
 
+    this.crossExecutionRouter.setWsHealthScore(this.lastCrossWsHealthScore);
     await this.crossExecutionRouter.execute(sized);
   }
 
@@ -998,9 +1000,7 @@ class ArbitrageBot {
         this.applyWsHealthPenalty(now);
         return false;
       }
-      if (minScore > 0) {
-        scores.push(this.calcWsHealthScore(poly.lastMessageAt, maxAge, now));
-      }
+      scores.push(this.calcWsHealthScore(poly.lastMessageAt, maxAge, now));
     }
     if (this.config.opinionWsEnabled) {
       const opn = status.opinion;
@@ -1012,16 +1012,17 @@ class ArbitrageBot {
         this.applyWsHealthPenalty(now);
         return false;
       }
-      if (minScore > 0) {
-        scores.push(this.calcWsHealthScore(opn.lastMessageAt, maxAge, now));
-      }
+      scores.push(this.calcWsHealthScore(opn.lastMessageAt, maxAge, now));
     }
-    if (minScore > 0 && scores.length > 0) {
+    if (scores.length > 0) {
       const score = Math.min(...scores);
-      if (score < minScore) {
+      this.lastCrossWsHealthScore = score;
+      if (minScore > 0 && score < minScore) {
         this.applyWsHealthPenalty(now);
         return false;
       }
+    } else {
+      this.lastCrossWsHealthScore = 100;
     }
     return true;
   }

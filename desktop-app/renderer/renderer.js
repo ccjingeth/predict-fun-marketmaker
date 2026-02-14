@@ -40,6 +40,8 @@ const metricAvoidHours = document.getElementById('metricAvoidHours');
 const metricAvoidMode = document.getElementById('metricAvoidMode');
 const metricAvoidSeverity = document.getElementById('metricAvoidSeverity');
 const metricAvoidDecay = document.getElementById('metricAvoidDecay');
+const metricWsHealthScore = document.getElementById('metricWsHealthScore');
+const metricWsHealthTighten = document.getElementById('metricWsHealthTighten');
 const metricConsistencyCooldown = document.getElementById('metricConsistencyCooldown');
 let lastAutoAvoidHours = '';
 let autoDisabledCrossPlatform = false;
@@ -2827,6 +2829,15 @@ async function loadMetrics() {
       const factor = getAvoidTemplateFactorForSeverity(severity.level);
       const suffix = score > 0 ? ` (${formatNumber(score, 2)})` : '';
       metricAvoidSeverity.textContent = `${severity.level}${suffix} / x${formatNumber(factor, 2)}`;
+    }
+    if (metricWsHealthScore) {
+      const score = Number(data.wsHealthScore);
+      metricWsHealthScore.textContent = Number.isFinite(score) ? `${Math.round(score)}` : '--';
+    }
+    if (metricWsHealthTighten) {
+      const tighten = Number(data.wsHealthTightenFactor);
+      metricWsHealthTighten.textContent =
+        Number.isFinite(tighten) && tighten > 0 ? `x${formatNumber(1 / tighten, 2)}` : '--';
     }
     if (metricAvoidDecay) {
       const env = parseEnv(envEditor.value || '');

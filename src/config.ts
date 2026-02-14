@@ -365,6 +365,9 @@ export function loadConfig(): Config {
     crossPlatformAvoidHoursTemplateFactor: parseFloat(
       process.env.CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_FACTOR || '1.2'
     ),
+    crossPlatformWsHealthTightenMax: parseFloat(
+      process.env.CROSS_PLATFORM_WS_HEALTH_TIGHTEN_MAX || '1.5'
+    ),
     crossPlatformConsistencyCooldownMs: parseInt(process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_MS || '0'),
     crossPlatformConsistencyCooldownThreshold: parseInt(
       process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_THRESHOLD || '0'
