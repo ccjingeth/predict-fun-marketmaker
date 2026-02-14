@@ -2238,6 +2238,7 @@ export class CrossPlatformExecutionRouter {
     const minFactor = Math.max(0.2, this.config.crossPlatformConsistencyTemplateTightenMin || 0.5);
     const maxFactor = Math.max(1, this.config.crossPlatformConsistencyTemplateTightenMax || 2.5);
     let factor = this.consistencyTemplateTightenFactor;
+    factor *= this.getConsistencyPressureFactor();
     const avoid = this.isAvoidHourActive();
     if (avoid.active && avoid.mode === 'TEMPLATE') {
       const avoidFactor = Math.max(1, this.config.crossPlatformAvoidHoursTemplateFactor || 1);
@@ -2297,6 +2298,7 @@ export class CrossPlatformExecutionRouter {
     }
     this.lastConsistencyPressureAt = now;
     this.applyConsistencyPressureCooldown(now);
+    this.applyConsistencyPressureDegrade(now);
   }
 
   private relaxConsistencyPressure(now: number): void {
@@ -2322,6 +2324,15 @@ export class CrossPlatformExecutionRouter {
     return 1 + pressure * (maxTighten - 1);
   }
 
+  private getConsistencyPressureSizeFactor(now: number = Date.now()): number {
+    const minFactor = Math.max(0.05, Math.min(1, this.config.crossPlatformConsistencyPressureSizeMin || 1));
+    if (minFactor >= 1) {
+      return 1;
+    }
+    const pressure = this.getConsistencyPressure(now);
+    return 1 - pressure * (1 - minFactor);
+  }
+
   private getConsistencyPressureRetryDelay(now: number = Date.now()): number {
     const maxExtra = Math.max(0, this.config.crossPlatformConsistencyPressureRetryDelayMs || 0);
     if (!maxExtra) {
@@ -2343,6 +2354,33 @@ export class CrossPlatformExecutionRouter {
     const extra = Math.round(maxExtra * pressure);
     if (extra > 0) {
       this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + extra);
+    }
+  }
+
+  private applyConsistencyPressureDegrade(now: number): void {
+    const threshold = Math.max(0, Math.min(1, this.config.crossPlatformConsistencyPressureDegradeThreshold || 0));
+    if (!threshold) {
+      return;
+    }
+    if (this.getConsistencyPressure(now) < threshold) {
+      return;
+    }
+    const duration = Math.max(0, this.config.crossPlatformConsistencyPressureDegradeMs || 0);
+    if (!duration) {
+      return;
+    }
+    const useDegrade = this.config.crossPlatformConsistencyPressureUseDegradeProfile !== false;
+    if (useDegrade) {
+      this.degradedUntil = Math.max(this.degradedUntil, now + duration);
+      this.degradedReason = this.degradedReason || 'consistency-pressure';
+      if (!this.degradedAt) {
+        this.degradedAt = now;
+      }
+    } else {
+      this.consistencyOverrideUntil = Math.max(this.consistencyOverrideUntil, now + duration);
+    }
+    if (this.config.crossPlatformConsistencyTemplateEnabled) {
+      this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, now + duration);
     }
   }
 
@@ -3182,6 +3220,11 @@ export class CrossPlatformExecutionRouter {
       if (usageCap < target) {
         adjustedLegs = adjustedLegs.map((leg) => ({ ...leg, shares: usageCap }));
       }
+    }
+
+    const pressureFactor = this.getConsistencyPressureSizeFactor();
+    if (pressureFactor < 1) {
+      adjustedLegs = adjustedLegs.map((leg) => ({ ...leg, shares: leg.shares * pressureFactor }));
     }
 
     const notionalCap = this.config.crossPlatformMaxNotional ?? 0;

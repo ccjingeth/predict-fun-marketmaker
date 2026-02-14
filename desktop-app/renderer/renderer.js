@@ -38,6 +38,7 @@ const metricConsistencyRateLimit = document.getElementById('metricConsistencyRat
 const metricConsistencyTighten = document.getElementById('metricConsistencyTighten');
 const metricConsistencyPressure = document.getElementById('metricConsistencyPressure');
 const metricConsistencyPenalty = document.getElementById('metricConsistencyPenalty');
+const metricConsistencySize = document.getElementById('metricConsistencySize');
 const metricAvoidHours = document.getElementById('metricAvoidHours');
 const metricAvoidMode = document.getElementById('metricAvoidMode');
 const metricAvoidSeverity = document.getElementById('metricAvoidSeverity');
@@ -2835,6 +2836,15 @@ async function loadMetrics() {
       metricConsistencyPressure.textContent = Number.isFinite(pressure)
         ? `${formatNumber(pressure, 2)}`
         : '未触发';
+    }
+    if (metricConsistencySize) {
+      const pressure = Number(data.consistencyPressure || 0);
+      const minFactor = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_CONSISTENCY_PRESSURE_SIZE_MIN') || 1);
+      const factor =
+        Number.isFinite(pressure) && Number.isFinite(minFactor)
+          ? 1 - Math.max(0, Math.min(1, pressure)) * (1 - Math.max(0.05, Math.min(1, minFactor)))
+          : 1;
+      metricConsistencySize.textContent = `x${formatNumber(factor, 2)}`;
     }
     if (metricConsistencyPenalty) {
       const pressure = Number(data.consistencyPressure || 0);

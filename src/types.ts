@@ -292,6 +292,10 @@ export interface Config {
   crossPlatformConsistencyPressureTightenMax?: number;
   crossPlatformConsistencyPressureRetryDelayMs?: number;
   crossPlatformConsistencyPressureCooldownMaxMs?: number;
+  crossPlatformConsistencyPressureSizeMin?: number;
+  crossPlatformConsistencyPressureDegradeThreshold?: number;
+  crossPlatformConsistencyPressureDegradeMs?: number;
+  crossPlatformConsistencyPressureUseDegradeProfile?: boolean;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
