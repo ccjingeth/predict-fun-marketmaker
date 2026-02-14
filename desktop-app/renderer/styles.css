@@ -168,6 +168,13 @@ body::after {
   margin-top: 10px;
 }
 
+.template-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .btn {
   border: none;
   cursor: pointer;

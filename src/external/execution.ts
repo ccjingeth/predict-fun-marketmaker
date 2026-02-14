@@ -1915,6 +1915,13 @@ export class CrossPlatformExecutionRouter {
           ? ((vwap.avgPrice - limit) / limit) * 10000
           : ((limit - vwap.avgPrice) / limit) * 10000;
 
+      const softThreshold = Math.max(0, (this.config.crossPlatformLegDeviationSoftBps || 0) * this.getAutoTuneFactor());
+      if (softThreshold > 0 && deviationBps > softThreshold) {
+        throw new Error(
+          `Preflight soft block: VWAP deviates ${deviationBps.toFixed(1)} bps (soft ${softThreshold}) for ${leg.platform}:${leg.tokenId}`
+        );
+      }
+
       const maxDeviation = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor());
       if (deviationBps > maxDeviation) {
         throw new Error(

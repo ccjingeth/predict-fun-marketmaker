@@ -223,6 +223,7 @@ export function loadConfig(): Config {
     crossPlatformLegDriftSpreadBps: parseInt(process.env.CROSS_PLATFORM_LEG_DRIFT_SPREAD_BPS || '0'),
     crossPlatformLegVwapDeviationBps: parseInt(process.env.CROSS_PLATFORM_LEG_VWAP_DEVIATION_BPS || '0'),
     crossPlatformLegMinDepthUsd: parseFloat(process.env.CROSS_PLATFORM_LEG_MIN_DEPTH_USD || '0'),
+    crossPlatformLegDeviationSoftBps: parseInt(process.env.CROSS_PLATFORM_LEG_DEVIATION_SOFT_BPS || '0'),
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),

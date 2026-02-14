@@ -198,6 +198,7 @@ export interface Config {
   crossPlatformLegDriftSpreadBps?: number;
   crossPlatformLegVwapDeviationBps?: number;
   crossPlatformLegMinDepthUsd?: number;
+  crossPlatformLegDeviationSoftBps?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
