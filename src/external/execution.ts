@@ -674,6 +674,8 @@ export class CrossPlatformExecutionRouter {
   private lastAvoidAlertHour = -1;
   private wsHealthScore = 100;
   private wsHealthTightenFactor = 1;
+  private wsHealthChunkDelayExtraMs = 0;
+  private wsHealthChunkFactor = 1;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -1600,6 +1602,7 @@ export class CrossPlatformExecutionRouter {
         factor *= template / this.getConsistencyTemplateFactor();
       }
     }
+    factor *= this.wsHealthChunkFactor || 1;
     return Math.max(0.05, factor);
   }
 
@@ -1611,9 +1614,9 @@ export class CrossPlatformExecutionRouter {
     }
     if (this.isConsistencyTemplateActive()) {
       const extra = Math.max(0, this.config.crossPlatformConsistencyTemplateChunkDelayMs || 0);
-      return base + extra * this.getConsistencyTemplateFactor();
+      return base + extra * this.getConsistencyTemplateFactor() + (this.wsHealthChunkDelayExtraMs || 0);
     }
-    return base;
+    return base + (this.wsHealthChunkDelayExtraMs || 0);
   }
 
   private assertCircuitHealthy(): void {
@@ -2263,6 +2266,8 @@ export class CrossPlatformExecutionRouter {
     }
     this.wsHealthScore = Math.max(0, Math.min(100, Number(score)));
     this.wsHealthTightenFactor = this.computeWsHealthTightenFactor();
+    this.wsHealthChunkDelayExtraMs = this.computeWsHealthChunkDelayExtra();
+    this.wsHealthChunkFactor = this.computeWsHealthChunkFactor();
   }
 
   private computeWsHealthTightenFactor(): number {
@@ -2273,6 +2278,24 @@ export class CrossPlatformExecutionRouter {
     const ratio = Math.max(0, Math.min(1, 1 - this.wsHealthScore / 100));
     const tighten = 1 + ratio * (maxTighten - 1);
     return 1 / tighten;
+  }
+
+  private computeWsHealthChunkDelayExtra(): number {
+    const maxExtra = Math.max(0, this.config.crossPlatformWsHealthChunkDelayMaxMs || 0);
+    if (maxExtra <= 0) {
+      return 0;
+    }
+    const ratio = Math.max(0, Math.min(1, 1 - this.wsHealthScore / 100));
+    return Math.round(maxExtra * ratio);
+  }
+
+  private computeWsHealthChunkFactor(): number {
+    const minFactor = Math.max(0.05, Math.min(1, this.config.crossPlatformWsHealthChunkFactorMin || 1));
+    if (minFactor >= 1) {
+      return 1;
+    }
+    const ratio = Math.max(0, Math.min(1, 1 - this.wsHealthScore / 100));
+    return 1 - ratio * (1 - minFactor);
   }
 
   private getAutoTuneFactor(): number {
@@ -2563,6 +2586,8 @@ export class CrossPlatformExecutionRouter {
       consistencyCooldownUntil: this.consistencyCooldownUntil,
       wsHealthScore: this.wsHealthScore,
       wsHealthTightenFactor: this.wsHealthTightenFactor,
+      wsHealthChunkDelayExtraMs: this.wsHealthChunkDelayExtraMs,
+      wsHealthChunkFactor: this.wsHealthChunkFactor,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2588,6 +2613,8 @@ export class CrossPlatformExecutionRouter {
       consistencyCooldownUntil: this.consistencyCooldownUntil,
       wsHealthScore: this.wsHealthScore,
       wsHealthTightenFactor: this.wsHealthTightenFactor,
+      wsHealthChunkDelayExtraMs: this.wsHealthChunkDelayExtraMs,
+      wsHealthChunkFactor: this.wsHealthChunkFactor,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2698,6 +2725,8 @@ export class CrossPlatformExecutionRouter {
     if (Number.isFinite(data?.wsHealthScore)) {
       this.wsHealthScore = Math.max(0, Math.min(100, Number(data.wsHealthScore)));
       this.wsHealthTightenFactor = this.computeWsHealthTightenFactor();
+      this.wsHealthChunkDelayExtraMs = this.computeWsHealthChunkDelayExtra();
+      this.wsHealthChunkFactor = this.computeWsHealthChunkFactor();
     }
 
     const platformSet = new Set<ExternalPlatform>(['Predict', 'Polymarket', 'Opinion']);

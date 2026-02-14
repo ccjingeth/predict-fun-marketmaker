@@ -281,6 +281,8 @@ export interface Config {
   crossPlatformAvoidHoursTemplateScore?: number;
   crossPlatformAvoidHoursTemplateFactor?: number;
   crossPlatformWsHealthTightenMax?: number;
+  crossPlatformWsHealthChunkDelayMaxMs?: number;
+  crossPlatformWsHealthChunkFactorMin?: number;
   crossPlatformConsistencyCooldownMs?: number;
   crossPlatformConsistencyCooldownThreshold?: number;
   crossPlatformConsistencyCooldownWindowMs?: number;

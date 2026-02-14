@@ -368,6 +368,12 @@ export function loadConfig(): Config {
     crossPlatformWsHealthTightenMax: parseFloat(
       process.env.CROSS_PLATFORM_WS_HEALTH_TIGHTEN_MAX || '1.5'
     ),
+    crossPlatformWsHealthChunkDelayMaxMs: parseInt(
+      process.env.CROSS_PLATFORM_WS_HEALTH_CHUNK_DELAY_MAX_MS || '600'
+    ),
+    crossPlatformWsHealthChunkFactorMin: parseFloat(
+      process.env.CROSS_PLATFORM_WS_HEALTH_CHUNK_FACTOR_MIN || '0.7'
+    ),
     crossPlatformConsistencyCooldownMs: parseInt(process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_MS || '0'),
     crossPlatformConsistencyCooldownThreshold: parseInt(
       process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_THRESHOLD || '0'
