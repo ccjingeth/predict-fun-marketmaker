@@ -59,6 +59,7 @@ const metricRiskBar = document.getElementById('metricRiskBar');
 const chartSuccess = document.getElementById('chartSuccess');
 const chartDrift = document.getElementById('chartDrift');
 const chartRisk = document.getElementById('chartRisk');
+const metricFailureReasons = document.getElementById('metricFailureReasons');
 const metricAlertsList = document.getElementById('metricAlertsList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
 const healthStatus = document.getElementById('healthStatus');
@@ -654,6 +655,40 @@ function renderFailureTopN() {
     row.appendChild(button);
     healthFailureList.appendChild(row);
   });
+}
+
+function renderMetricFailureReasons(reasons) {
+  if (!metricFailureReasons) return;
+  metricFailureReasons.innerHTML = '';
+  if (!reasons) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无数据。';
+    metricFailureReasons.appendChild(item);
+    return;
+  }
+  const entries = Object.entries(reasons).filter(([, v]) => Number(v) > 0);
+  if (!entries.length) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无失败记录。';
+    metricFailureReasons.appendChild(item);
+    return;
+  }
+  const sorted = entries.sort((a, b) => Number(b[1]) - Number(a[1]));
+  for (const [key, value] of sorted) {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = key;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.textContent = `${value} 次`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    metricFailureReasons.appendChild(row);
+  }
 }
 
 async function copyFailures() {
@@ -1428,6 +1463,7 @@ async function loadMetrics() {
     );
     setMetricText(metricLastError, metrics.lastError || '无');
     setMetricText(metricUpdatedAt, formatTimestamp(updatedAt));
+    renderMetricFailureReasons(metrics.failureReasons);
 
     if (updatedAt && successRate >= 0) {
       const last = metricsHistory[metricsHistory.length - 1];
