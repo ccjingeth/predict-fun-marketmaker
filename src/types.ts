@@ -253,6 +253,10 @@ export interface Config {
   crossPlatformHedgeSlippageBps?: number;
   crossPlatformHedgeMinProfitUsd?: number;
   crossPlatformHedgeMinEdge?: number;
+  crossPlatformPostTradeHedge?: boolean;
+  crossPlatformPostTradeHedgeMaxShares?: number;
+  crossPlatformPostTradeHedgeForce?: boolean;
+  crossPlatformPostTradeHedgeSlippageBps?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;

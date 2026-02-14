@@ -278,6 +278,12 @@ export function loadConfig(): Config {
     crossPlatformHedgeSlippageBps: parseInt(process.env.CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS || '400'),
     crossPlatformHedgeMinProfitUsd: parseFloat(process.env.CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD || '0'),
     crossPlatformHedgeMinEdge: parseFloat(process.env.CROSS_PLATFORM_HEDGE_MIN_EDGE || '0'),
+    crossPlatformPostTradeHedge: process.env.CROSS_PLATFORM_POST_TRADE_HEDGE === 'true',
+    crossPlatformPostTradeHedgeMaxShares: parseFloat(process.env.CROSS_PLATFORM_POST_TRADE_HEDGE_MAX_SHARES || '0'),
+    crossPlatformPostTradeHedgeForce: process.env.CROSS_PLATFORM_POST_TRADE_HEDGE_FORCE === 'true',
+    crossPlatformPostTradeHedgeSlippageBps: parseInt(
+      process.env.CROSS_PLATFORM_POST_TRADE_HEDGE_SLIPPAGE_BPS || '0'
+    ),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),

@@ -867,7 +867,8 @@ export class CrossPlatformExecutionRouter {
       const chunk = chunks[i];
       if (chunkPreflight) {
         const cache = new Map<string, Promise<OrderbookSnapshot | null>>();
-        await this.preflightVwapWithCache(chunk, cache);
+        const preflight = await this.preflightVwapWithCache(chunk, cache);
+        this.lastPreflight = preflight;
         this.assertMinNotionalAndProfit(chunk);
       }
       const results = await this.executeOnce(chunk);
@@ -877,6 +878,11 @@ export class CrossPlatformExecutionRouter {
       this.mergeLegs(penalizedLegs, post.penalizedLegs);
       this.mergeLegs(spreadPenalizedLegs, post.spreadPenalizedLegs);
       post.penalizedTokenIds.forEach((id) => penalizedTokenIds.add(id));
+      if (post.penalizedLegs.length > 0) {
+        this.adjustChunkFactor(false);
+        this.adjustChunkDelay(false);
+        await this.hedgeOnPostTrade(post.penalizedLegs);
+      }
       const abortBps = Math.max(0, this.config.crossPlatformAbortPostTradeDriftBps || 0);
       if (abortBps > 0 && post.maxDriftBps >= abortBps) {
         const cooldown = Math.max(0, this.config.crossPlatformAbortCooldownMs || 0);
@@ -896,6 +902,53 @@ export class CrossPlatformExecutionRouter {
     }
 
     return { postTrade: { maxDriftBps, penalizedLegs, penalizedTokenIds, spreadPenalizedLegs } };
+  }
+
+  private async hedgeOnPostTrade(legs: PlatformLeg[]): Promise<void> {
+    if (!this.config.crossPlatformPostTradeHedge) {
+      return;
+    }
+    if (!legs.length) {
+      return;
+    }
+    const slippage =
+      (this.config.crossPlatformPostTradeHedgeSlippageBps && this.config.crossPlatformPostTradeHedgeSlippageBps > 0)
+        ? this.config.crossPlatformPostTradeHedgeSlippageBps
+        : this.config.crossPlatformHedgeSlippageBps || this.getSlippageBps() || 400;
+    const minProfitUsd = Math.max(0, this.config.crossPlatformHedgeMinProfitUsd || 0);
+    const minEdge = Math.max(0, this.config.crossPlatformHedgeMinEdge || 0);
+    const maxShares = Math.max(0, this.config.crossPlatformPostTradeHedgeMaxShares || 0);
+    const force = this.config.crossPlatformPostTradeHedgeForce === true;
+
+    const grouped = new Map<ExternalPlatform, PlatformLeg[]>();
+    for (const leg of legs) {
+      const platform = leg.platform;
+      if (!platform) continue;
+      if (this.config.crossPlatformHedgePredictOnly && platform !== 'Predict') {
+        continue;
+      }
+      const sized = maxShares > 0 ? { ...leg, shares: Math.min(leg.shares, maxShares) } : leg;
+      if (!grouped.has(platform)) {
+        grouped.set(platform, []);
+      }
+      grouped.get(platform)!.push(sized);
+    }
+
+    const hedgePromises: Promise<void>[] = [];
+    for (const [platform, legsForPlatform] of grouped.entries()) {
+      const executor = this.executors.get(platform);
+      if (!executor || !executor.hedgeLegs) {
+        continue;
+      }
+      if (!force && !this.shouldHedgeLegs(legsForPlatform, minProfitUsd, minEdge, slippage)) {
+        continue;
+      }
+      hedgePromises.push(executor.hedgeLegs(legsForPlatform, slippage));
+    }
+
+    if (hedgePromises.length > 0) {
+      await Promise.allSettled(hedgePromises);
+    }
   }
 
   private splitLegsIntoChunks(legs: PlatformLeg[]): PlatformLeg[][] {
