@@ -33,6 +33,7 @@ export interface MultiOutcomeConfig {
   minNotionalUsd: number;
   minProfitUsd: number;
   maxVwapDeviationBps: number;
+  recheckDeviationBps: number;
 }
 
 export class MultiOutcomeArbitrageDetector {
@@ -49,6 +50,7 @@ export class MultiOutcomeArbitrageDetector {
       minNotionalUsd: 0,
       minProfitUsd: 0,
       maxVwapDeviationBps: 0,
+      recheckDeviationBps: 60,
       ...config,
     };
     this.config.depthUsage = Math.max(0.05, Math.min(1, this.config.depthUsage));
@@ -172,11 +174,16 @@ export class MultiOutcomeArbitrageDetector {
           usable = false;
           break;
         }
-        if (this.config.maxVwapDeviationBps > 0) {
+        if (this.config.maxVwapDeviationBps > 0 || this.config.recheckDeviationBps > 0) {
           const ask = book?.best_ask ?? 0;
           if (ask > 0) {
             const maxDev = this.config.maxVwapDeviationBps / 10000;
-            if (fill.avgPrice > ask * (1 + maxDev)) {
+            const recheckDev = this.config.recheckDeviationBps / 10000;
+            if (maxDev > 0 && fill.avgPrice > ask * (1 + maxDev)) {
+              usable = false;
+              break;
+            }
+            if (recheckDev > 0 && fill.avgPrice > ask * (1 + recheckDev)) {
               usable = false;
               break;
             }

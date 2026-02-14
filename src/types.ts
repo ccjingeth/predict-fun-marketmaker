@@ -306,6 +306,7 @@ export interface Config {
   arbMinNotionalUsd?: number;
   arbMinProfitUsd?: number;
   arbMaxVwapDeviationBps?: number;
+  arbRecheckDeviationBps?: number;
   arbStabilityRequired?: boolean;
   arbStabilityMinCount?: number;
   arbStabilityWindowMs?: number;

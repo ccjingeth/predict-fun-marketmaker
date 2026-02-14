@@ -331,6 +331,7 @@ export function loadConfig(): Config {
     arbMinNotionalUsd: parseFloat(process.env.ARB_MIN_NOTIONAL_USD || '0'),
     arbMinProfitUsd: parseFloat(process.env.ARB_MIN_PROFIT_USD || '0'),
     arbMaxVwapDeviationBps: parseFloat(process.env.ARB_MAX_VWAP_DEVIATION_BPS || '0'),
+    arbRecheckDeviationBps: parseFloat(process.env.ARB_RECHECK_DEVIATION_BPS || '60'),
     arbStabilityRequired: process.env.ARB_STABILITY_REQUIRED !== 'false',
     arbStabilityMinCount: parseInt(process.env.ARB_STABILITY_MIN_COUNT || '2'),
     arbStabilityWindowMs: parseInt(process.env.ARB_STABILITY_WINDOW_MS || '2000'),

@@ -163,6 +163,7 @@
 - `ARB_MARKETS_CACHE_MS`：市场列表缓存。
 - `ARB_WS_MAX_AGE_MS`：WS 数据最大允许延迟。
 - `ARB_MAX_VWAP_DEVIATION_BPS`：VWAP 与盘口最优价的最大偏离（bps，防止低流动性误判）。
+- `ARB_RECHECK_DEVIATION_BPS`：VWAP 偏离超过该阈值时要求二次确认（bps）。
 - `ARB_REQUIRE_WS`：仅使用 WS 数据（不回落 REST）。
 
 ## 5. 自动执行熔断

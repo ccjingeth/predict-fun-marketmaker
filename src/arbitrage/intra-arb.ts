@@ -18,6 +18,7 @@ export class InPlatformArbitrageDetector {
   private minNotionalUsd: number;
   private minProfitUsd: number;
   private maxVwapDeviationBps: number;
+  private recheckDeviationBps: number;
 
   constructor(
     minProfitThreshold: number = 0.02,
@@ -28,7 +29,8 @@ export class InPlatformArbitrageDetector {
     depthUsage: number = 0.6,
     minNotionalUsd: number = 0,
     minProfitUsd: number = 0,
-    maxVwapDeviationBps: number = 0
+    maxVwapDeviationBps: number = 0,
+    recheckDeviationBps: number = 60
   ) {
     this.minProfitThreshold = minProfitThreshold;
     this.estimatedFee = estimatedFee;
@@ -39,6 +41,7 @@ export class InPlatformArbitrageDetector {
     this.minNotionalUsd = Math.max(0, minNotionalUsd);
     this.minProfitUsd = Math.max(0, minProfitUsd);
     this.maxVwapDeviationBps = Math.max(0, maxVwapDeviationBps);
+    this.recheckDeviationBps = Math.max(0, recheckDeviationBps);
   }
 
 
@@ -107,8 +110,10 @@ export class InPlatformArbitrageDetector {
       sellSize
     );
 
-    if (this.maxVwapDeviationBps > 0) {
+    const recheckBps = this.recheckDeviationBps;
+    if (this.maxVwapDeviationBps > 0 || recheckBps > 0) {
       const maxDev = this.maxVwapDeviationBps / 10000;
+      const recheckDev = recheckBps / 10000;
       if (buyCandidate) {
         const buyTooDeep =
           buyCandidate.yes.avgPrice > yesTop.ask * (1 + maxDev) ||
@@ -123,6 +128,24 @@ export class InPlatformArbitrageDetector {
           sellCandidate.no.avgPrice < noTop.bid * (1 - maxDev);
         if (sellTooDeep) {
           sellCandidate = null;
+        }
+      }
+      if (recheckDev > 0) {
+        if (buyCandidate) {
+          const needsRecheck =
+            buyCandidate.yes.avgPrice > yesTop.ask * (1 + recheckDev) ||
+            buyCandidate.no.avgPrice > noTop.ask * (1 + recheckDev);
+          if (needsRecheck) {
+            return null;
+          }
+        }
+        if (sellCandidate) {
+          const needsRecheck =
+            sellCandidate.yes.avgPrice < yesTop.bid * (1 - recheckDev) ||
+            sellCandidate.no.avgPrice < noTop.bid * (1 - recheckDev);
+          if (needsRecheck) {
+            return null;
+          }
         }
       }
     }
