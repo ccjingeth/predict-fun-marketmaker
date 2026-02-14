@@ -19,6 +19,8 @@ const metricsStatus = document.getElementById('metricsStatus');
 const metricSuccessRate = document.getElementById('metricSuccessRate');
 const metricSuccessRaw = document.getElementById('metricSuccessRaw');
 const metricFailureRate = document.getElementById('metricFailureRate');
+const metricPreflightRate = document.getElementById('metricPreflightRate');
+const metricPostFailRate = document.getElementById('metricPostFailRate');
 const metricAttempts = document.getElementById('metricAttempts');
 const metricPreflight = document.getElementById('metricPreflight');
 const metricExec = document.getElementById('metricExec');
@@ -1224,6 +1226,15 @@ function renderAdvice(items, metricsSnapshot) {
     if (metricsSnapshot.successRate < 60) {
       advice.push('成功率偏低：建议提高 VWAP 保护或减小下单量。');
     }
+    if (metricsSnapshot.failureRate > 40) {
+      advice.push('失败率偏高：建议提高稳定窗口、缩小深度使用并启用更严格预检。');
+    }
+    if (metricsSnapshot.preflightFailRate > 20) {
+      advice.push('预检失败率偏高：建议校验映射表、提高最小利润门槛。');
+    }
+    if (metricsSnapshot.postFailRate > 10) {
+      advice.push('成交后失败率偏高：建议提高 post-trade drift 阈值或降低执行并发。');
+    }
     if (metricsSnapshot.postTradeDriftBps > metricsSnapshot.driftLimit) {
       advice.push('Post-trade drift 偏高：建议加大分块/缩小深度使用。');
     }
@@ -1512,6 +1523,8 @@ async function loadMetrics() {
     setMetricText(metricSuccessRate, `${formatNumber(successRate, 1)}%`);
     setMetricText(metricSuccessRaw, `${successes}/${attempts} 成功`);
     setMetricText(metricFailureRate, `${formatNumber(failureRate, 1)}%`);
+    setMetricText(metricPreflightRate, `${formatNumber(preflightFailRate, 1)}%`);
+    setMetricText(metricPostFailRate, `${formatNumber(postFailRate, 1)}%`);
     setMetricText(metricAttempts, `${attempts}`);
     setMetricText(metricPreflight, formatMs(metrics.emaPreflightMs));
     setMetricText(metricExec, formatMs(metrics.emaExecMs));
