@@ -1882,6 +1882,13 @@ function getAvoidSeverity(score) {
   return { level: '低', tone: 'ok' };
 }
 
+function getAvoidTemplateFactorForSeverity(severityLevel) {
+  if (severityLevel === '高') return 1.6;
+  if (severityLevel === '中') return 1.3;
+  if (severityLevel === '低') return 1.1;
+  return 1.0;
+}
+
 function applyConsistencyAvoidHours() {
   const hours = getConsistencyHotspotHours();
   if (!hours.length) {
@@ -1904,11 +1911,13 @@ function maybeAutoApplyAvoidHours() {
   const score = getConsistencyHotspotScore();
   const severity = getAvoidSeverity(score);
   const desiredMode = severity.level === '高' ? 'BLOCK' : 'TEMPLATE';
+  const desiredFactor = getAvoidTemplateFactorForSeverity(severity.level);
   if (value && value !== current && value !== lastAutoAvoidHours) {
     let text = envEditor.value || '';
     text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS', value);
     if (modeAuto) {
       text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS_MODE', desiredMode);
+      text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_FACTOR', String(desiredFactor));
     }
     envEditor.value = text;
     detectTradingMode(text);
@@ -1918,14 +1927,16 @@ function maybeAutoApplyAvoidHours() {
       saveEnvButton.classList.add('attention');
     }
     lastAutoAvoidHours = value;
-    const modeMsg = modeAuto ? ` | 模式=${desiredMode}` : '';
+    const modeMsg = modeAuto ? ` | 模式=${desiredMode} | 因子=${desiredFactor}` : '';
     pushLog({ type: 'system', level: 'system', message: `自动避开热区时段：${value}${modeMsg}（请保存生效）` });
   }
   if (modeAuto && value === current) {
     const currentMode = String(env.get('CROSS_PLATFORM_AVOID_HOURS_MODE') || 'BLOCK').toUpperCase();
-    if (currentMode !== desiredMode) {
+    const currentFactor = Number(env.get('CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_FACTOR') || desiredFactor);
+    if (currentMode !== desiredMode || currentFactor !== desiredFactor) {
       let text = envEditor.value || '';
       text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS_MODE', desiredMode);
+      text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_FACTOR', String(desiredFactor));
       envEditor.value = text;
       detectTradingMode(text);
       syncTogglesFromEnv(text);
@@ -1936,7 +1947,7 @@ function maybeAutoApplyAvoidHours() {
       pushLog({
         type: 'system',
         level: 'system',
-        message: `热区强度变化，避开策略切换为 ${desiredMode}（请保存生效）`,
+        message: `热区强度变化，避开策略切换为 ${desiredMode}，模板因子=${desiredFactor}（请保存生效）`,
       });
     }
   }
@@ -2813,8 +2824,9 @@ async function loadMetrics() {
     if (metricAvoidSeverity) {
       const score = getConsistencyHotspotScore();
       const severity = getAvoidSeverity(score);
+      const factor = getAvoidTemplateFactorForSeverity(severity.level);
       const suffix = score > 0 ? ` (${formatNumber(score, 2)})` : '';
-      metricAvoidSeverity.textContent = `${severity.level}${suffix}`;
+      metricAvoidSeverity.textContent = `${severity.level}${suffix} / x${formatNumber(factor, 2)}`;
     }
     if (metricAvoidDecay) {
       const env = parseEnv(envEditor.value || '');

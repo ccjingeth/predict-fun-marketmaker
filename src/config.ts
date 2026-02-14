@@ -362,6 +362,9 @@ export function loadConfig(): Config {
     crossPlatformAvoidHoursModeAuto: process.env.CROSS_PLATFORM_AVOID_HOURS_MODE_AUTO === 'true',
     crossPlatformAvoidHoursBlockScore: parseFloat(process.env.CROSS_PLATFORM_AVOID_HOURS_BLOCK_SCORE || '3'),
     crossPlatformAvoidHoursTemplateScore: parseFloat(process.env.CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_SCORE || '1.5'),
+    crossPlatformAvoidHoursTemplateFactor: parseFloat(
+      process.env.CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_FACTOR || '1.2'
+    ),
     crossPlatformConsistencyCooldownMs: parseInt(process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_MS || '0'),
     crossPlatformConsistencyCooldownThreshold: parseInt(
       process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_THRESHOLD || '0'

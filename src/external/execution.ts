@@ -2024,48 +2024,61 @@ export class CrossPlatformExecutionRouter {
   }
 
   private assertAvoidHours(): void {
-    const hours = this.config.crossPlatformAvoidHours;
-    if (!hours || hours.length === 0) {
+    const state = this.isAvoidHourActive();
+    if (!state.active) {
       return;
     }
     const now = new Date();
-    const hour = now.getHours();
-    if (hours.includes(hour)) {
-      const nextHour = new Date(now);
-      nextHour.setMinutes(0, 0, 0);
-      nextHour.setHours(hour + 1);
-      const mode = (this.config.crossPlatformAvoidHoursMode || 'BLOCK').toUpperCase();
-      if (mode === 'TEMPLATE') {
-        if (this.config.crossPlatformConsistencyTemplateEnabled) {
-          this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, nextHour.getTime());
-          if (this.lastAvoidAlertHour !== hour) {
-            this.lastAvoidAlertHour = hour;
-            if (this.config.alertWebhookUrl) {
-              const label = String(hour).padStart(2, '0');
-              void sendAlert(
-                this.config.alertWebhookUrl,
-                `⚠️ 避开时段 ${label}:00 生效，已启用一致性模板（不强制暂停）。`,
-                this.config.alertMinIntervalMs
-              );
-            }
+    const hour = state.hour;
+    const nextHour = new Date(now);
+    nextHour.setMinutes(0, 0, 0);
+    nextHour.setHours(hour + 1);
+    const mode = state.mode;
+    if (mode === 'TEMPLATE') {
+      if (this.config.crossPlatformConsistencyTemplateEnabled) {
+        this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, nextHour.getTime());
+        if (this.lastAvoidAlertHour !== hour) {
+          this.lastAvoidAlertHour = hour;
+          if (this.config.alertWebhookUrl) {
+            const label = String(hour).padStart(2, '0');
+            void sendAlert(
+              this.config.alertWebhookUrl,
+              `⚠️ 避开时段 ${label}:00 生效，已启用一致性模板（不强制暂停）。`,
+              this.config.alertMinIntervalMs
+            );
           }
-          return;
         }
+        return;
       }
-      this.globalCooldownUntil = Math.max(this.globalCooldownUntil, nextHour.getTime());
-      if (this.lastAvoidAlertHour !== hour) {
-        this.lastAvoidAlertHour = hour;
-        if (this.config.alertWebhookUrl) {
-          const label = String(hour).padStart(2, '0');
-          void sendAlert(
-            this.config.alertWebhookUrl,
-            `⚠️ 避开时段 ${label}:00 生效，跨平台执行已进入冷却。`,
-            this.config.alertMinIntervalMs
-          );
-        }
-      }
-      throw new Error(`Preflight failed: avoid hour ${hour}`);
     }
+    this.globalCooldownUntil = Math.max(this.globalCooldownUntil, nextHour.getTime());
+    if (this.lastAvoidAlertHour !== hour) {
+      this.lastAvoidAlertHour = hour;
+      if (this.config.alertWebhookUrl) {
+        const label = String(hour).padStart(2, '0');
+        void sendAlert(
+          this.config.alertWebhookUrl,
+          `⚠️ 避开时段 ${label}:00 生效，跨平台执行已进入冷却。`,
+          this.config.alertMinIntervalMs
+        );
+      }
+    }
+    throw new Error(`Preflight failed: avoid hour ${hour}`);
+  }
+
+  private isAvoidHourActive(): { active: boolean; hour: number; mode: 'BLOCK' | 'TEMPLATE' } {
+    const hours = this.config.crossPlatformAvoidHours;
+    const now = new Date();
+    const hour = now.getHours();
+    if (!hours || hours.length === 0) {
+      return { active: false, hour, mode: 'BLOCK' };
+    }
+    const mode = (this.config.crossPlatformAvoidHoursMode || 'BLOCK').toUpperCase();
+    return {
+      active: hours.includes(hour),
+      hour,
+      mode: mode === 'TEMPLATE' ? 'TEMPLATE' : 'BLOCK',
+    };
   }
 
   private maybeAutoBlock(legs: PlatformLeg[]): void {
@@ -2215,7 +2228,13 @@ export class CrossPlatformExecutionRouter {
   private getConsistencyTemplateFactor(): number {
     const minFactor = Math.max(0.2, this.config.crossPlatformConsistencyTemplateTightenMin || 0.5);
     const maxFactor = Math.max(1, this.config.crossPlatformConsistencyTemplateTightenMax || 2.5);
-    return Math.max(minFactor, Math.min(maxFactor, this.consistencyTemplateTightenFactor));
+    let factor = this.consistencyTemplateTightenFactor;
+    const avoid = this.isAvoidHourActive();
+    if (avoid.active && avoid.mode === 'TEMPLATE') {
+      const avoidFactor = Math.max(1, this.config.crossPlatformAvoidHoursTemplateFactor || 1);
+      factor *= avoidFactor;
+    }
+    return Math.max(minFactor, Math.min(maxFactor, factor));
   }
 
   private getDepthRatioPenaltyFactor(): number {

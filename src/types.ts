@@ -279,6 +279,7 @@ export interface Config {
   crossPlatformAvoidHoursModeAuto?: boolean;
   crossPlatformAvoidHoursBlockScore?: number;
   crossPlatformAvoidHoursTemplateScore?: number;
+  crossPlatformAvoidHoursTemplateFactor?: number;
   crossPlatformConsistencyCooldownMs?: number;
   crossPlatformConsistencyCooldownThreshold?: number;
   crossPlatformConsistencyCooldownWindowMs?: number;
