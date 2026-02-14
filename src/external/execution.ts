@@ -1513,12 +1513,6 @@ export class CrossPlatformExecutionRouter {
         return base + bump;
       }
     }
-    if (this.isConsistencyTemplateActive()) {
-      const template = Math.max(0, this.config.crossPlatformConsistencyTemplateSlippageBps || 0);
-      if (template > 0) {
-        return Math.min(base, template);
-      }
-    }
     if (this.isDegraded()) {
       const override = Math.max(0, this.config.crossPlatformDegradeStabilityBps || 0);
       if (override > 0) {

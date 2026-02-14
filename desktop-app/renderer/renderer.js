@@ -49,6 +49,7 @@ const riskLevel = document.getElementById('riskLevel');
 const downgradeProfileBtn = document.getElementById('downgradeProfile');
 const downgradeSafeBtn = document.getElementById('downgradeSafe');
 const downgradeUltraBtn = document.getElementById('downgradeUltra');
+const applyConsistencyTemplateBtn = document.getElementById('applyConsistencyTemplate');
 const applyFixTemplateBtn = document.getElementById('applyFixTemplate');
 const weightSuccess = document.getElementById('weightSuccess');
 const weightDrift = document.getElementById('weightDrift');
@@ -74,6 +75,7 @@ const chartRisk = document.getElementById('chartRisk');
 const chartFailure = document.getElementById('chartFailure');
 const chartFailPreflight = document.getElementById('chartFailPreflight');
 const chartFailPost = document.getElementById('chartFailPost');
+const chartConsistency = document.getElementById('chartConsistency');
 const metricFailureReasons = document.getElementById('metricFailureReasons');
 const metricAlertsList = document.getElementById('metricAlertsList');
 const metricFailureAdviceList = document.getElementById('metricFailureAdviceList');
@@ -1752,6 +1754,27 @@ function applyArbSafeTemplate() {
   );
 }
 
+function applyConsistencyTemplate() {
+  applyTemplate(
+    {
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_ENABLED: 'true',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_DEPTH_USAGE: '0.2',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_SLIPPAGE_BPS: '200',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MAX_VWAP_LEVELS: '2',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_PROFIT_BPS: '15',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_PROFIT_USD: '0.03',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_MIN_NOTIONAL_USD: '12',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_CHUNK_FACTOR: '0.6',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_CHUNK_DELAY_MS: '200',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_FORCE_SEQUENTIAL: 'true',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_USE_FOK: 'true',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_LIMIT_ORDERS: 'true',
+      CROSS_PLATFORM_CONSISTENCY_TEMPLATE_DISABLE_BATCH: 'true',
+    },
+    '一致性保守模板'
+  );
+}
+
 function buildFixTemplate() {
   const categories = new Map();
   for (const [line, count] of failureCounts.entries()) {
@@ -2117,12 +2140,14 @@ function updateCharts() {
   const failureSeries = metricsHistory.map((item) => item.failureRate || 0);
   const preflightSeries = metricsHistory.map((item) => item.preflightFailRate || 0);
   const postSeries = metricsHistory.map((item) => item.postFailRate || 0);
+  const consistencySeries = metricsHistory.map((item) => item.consistencyActive || 0);
   drawSparkline(chartSuccess, successSeries, '#6aa3ff');
   drawSparkline(chartDrift, driftSeries, '#f7c46c');
   drawSparkline(chartRisk, riskSeries, '#ff6b6b');
   drawSparkline(chartFailure, failureSeries, '#f07ca2');
   drawSparkline(chartFailPreflight, preflightSeries, '#9b8cff');
   drawSparkline(chartFailPost, postSeries, '#6dd3ce');
+  drawSparkline(chartConsistency, consistencySeries, '#ff9f43');
 }
 
 function updateAlerts({
@@ -2354,6 +2379,12 @@ async function loadMetrics() {
     setMetricText(metricUpdatedAt, formatTimestamp(updatedAt));
     renderMetricFailureReasons(metrics.failureReasons);
 
+    const consistencyActiveValue = Math.max(
+      Number(data.consistencyOverrideUntil || 0),
+      Number(data.consistencyTemplateActiveUntil || 0)
+    );
+    const consistencyActive = consistencyActiveValue > Date.now() ? 100 : 0;
+
     if (updatedAt && successRate >= 0) {
       const last = metricsHistory[metricsHistory.length - 1];
       if (!last || last.ts !== updatedAt) {
@@ -2365,6 +2396,7 @@ async function loadMetrics() {
           failureRate,
           preflightFailRate,
           postFailRate,
+          consistencyActive,
         });
         if (metricsHistory.length > METRICS_HISTORY_MAX) {
           metricsHistory.shift();
@@ -2385,9 +2417,7 @@ async function loadMetrics() {
       postFailRate,
       driftLimit: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80),
       minQuality: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7),
-      consistencyOverrideActive:
-        Math.max(Number(data.consistencyOverrideUntil || 0), Number(data.consistencyTemplateActiveUntil || 0)) >
-        Date.now(),
+      consistencyOverrideActive: consistencyActive > 0,
     };
     updateAlerts(metricsSnapshot);
     renderAdvice(null, metricsSnapshot);
@@ -2595,6 +2625,9 @@ downgradeProfileBtn.addEventListener('click', () => applyDowngradeProfile('safe'
 downgradeSafeBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
 downgradeUltraBtn.addEventListener('click', () => applyDowngradeProfile('ultra'));
 applyFixTemplateBtn.addEventListener('click', applyFixTemplate);
+if (applyConsistencyTemplateBtn) {
+  applyConsistencyTemplateBtn.addEventListener('click', applyConsistencyTemplate);
+}
 refreshMmMetrics.addEventListener('click', loadMmMetrics);
 if (applyMmPassiveBtn) {
   applyMmPassiveBtn.addEventListener('click', applyMmPassiveTemplate);
