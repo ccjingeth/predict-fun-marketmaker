@@ -47,6 +47,7 @@ class ArbitrageBot {
   private crossRealtimeRunning = false;
   private crossRealtimeUnsub?: () => void;
   private crossDirtyTokens: Set<string> = new Set();
+  private arbPauseMs = 0;
 
   constructor() {
     this.config = loadConfig();
@@ -276,6 +277,7 @@ class ArbitrageBot {
         this.recordArbError(error);
         return;
       }
+      this.recordArbSuccess();
       this.lastExecution.set(key, now);
     };
 
@@ -811,10 +813,31 @@ class ArbitrageBot {
     }
     this.arbErrorCount += 1;
     if (this.arbErrorCount >= maxErrors) {
-      this.arbPausedUntil = now + (this.config.arbPauseOnErrorMs || 60000);
+      const base = this.config.arbPauseOnErrorMs || 60000;
+      if (!this.arbPauseMs || this.arbPauseMs <= 0) {
+        this.arbPauseMs = base;
+      }
+      const pauseMs = Math.max(base, this.arbPauseMs);
+      this.arbPausedUntil = now + pauseMs;
+      const backoff = Math.max(1, this.config.arbPauseBackoff || 1.5);
+      const maxPause = Math.max(pauseMs, this.config.arbPauseMaxMs || pauseMs);
+      this.arbPauseMs = Math.min(maxPause, Math.round(pauseMs * backoff));
       this.arbErrorCount = 0;
       console.error(`Arb auto-exec paused until ${new Date(this.arbPausedUntil).toISOString()}`);
     }
+  }
+
+  private recordArbSuccess(): void {
+    const base = this.config.arbPauseOnErrorMs || 60000;
+    if (!this.arbPauseMs || this.arbPauseMs <= 0) {
+      return;
+    }
+    const recovery = this.config.arbPauseRecoveryFactor ?? 0.8;
+    if (recovery <= 0 || recovery >= 1) {
+      return;
+    }
+    const next = Math.max(base, Math.round(this.arbPauseMs * recovery));
+    this.arbPauseMs = next;
   }
 
   private isArbPaused(): boolean {

@@ -60,6 +60,7 @@ export class MarketMaker {
   private lastNetShares: Map<string, number> = new Map();
   private lastHedgeAt: Map<string, number> = new Map();
   private lastIcebergAt: Map<string, number> = new Map();
+  private lastFillAt: Map<string, number> = new Map();
   private lastProfile: Map<string, 'CALM' | 'NORMAL' | 'VOLATILE'> = new Map();
   private lastProfileAt: Map<string, number> = new Map();
   private icebergPenalty: Map<string, { value: number; ts: number }> = new Map();
@@ -788,6 +789,29 @@ export class MarketMaker {
     return value;
   }
 
+  private getNoFillPenalty(tokenId: string): { spreadBps: number; sizeFactor: number } {
+    const threshold = Math.max(0, this.config.mmNoFillPassiveMs ?? 0);
+    if (threshold <= 0) {
+      return { spreadBps: 0, sizeFactor: 1 };
+    }
+    const last = this.lastFillAt.get(tokenId);
+    if (!last) {
+      return { spreadBps: 0, sizeFactor: 1 };
+    }
+    const elapsed = Date.now() - last;
+    if (elapsed <= threshold) {
+      return { spreadBps: 0, sizeFactor: 1 };
+    }
+    const rampMs = Math.max(1, this.config.mmNoFillRampMs ?? 30000);
+    const intensity = this.clamp((elapsed - threshold) / rampMs, 0, 1);
+    const base = Math.max(0, this.config.mmNoFillPenaltyBps ?? 0);
+    const maxBps = Math.max(base, this.config.mmNoFillPenaltyMaxBps ?? base * 4);
+    const spreadBps = base > 0 ? base + (maxBps - base) * intensity : 0;
+    const sizePenalty = this.clamp(this.config.mmNoFillSizePenalty ?? 1, 0.2, 1);
+    const sizeFactor = 1 - (1 - sizePenalty) * intensity;
+    return { spreadBps, sizeFactor };
+  }
+
   private canRecheck(tokenId: string): boolean {
     const cooldown = Math.max(0, this.config.mmRecheckCooldownMs ?? 0);
     if (!cooldown) {
@@ -917,6 +941,7 @@ export class MarketMaker {
       inventoryBias: prices.inventoryBias,
       nearTouchPenaltyBps: this.getNearTouchPenalty(market.token_id),
       fillPenaltyBps: this.getFillPenalty(market.token_id),
+      noFillPenaltyBps: this.getNoFillPenalty(market.token_id).spreadBps,
       updatedAt: Date.now(),
     };
     this.mmMetrics.set(market.token_id, entry);
@@ -1044,6 +1069,10 @@ export class MarketMaker {
     const fillPenalty = this.getFillPenalty(market.token_id);
     if (fillPenalty > 0) {
       adaptiveSpread += fillPenalty / 10000;
+    }
+    const noFillPenalty = this.getNoFillPenalty(market.token_id);
+    if (noFillPenalty.spreadBps > 0) {
+      adaptiveSpread += noFillPenalty.spreadBps / 10000;
     }
 
     const depthTarget = this.config.mmDepthTargetShares ?? 0;
@@ -1224,7 +1253,8 @@ export class MarketMaker {
     }
     sizeFactor = this.clamp(sizeFactor, sizeMin, sizeMax);
     const penalty = this.getSizePenalty(market.token_id);
-    shares = Math.floor(shares * sizeFactor * penalty);
+    const noFill = this.getNoFillPenalty(market.token_id);
+    shares = Math.floor(shares * sizeFactor * penalty * (noFill.sizeFactor || 1));
 
     const minShares = market.liquidity_activation?.min_shares || 0;
     if (minShares > 0 && shares < minShares) {
@@ -1390,6 +1420,9 @@ export class MarketMaker {
 
     const tokenId = market.token_id;
     this.updateBestPrices(tokenId, orderbook);
+    if (!this.lastFillAt.has(tokenId)) {
+      this.lastFillAt.set(tokenId, Date.now());
+    }
 
     if (this.isPaused(tokenId)) {
       return;
@@ -1712,6 +1745,7 @@ export class MarketMaker {
       const absDelta = Math.abs(delta);
       if (absDelta > 0) {
         this.updateFillPressure(tokenId, absDelta);
+        this.lastFillAt.set(tokenId, Date.now());
       }
       const partialThreshold = this.config.mmPartialFillShares ?? 5;
       if (absDelta > 0) {

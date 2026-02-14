@@ -129,6 +129,11 @@ export function loadConfig(): Config {
     mmFillPenaltyBps: parseFloat(process.env.MM_FILL_PENALTY_BPS || '0'),
     mmFillPenaltyMaxBps: parseFloat(process.env.MM_FILL_PENALTY_MAX_BPS || '0'),
     mmFillPenaltyDecayMs: parseInt(process.env.MM_FILL_PENALTY_DECAY_MS || '90000'),
+    mmNoFillPassiveMs: parseInt(process.env.MM_NO_FILL_PASSIVE_MS || '0'),
+    mmNoFillPenaltyBps: parseFloat(process.env.MM_NO_FILL_PENALTY_BPS || '0'),
+    mmNoFillPenaltyMaxBps: parseFloat(process.env.MM_NO_FILL_PENALTY_MAX_BPS || '0'),
+    mmNoFillRampMs: parseInt(process.env.MM_NO_FILL_RAMP_MS || '30000'),
+    mmNoFillSizePenalty: parseFloat(process.env.MM_NO_FILL_SIZE_PENALTY || '1'),
     mmAggressiveMoveBps: parseFloat(process.env.MM_AGGRESSIVE_MOVE_BPS || '0.002'),
     mmAggressiveMoveWindowMs: parseInt(process.env.MM_AGGRESSIVE_MOVE_WINDOW_MS || '1500'),
     mmVolatilityHighBps: parseFloat(process.env.MM_VOLATILITY_HIGH_BPS || '0.006'),
@@ -406,6 +411,9 @@ export function loadConfig(): Config {
     arbMaxErrors: parseInt(process.env.ARB_MAX_ERRORS || '5'),
     arbErrorWindowMs: parseInt(process.env.ARB_ERROR_WINDOW_MS || '60000'),
     arbPauseOnErrorMs: parseInt(process.env.ARB_PAUSE_ON_ERROR_MS || '60000'),
+    arbPauseBackoff: parseFloat(process.env.ARB_PAUSE_BACKOFF || '1.5'),
+    arbPauseMaxMs: parseInt(process.env.ARB_PAUSE_MAX_MS || '600000'),
+    arbPauseRecoveryFactor: parseFloat(process.env.ARB_PAUSE_RECOVERY_FACTOR || '0.8'),
     arbWsHealthLogMs: parseInt(process.env.ARB_WS_HEALTH_LOG_MS || '0'),
     arbPreflightEnabled: process.env.ARB_PREFLIGHT_ENABLED !== 'false',
     arbPreflightMaxAgeMs: parseInt(process.env.ARB_PREFLIGHT_MAX_AGE_MS || '3000'),
@@ -529,6 +537,15 @@ export function loadConfig(): Config {
   }
   if ((config.arbWsHealthRecoveryMs ?? 0) < 0) {
     config.arbWsHealthRecoveryMs = 0;
+  }
+  if ((config.arbPauseBackoff ?? 0) < 1) {
+    config.arbPauseBackoff = 1.2;
+  }
+  if ((config.arbPauseMaxMs ?? 0) < 0) {
+    config.arbPauseMaxMs = 0;
+  }
+  if ((config.arbPauseRecoveryFactor ?? 0) <= 0 || (config.arbPauseRecoveryFactor ?? 0) >= 1) {
+    config.arbPauseRecoveryFactor = 0.8;
   }
 
   if (
@@ -746,6 +763,24 @@ export function loadConfig(): Config {
   if ((config.mmFillPenaltyDecayMs ?? 0) < 0) {
     config.mmFillPenaltyDecayMs = 0;
   }
+  if ((config.mmNoFillPassiveMs ?? 0) < 0) {
+    config.mmNoFillPassiveMs = 0;
+  }
+  if ((config.mmNoFillPenaltyBps ?? 0) < 0) {
+    config.mmNoFillPenaltyBps = 0;
+  }
+  if ((config.mmNoFillPenaltyMaxBps ?? 0) < 0) {
+    config.mmNoFillPenaltyMaxBps = 0;
+  }
+  if ((config.mmNoFillPenaltyMaxBps ?? 0) > 0 && (config.mmNoFillPenaltyMaxBps ?? 0) < (config.mmNoFillPenaltyBps ?? 0)) {
+    config.mmNoFillPenaltyMaxBps = config.mmNoFillPenaltyBps;
+  }
+  if ((config.mmNoFillRampMs ?? 0) < 0) {
+    config.mmNoFillRampMs = 0;
+  }
+  if ((config.mmNoFillSizePenalty ?? 0) <= 0 || (config.mmNoFillSizePenalty ?? 0) > 1) {
+    config.mmNoFillSizePenalty = 1;
+  }
 
   return config;
 }
@@ -788,6 +823,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `MM Fill Penalty: base=${config.mmFillPenaltyBps ?? 0}bps max=${config.mmFillPenaltyMaxBps ?? 0}bps decay=${config.mmFillPenaltyDecayMs}ms`
+  );
+  console.log(
+    `MM No-Fill Passive: after=${config.mmNoFillPassiveMs ?? 0}ms base=${config.mmNoFillPenaltyBps ?? 0}bps max=${config.mmNoFillPenaltyMaxBps ?? 0}bps size=${config.mmNoFillSizePenalty ?? 1}`
   );
   console.log(
     `MM Cancel Confirm: reprice=${config.mmRepriceConfirmMs}ms cancel=${config.mmCancelConfirmMs}ms`
@@ -879,6 +917,9 @@ export function printConfig(config: Config): void {
   console.log(`Arb Preflight: ${config.arbPreflightEnabled ? '✅' : '❌'} maxAge=${config.arbPreflightMaxAgeMs}ms`);
   console.log(
     `Arb Depth Usage: ${config.arbDepthUsage} minDepth=$${config.arbMinDepthUsd} minNotional=$${config.arbMinNotionalUsd} minProfit=$${config.arbMinProfitUsd}`
+  );
+  console.log(
+    `Arb Pause Backoff: base=${config.arbPauseOnErrorMs}ms max=${config.arbPauseMaxMs}ms backoff=${config.arbPauseBackoff} recover=${config.arbPauseRecoveryFactor}`
   );
   console.log(
     `Arb Stability: ${config.arbStabilityRequired ? '✅' : '❌'} count=${config.arbStabilityMinCount} window=${config.arbStabilityWindowMs}ms`

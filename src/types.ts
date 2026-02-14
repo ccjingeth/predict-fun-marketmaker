@@ -96,6 +96,11 @@ export interface Config {
   mmFillPenaltyBps?: number;
   mmFillPenaltyMaxBps?: number;
   mmFillPenaltyDecayMs?: number;
+  mmNoFillPassiveMs?: number;
+  mmNoFillPenaltyBps?: number;
+  mmNoFillPenaltyMaxBps?: number;
+  mmNoFillRampMs?: number;
+  mmNoFillSizePenalty?: number;
   mmAggressiveMoveBps?: number;
   mmAggressiveMoveWindowMs?: number;
   mmVolatilityHighBps?: number;
@@ -357,6 +362,9 @@ export interface Config {
   arbMaxErrors?: number;
   arbErrorWindowMs?: number;
   arbPauseOnErrorMs?: number;
+  arbPauseBackoff?: number;
+  arbPauseMaxMs?: number;
+  arbPauseRecoveryFactor?: number;
   arbWsHealthLogMs?: number;
   arbPreflightEnabled?: boolean;
   arbPreflightMaxAgeMs?: number;
