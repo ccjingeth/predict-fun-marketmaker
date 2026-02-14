@@ -41,6 +41,8 @@ export interface ArbitrageConfig {
   dependencyMaxLegs: number;
   dependencyMaxNotional: number;
   dependencyMinDepth: number;
+  dependencyMinDepthUsd: number;
+  dependencyDepthUsage: number;
   dependencyFeeBps: number;
   dependencyFeeCurveRate: number;
   dependencyFeeCurveExponent: number;
@@ -102,6 +104,8 @@ export class ArbitrageMonitor {
       dependencyMaxLegs: 6,
       dependencyMaxNotional: 200,
       dependencyMinDepth: 1,
+      dependencyMinDepthUsd: 0,
+      dependencyDepthUsage: 1,
       dependencyFeeBps: 100,
       dependencyFeeCurveRate: 0,
       dependencyFeeCurveExponent: 0,
@@ -174,6 +178,8 @@ export class ArbitrageMonitor {
         maxLegs: this.config.dependencyMaxLegs,
         maxNotional: this.config.dependencyMaxNotional,
         minDepth: this.config.dependencyMinDepth,
+        minDepthUsd: this.config.dependencyMinDepthUsd,
+        depthUsage: this.config.dependencyDepthUsage,
         feeBps: this.config.dependencyFeeBps,
         feeCurveRate: this.config.dependencyFeeCurveRate || 0,
         feeCurveExponent: this.config.dependencyFeeCurveExponent || 0,
