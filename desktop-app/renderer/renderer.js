@@ -67,6 +67,7 @@ const chartFailPreflight = document.getElementById('chartFailPreflight');
 const chartFailPost = document.getElementById('chartFailPost');
 const metricFailureReasons = document.getElementById('metricFailureReasons');
 const metricAlertsList = document.getElementById('metricAlertsList');
+const metricFailureAdviceList = document.getElementById('metricFailureAdviceList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
 const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
@@ -664,6 +665,48 @@ function renderFailureTopN() {
     row.appendChild(hint);
     row.appendChild(button);
     healthFailureList.appendChild(row);
+  });
+}
+
+function renderMetricFailureAdvice(reasons) {
+  if (!metricFailureAdviceList) return;
+  metricFailureAdviceList.innerHTML = '';
+  if (!reasons) {
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.textContent = '暂无建议';
+    metricFailureAdviceList.appendChild(item);
+    return;
+  }
+  const entries = Object.entries(reasons).filter(([, v]) => Number(v) > 0);
+  if (!entries.length) {
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.textContent = '暂无建议';
+    metricFailureAdviceList.appendChild(item);
+    return;
+  }
+  const sorted = entries.sort((a, b) => Number(b[1]) - Number(a[1]));
+  const top = sorted.slice(0, 2);
+  const lines = [];
+  top.forEach(([key]) => {
+    const hints = getFailureAdvice(String(key));
+    if (hints.length) {
+      lines.push(...hints.slice(0, 2));
+    }
+  });
+  if (!lines.length) {
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.textContent = '暂无建议';
+    metricFailureAdviceList.appendChild(item);
+    return;
+  }
+  lines.slice(0, 4).forEach((text) => {
+    const row = document.createElement('div');
+    row.className = 'alert-item';
+    row.textContent = text;
+    metricFailureAdviceList.appendChild(row);
   });
 }
 
@@ -1597,6 +1640,7 @@ async function loadMetrics() {
     setMetricText(metricLastError, metrics.lastError || '无');
     setMetricText(metricUpdatedAt, formatTimestamp(updatedAt));
     renderMetricFailureReasons(metrics.failureReasons);
+    renderMetricFailureAdvice(metrics.failureReasons);
 
     if (updatedAt && successRate >= 0) {
       const last = metricsHistory[metricsHistory.length - 1];
