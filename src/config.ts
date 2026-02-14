@@ -356,6 +356,8 @@ export function loadConfig(): Config {
     crossPlatformFallbackShrinkFactor: parseFloat(process.env.CROSS_PLATFORM_FALLBACK_SHRINK_FACTOR || '0.7'),
     crossPlatformFallbackMinFactor: parseFloat(process.env.CROSS_PLATFORM_FALLBACK_MIN_FACTOR || '0.3'),
     crossPlatformSingleLegTopN: parseInt(process.env.CROSS_PLATFORM_SINGLE_LEG_TOP_N || '2'),
+    crossPlatformFailureProfitBps: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PROFIT_BPS || '0'),
+    crossPlatformFailureProfitUsd: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PROFIT_USD || '0'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -372,7 +374,6 @@ export function loadConfig(): Config {
     crossPlatformSlippageCeilBps: parseInt(process.env.CROSS_PLATFORM_SLIPPAGE_CEIL_BPS || '400'),
     crossPlatformFailureSlippageBumpBps: parseInt(process.env.CROSS_PLATFORM_FAILURE_SLIPPAGE_BUMP_BPS || '25'),
     crossPlatformSuccessSlippageTightenBps: parseInt(process.env.CROSS_PLATFORM_SUCCESS_SLIPPAGE_TIGHTEN_BPS || '10'),
-    crossPlatformFailureStabilityBps: parseInt(process.env.CROSS_PLATFORM_FAILURE_STABILITY_BPS || '0'),
     crossPlatformSuccessStabilityBps: parseInt(process.env.CROSS_PLATFORM_SUCCESS_STABILITY_BPS || '0'),
     crossPlatformFailureChunkDelayBumpMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_CHUNK_DELAY_BUMP_MS || '0'),
     crossPlatformSuccessChunkDelayTightenMs: parseInt(process.env.CROSS_PLATFORM_SUCCESS_CHUNK_DELAY_TIGHTEN_MS || '0'),
@@ -710,6 +711,12 @@ export function loadConfig(): Config {
   }
   if ((config.crossPlatformSuccessStabilityBps ?? 0) < 0) {
     config.crossPlatformSuccessStabilityBps = 0;
+  }
+  if ((config.crossPlatformFailureProfitBps ?? 0) < 0) {
+    config.crossPlatformFailureProfitBps = 0;
+  }
+  if ((config.crossPlatformFailureProfitUsd ?? 0) < 0) {
+    config.crossPlatformFailureProfitUsd = 0;
   }
   if ((config.crossPlatformFailureChunkDelayBumpMs ?? 0) < 0) {
     config.crossPlatformFailureChunkDelayBumpMs = 0;

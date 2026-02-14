@@ -1356,6 +1356,12 @@ export class CrossPlatformExecutionRouter {
 
   private getStabilityBps(): number {
     const base = Math.max(0, this.stabilityBpsDynamic || this.resolveDynamicStability());
+    if (this.circuitFailures > 0 || this.isDegraded()) {
+      const bump = Math.max(0, this.config.crossPlatformFailureStabilityBps || 0);
+      if (bump > 0) {
+        return base + bump;
+      }
+    }
     if (this.isDegraded()) {
       const override = Math.max(0, this.config.crossPlatformDegradeStabilityBps || 0);
       if (override > 0) {
@@ -2561,8 +2567,8 @@ export class CrossPlatformExecutionRouter {
 
   private assertMinNotionalAndProfit(legs: PlatformLeg[]): void {
     const minNotional = Math.max(0, this.config.crossPlatformMinNotionalUsd || 0);
-    const minProfit = Math.max(0, this.config.crossPlatformMinProfitUsd || 0);
-    if (!minNotional && !minProfit) {
+    const baseProfit = Math.max(0, this.config.crossPlatformMinProfitUsd || 0);
+    if (!minNotional && !baseProfit) {
       return;
     }
     if (!legs.length) {
@@ -2612,11 +2618,15 @@ export class CrossPlatformExecutionRouter {
       throw new Error(`Preflight failed: notional $${notional.toFixed(2)} < min ${minNotional}`);
     }
     const baseBps = Math.max(0, this.config.crossPlatformMinProfitBps || 0);
+    const failureBps = Math.max(0, this.config.crossPlatformFailureProfitBps || 0);
+    const failureUsd = Math.max(0, this.config.crossPlatformFailureProfitUsd || 0);
     const impactMult = Math.max(0, this.config.crossPlatformMinProfitImpactMult || 0);
     const impactBps = Math.max(0, this.lastPreflight?.maxDeviationBps || 0);
+    const failureMult = this.circuitFailures > 0 || this.isDegraded() ? 1 : 0;
     const required =
-      minProfit +
-      notional * (baseBps / 10000) +
+      baseProfit +
+      failureUsd * failureMult +
+      notional * ((baseBps + failureBps * failureMult) / 10000) +
       notional * (impactBps / 10000) * impactMult;
     if (required > 0 && profit < required) {
       throw new Error(

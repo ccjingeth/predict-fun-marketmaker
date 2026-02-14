@@ -307,6 +307,9 @@ export interface Config {
   crossPlatformFallbackShrinkFactor?: number;
   crossPlatformFallbackMinFactor?: number;
   crossPlatformSingleLegTopN?: number;
+  crossPlatformFailureProfitBps?: number;
+  crossPlatformFailureProfitUsd?: number;
+  crossPlatformFailureStabilityBps?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;
@@ -323,7 +326,6 @@ export interface Config {
   crossPlatformSlippageCeilBps?: number;
   crossPlatformFailureSlippageBumpBps?: number;
   crossPlatformSuccessSlippageTightenBps?: number;
-  crossPlatformFailureStabilityBps?: number;
   crossPlatformSuccessStabilityBps?: number;
   crossPlatformFailureChunkDelayBumpMs?: number;
   crossPlatformSuccessChunkDelayTightenMs?: number;
