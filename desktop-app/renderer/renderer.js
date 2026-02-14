@@ -772,7 +772,7 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
   lines.forEach((text, idx) => {
     const row = document.createElement('div');
     row.className = 'alert-item warn';
-    row.textContent = text;
+    row.textContent = `建议 ${idx + 1}: ${text}`;
     if (idx === 0 && recommendedCategories.length && fixSelectList) {
       const action = document.createElement('button');
       action.className = 'btn ghost';
@@ -828,8 +828,13 @@ function renderFixSummary() {
     return normalizedCurrent !== normalizedValue;
   });
   const item = document.createElement('div');
-  item.className = 'alert-item warn';
-  item.textContent = `建议可应用 ${changed.length} 项参数`;
+  if (changed.length) {
+    item.className = 'alert-item warn';
+    item.textContent = `建议可应用 ${changed.length} 项参数`;
+  } else {
+    item.className = 'alert-item ok';
+    item.textContent = '建议项已全部匹配，无需应用。';
+  }
   metricFixSummaryList.appendChild(item);
   if (changed.length) {
     const actionRow = document.createElement('div');
