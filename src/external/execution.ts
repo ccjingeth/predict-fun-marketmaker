@@ -2668,6 +2668,17 @@ export class CrossPlatformExecutionRouter {
       }
     }
 
+    const usageCap = await this.getMaxLegDepthUsageShares(adjustedLegs, cache);
+    if (usageCap !== null) {
+      if (usageCap <= 0) {
+        throw new Error('Preflight failed: insufficient depth for usage cap');
+      }
+      const target = Math.min(...adjustedLegs.map((leg) => leg.shares));
+      if (usageCap < target) {
+        adjustedLegs = adjustedLegs.map((leg) => ({ ...leg, shares: usageCap }));
+      }
+    }
+
     const notionalCap = this.config.crossPlatformMaxNotional ?? 0;
     if (notionalCap > 0) {
       const currentNotional = adjustedLegs.reduce((sum, leg) => sum + leg.price * leg.shares, 0);
@@ -2791,6 +2802,44 @@ export class CrossPlatformExecutionRouter {
       throw new Error(`Preflight failed: insufficient depth (min ${minAllowed})`);
     }
     return minDepth * Math.max(0, Math.min(1, usage));
+  }
+
+  private async getMaxLegDepthUsageShares(
+    legs: PlatformLeg[],
+    cache: Map<string, Promise<OrderbookSnapshot | null>>
+  ): Promise<number | null> {
+    const base = Math.max(0, this.config.crossPlatformLegDepthUsageMax || 0);
+    if (!base) {
+      return null;
+    }
+    const maxUsage = Math.min(1, base * this.getAutoTuneFactor());
+    if (maxUsage <= 0) {
+      return null;
+    }
+    const depthLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
+    let cap = Number.POSITIVE_INFINITY;
+    let found = false;
+    for (const leg of legs) {
+      const book = await this.fetchOrderbook(leg, cache);
+      if (!book) {
+        continue;
+      }
+      found = true;
+      const levels = leg.side === 'BUY' ? book.asks : book.bids;
+      const capped = depthLevels > 0 ? levels.slice(0, depthLevels) : levels;
+      const depthShares = capped.reduce((sum, entry) => {
+        const shares = Number(entry.shares);
+        return sum + (Number.isFinite(shares) && shares > 0 ? shares : 0);
+      }, 0);
+      if (depthShares <= 0) {
+        return 0;
+      }
+      cap = Math.min(cap, depthShares * maxUsage);
+    }
+    if (!found || !Number.isFinite(cap)) {
+      return null;
+    }
+    return cap;
   }
 
   private async maybeRecheckPreflight(
