@@ -828,6 +828,7 @@ function normalizeFailureLine(text) {
 
 function classifyFailure(line) {
   const text = (line || '').toLowerCase();
+  if (/hard gate/.test(text)) return '硬门控';
   if (/insufficient depth|min depth|depth/.test(text)) return '深度不足';
   if (/vwap/.test(text)) return 'VWAP 偏离';
   if (/drift/.test(text)) return '价格漂移';
