@@ -274,6 +274,7 @@ export interface Config {
   crossPlatformConsistencyRateLimitWindowMs?: number;
   crossPlatformAvoidHours?: number[];
   crossPlatformAvoidHoursAuto?: boolean;
+  crossPlatformAvoidHoursDecayDays?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
