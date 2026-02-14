@@ -645,6 +645,8 @@ export class CrossPlatformExecutionRouter {
   private lastPreflight?: { maxDeviationBps: number; maxDriftBps: number };
   private degradedUntil = 0;
   private degradedReason = '';
+  private degradedAt = 0;
+  private degradedSuccesses = 0;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -858,6 +860,7 @@ export class CrossPlatformExecutionRouter {
   }
 
   private async executeChunks(legs: PlatformLeg[]): Promise<{ postTrade: { maxDriftBps: number; penalizedLegs: PlatformLeg[]; penalizedTokenIds: Set<string>; spreadPenalizedLegs: PlatformLeg[] } }> {
+    this.assertNetRiskBudget(legs);
     const chunks = this.splitLegsIntoChunks(legs);
     let maxDriftBps = 0;
     const penalizedLegs: PlatformLeg[] = [];
@@ -905,6 +908,37 @@ export class CrossPlatformExecutionRouter {
     }
 
     return { postTrade: { maxDriftBps, penalizedLegs, penalizedTokenIds, spreadPenalizedLegs } };
+  }
+
+  private assertNetRiskBudget(legs: PlatformLeg[]): void {
+    const totalBudget = Math.max(0, this.config.crossPlatformNetRiskUsd || 0);
+    const perTokenBudget = Math.max(0, this.config.crossPlatformNetRiskUsdPerToken || 0);
+    if (!totalBudget && !perTokenBudget) {
+      return;
+    }
+    if (!legs.length) {
+      return;
+    }
+    const totals = new Map<string, number>();
+    let global = 0;
+    for (const leg of legs) {
+      const notional = Math.abs(leg.price * leg.shares);
+      const key = leg.tokenId ? `${leg.platform}:${leg.tokenId}` : leg.platform;
+      if (key) {
+        totals.set(key, (totals.get(key) || 0) + notional);
+      }
+      global += notional;
+    }
+    if (totalBudget > 0 && global > totalBudget) {
+      throw new Error(`Preflight failed: net risk $${global.toFixed(2)} > budget ${totalBudget}`);
+    }
+    if (perTokenBudget > 0) {
+      for (const [key, value] of totals.entries()) {
+        if (value > perTokenBudget) {
+          throw new Error(`Preflight failed: net risk $${value.toFixed(2)} > per-token budget ${perTokenBudget} (${key})`);
+        }
+      }
+    }
   }
 
   private async hedgeResidualExposure(results: ExecutionResult[]): Promise<void> {
@@ -1326,6 +1360,7 @@ export class CrossPlatformExecutionRouter {
     this.circuitFailures = 0;
     this.circuitOpenedAt = 0;
     this.resetFailurePause();
+    this.updateDegradeOnSuccess();
   }
 
   private applyDegrade(reason: string): void {
@@ -1336,10 +1371,34 @@ export class CrossPlatformExecutionRouter {
     const now = Date.now();
     this.degradedUntil = Math.max(this.degradedUntil, now + durationMs);
     this.degradedReason = reason;
+    if (!this.degradedAt) {
+      this.degradedAt = now;
+    }
+    this.degradedSuccesses = 0;
   }
 
   private isDegraded(): boolean {
     return this.degradedUntil > Date.now();
+  }
+
+  private updateDegradeOnSuccess(): void {
+    if (!this.isDegraded()) {
+      return;
+    }
+    this.degradedSuccesses += 1;
+    const minMs = Math.max(0, this.config.crossPlatformDegradeExitMs || 0);
+    const minSuccesses = Math.max(0, this.config.crossPlatformDegradeExitSuccesses || 0);
+    const now = Date.now();
+    if (minMs > 0 && this.degradedAt > 0 && now - this.degradedAt < minMs) {
+      return;
+    }
+    if (minSuccesses > 0 && this.degradedSuccesses < minSuccesses) {
+      return;
+    }
+    this.degradedUntil = 0;
+    this.degradedAt = 0;
+    this.degradedSuccesses = 0;
+    this.degradedReason = '';
   }
 
   private shouldParallelSubmit(): boolean {

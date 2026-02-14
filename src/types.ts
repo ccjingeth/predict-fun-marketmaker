@@ -270,6 +270,10 @@ export interface Config {
   crossPlatformDegradeChunkDelayMs?: number;
   crossPlatformDegradeForceSequential?: boolean;
   crossPlatformDegradeOnPostTrade?: boolean;
+  crossPlatformDegradeExitMs?: number;
+  crossPlatformDegradeExitSuccesses?: number;
+  crossPlatformNetRiskUsd?: number;
+  crossPlatformNetRiskUsdPerToken?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;
