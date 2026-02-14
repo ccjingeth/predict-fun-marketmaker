@@ -37,6 +37,7 @@ const metricConsistencyOverride = document.getElementById('metricConsistencyOver
 const metricConsistencyRateLimit = document.getElementById('metricConsistencyRateLimit');
 const metricConsistencyTighten = document.getElementById('metricConsistencyTighten');
 const metricAvoidHours = document.getElementById('metricAvoidHours');
+let lastAutoAvoidHours = '';
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -241,6 +242,7 @@ const FIX_HINTS = {
   CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_THRESHOLD: '一致性限速阈值次数',
   CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_WINDOW_MS: '一致性限速统计窗口（毫秒）',
   CROSS_PLATFORM_AVOID_HOURS: '跨平台避开小时（0-23）',
+  CROSS_PLATFORM_AVOID_HOURS_AUTO: '自动避开一致性热区',
   CROSS_PLATFORM_QUALITY_PROFIT_MULT: '质量分收益门槛放大系数',
   CROSS_PLATFORM_QUALITY_PROFIT_MAX: '质量分收益门槛放大上限',
   CROSS_PLATFORM_MAX_VWAP_LEVELS: '跨平台 VWAP 档位数上限',
@@ -1843,6 +1845,29 @@ function applyConsistencyAvoidHours() {
   applyTemplate({ CROSS_PLATFORM_AVOID_HOURS: value }, '避开一致性热区');
 }
 
+function maybeAutoApplyAvoidHours() {
+  const env = parseEnv(envEditor.value || '');
+  const auto = String(env.get('CROSS_PLATFORM_AVOID_HOURS_AUTO') || '').toLowerCase() === 'true';
+  if (!auto) return;
+  const hours = getConsistencyHotspotHours();
+  if (!hours.length) return;
+  const value = hours.map((h) => String(h).padStart(2, '0')).join(',');
+  const current = String(env.get('CROSS_PLATFORM_AVOID_HOURS') || '');
+  if (value && value !== current && value !== lastAutoAvoidHours) {
+    let text = envEditor.value || '';
+    text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS', value);
+    envEditor.value = text;
+    detectTradingMode(text);
+    syncTogglesFromEnv(text);
+    updateMetricsPaths();
+    if (saveEnvButton) {
+      saveEnvButton.classList.add('attention');
+    }
+    lastAutoAvoidHours = value;
+    pushLog({ type: 'system', level: 'system', message: `自动避开热区时段：${value}（请保存生效）` });
+  }
+}
+
 function buildFixTemplate() {
   const categories = new Map();
   for (const [line, count] of failureCounts.entries()) {
@@ -2391,6 +2416,16 @@ function updateAlerts({
   if (consistencyFailureRate >= 25) {
     warnings.push('一致性失败率偏高，建议启用一致性模板或提升一致性阈值。');
   }
+  const avoidHours = String(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_AVOID_HOURS') || '')
+    .split(',')
+    .map((val) => Number(val))
+    .filter((val) => Number.isFinite(val));
+  if (avoidHours.length > 0) {
+    const hour = new Date().getHours();
+    if (avoidHours.includes(hour)) {
+      warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
+    }
+  }
   if (cooldownUntil && cooldownUntil > Date.now()) {
     warnings.push('全局冷却中，执行将自动暂停。');
   }
@@ -2673,6 +2708,7 @@ async function loadMetrics() {
     renderMetricFailureAdvice(metrics.failureReasons, metricsSnapshot);
     renderConsistencyFailures();
     renderConsistencyHotspots();
+    maybeAutoApplyAvoidHours();
     const changedCount = renderFixSummary();
     const hasPendingSave = !!(saveEnvButton && saveEnvButton.classList.contains('attention'));
     if (changedCount === 0) {

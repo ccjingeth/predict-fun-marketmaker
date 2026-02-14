@@ -351,6 +351,7 @@ export function loadConfig(): Config {
       process.env.CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_WINDOW_MS || '0'
     ),
     crossPlatformAvoidHours: parseNumberList(process.env.CROSS_PLATFORM_AVOID_HOURS),
+    crossPlatformAvoidHoursAuto: process.env.CROSS_PLATFORM_AVOID_HOURS_AUTO === 'true',
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),
