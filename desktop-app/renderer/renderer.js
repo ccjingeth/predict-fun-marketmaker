@@ -2840,10 +2840,20 @@ async function loadMetrics() {
     if (metricConsistencySize) {
       const pressure = Number(data.consistencyPressure || 0);
       const minFactor = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_CONSISTENCY_PRESSURE_SIZE_MIN') || 1);
-      const factor =
+      const hardThreshold = Number(
+        parseEnv(envEditor.value || '').get('CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_THRESHOLD') || 0
+      );
+      const hardFactor = Number(
+        parseEnv(envEditor.value || '').get('CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_FACTOR') || 1
+      );
+      const clampedPressure = Math.max(0, Math.min(1, pressure));
+      let factor =
         Number.isFinite(pressure) && Number.isFinite(minFactor)
-          ? 1 - Math.max(0, Math.min(1, pressure)) * (1 - Math.max(0.05, Math.min(1, minFactor)))
+          ? 1 - clampedPressure * (1 - Math.max(0.05, Math.min(1, minFactor)))
           : 1;
+      if (hardThreshold > 0 && clampedPressure >= hardThreshold) {
+        factor = Math.min(factor, Math.max(0.05, Math.min(1, hardFactor)));
+      }
       metricConsistencySize.textContent = `x${formatNumber(factor, 2)}`;
     }
     if (metricConsistencyPenalty) {
@@ -2876,6 +2886,18 @@ async function loadMetrics() {
       const tighten = Number(data.wsHealthTightenFactor);
       metricWsHealthTighten.textContent =
         Number.isFinite(tighten) && tighten > 0 ? `x${formatNumber(1 / tighten, 2)}` : '--';
+    }
+    if (metricWsHealthScore) {
+      const score = Number(data.wsHealthScore);
+      const hardThreshold = Number(
+        parseEnv(envEditor.value || '').get('CROSS_PLATFORM_WS_HEALTH_HARD_THRESHOLD') || 0
+      );
+      const label = Number.isFinite(score) ? `${Math.round(score)}` : '--';
+      if (Number.isFinite(score) && hardThreshold > 0 && score <= hardThreshold) {
+        metricWsHealthScore.textContent = `${label} (硬)`;
+      } else {
+        metricWsHealthScore.textContent = label;
+      }
     }
     if (metricAvoidDecay) {
       const env = parseEnv(envEditor.value || '');

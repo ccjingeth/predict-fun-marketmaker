@@ -2330,7 +2330,13 @@ export class CrossPlatformExecutionRouter {
       return 1;
     }
     const pressure = this.getConsistencyPressure(now);
-    return 1 - pressure * (1 - minFactor);
+    const baseFactor = 1 - pressure * (1 - minFactor);
+    const hardThreshold = Math.max(0, Math.min(1, this.config.crossPlatformConsistencyPressureHardThreshold || 0));
+    if (hardThreshold > 0 && pressure >= hardThreshold) {
+      const hardFactor = Math.max(0.05, Math.min(1, this.config.crossPlatformConsistencyPressureHardFactor || 1));
+      return Math.min(baseFactor, hardFactor);
+    }
+    return baseFactor;
   }
 
   private getConsistencyPressureRetryDelay(now: number = Date.now()): number {
@@ -2419,7 +2425,13 @@ export class CrossPlatformExecutionRouter {
       return 1;
     }
     const ratio = Math.max(0, Math.min(1, 1 - this.wsHealthScore / 100));
-    return 1 - ratio * (1 - minFactor);
+    const baseFactor = 1 - ratio * (1 - minFactor);
+    const hardThreshold = Math.max(0, Math.min(100, this.config.crossPlatformWsHealthHardThreshold || 0));
+    if (hardThreshold > 0 && this.wsHealthScore <= hardThreshold) {
+      const hardFactor = Math.max(0.05, Math.min(1, this.config.crossPlatformWsHealthHardFactor || 1));
+      return Math.min(baseFactor, hardFactor);
+    }
+    return baseFactor;
   }
 
   private getAutoTuneFactor(): number {

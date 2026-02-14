@@ -296,6 +296,10 @@ export interface Config {
   crossPlatformConsistencyPressureDegradeThreshold?: number;
   crossPlatformConsistencyPressureDegradeMs?: number;
   crossPlatformConsistencyPressureUseDegradeProfile?: boolean;
+  crossPlatformConsistencyPressureHardThreshold?: number;
+  crossPlatformConsistencyPressureHardFactor?: number;
+  crossPlatformWsHealthHardThreshold?: number;
+  crossPlatformWsHealthHardFactor?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];

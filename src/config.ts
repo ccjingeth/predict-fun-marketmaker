@@ -410,6 +410,18 @@ export function loadConfig(): Config {
     ),
     crossPlatformConsistencyPressureUseDegradeProfile:
       process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_USE_DEGRADE_PROFILE !== 'false',
+    crossPlatformConsistencyPressureHardThreshold: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_THRESHOLD || '0.85'
+    ),
+    crossPlatformConsistencyPressureHardFactor: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_FACTOR || '0.35'
+    ),
+    crossPlatformWsHealthHardThreshold: parseFloat(
+      process.env.CROSS_PLATFORM_WS_HEALTH_HARD_THRESHOLD || '45'
+    ),
+    crossPlatformWsHealthHardFactor: parseFloat(
+      process.env.CROSS_PLATFORM_WS_HEALTH_HARD_FACTOR || '0.5'
+    ),
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),
