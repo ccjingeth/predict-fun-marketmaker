@@ -830,6 +830,21 @@ function renderFixSummary() {
   item.className = 'alert-item';
   item.textContent = `建议可应用 ${changed.length} 项参数`;
   metricFixSummaryList.appendChild(item);
+  if (changed.length) {
+    const actionRow = document.createElement('div');
+    actionRow.className = 'alert-item';
+    const button = document.createElement('button');
+    button.className = 'btn ghost';
+    button.textContent = '一键按摘要应用';
+    button.addEventListener('click', () => {
+      const categories = getTopFailureCategories();
+      autoSelectFixes(categories);
+      applySelectedFixes(true);
+      pushLog({ type: 'system', level: 'system', message: `已按摘要一键应用 ${changed.length} 项（请保存生效）` });
+    });
+    actionRow.appendChild(button);
+    metricFixSummaryList.appendChild(actionRow);
+  }
 }
 
 function renderMetricFailureReasons(reasons) {
