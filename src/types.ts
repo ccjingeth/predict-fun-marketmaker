@@ -378,6 +378,9 @@ export interface Config {
   arbDegradeFactor?: number;
   arbDegradeStabilityAdd?: number;
   arbDegradeTopNMin?: number;
+  arbRecheckBumpMs?: number;
+  arbRecheckBumpMaxMs?: number;
+  arbRecheckBumpRecover?: number;
   arbWsHealthLogMs?: number;
   arbPreflightEnabled?: boolean;
   arbPreflightMaxAgeMs?: number;

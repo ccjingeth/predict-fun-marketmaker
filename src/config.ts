@@ -427,6 +427,9 @@ export function loadConfig(): Config {
     arbDegradeFactor: parseFloat(process.env.ARB_DEGRADE_FACTOR || '0.7'),
     arbDegradeStabilityAdd: parseInt(process.env.ARB_DEGRADE_STABILITY_ADD || '1'),
     arbDegradeTopNMin: parseInt(process.env.ARB_DEGRADE_TOP_N_MIN || '1'),
+    arbRecheckBumpMs: parseInt(process.env.ARB_RECHECK_BUMP_MS || '200'),
+    arbRecheckBumpMaxMs: parseInt(process.env.ARB_RECHECK_BUMP_MAX_MS || '2000'),
+    arbRecheckBumpRecover: parseFloat(process.env.ARB_RECHECK_BUMP_RECOVER || '0.8'),
     arbWsHealthLogMs: parseInt(process.env.ARB_WS_HEALTH_LOG_MS || '0'),
     arbPreflightEnabled: process.env.ARB_PREFLIGHT_ENABLED !== 'false',
     arbPreflightMaxAgeMs: parseInt(process.env.ARB_PREFLIGHT_MAX_AGE_MS || '3000'),
@@ -571,6 +574,15 @@ export function loadConfig(): Config {
   }
   if ((config.arbDegradeTopNMin ?? 0) < 1) {
     config.arbDegradeTopNMin = 1;
+  }
+  if ((config.arbRecheckBumpMs ?? 0) < 0) {
+    config.arbRecheckBumpMs = 0;
+  }
+  if ((config.arbRecheckBumpMaxMs ?? 0) < 0) {
+    config.arbRecheckBumpMaxMs = 0;
+  }
+  if ((config.arbRecheckBumpRecover ?? 0) <= 0 || (config.arbRecheckBumpRecover ?? 0) >= 1) {
+    config.arbRecheckBumpRecover = 0.8;
   }
 
   if (

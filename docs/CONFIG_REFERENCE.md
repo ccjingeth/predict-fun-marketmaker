@@ -204,6 +204,9 @@
 - `ARB_DEGRADE_FACTOR`：降级系数（<1 越保守）。
 - `ARB_DEGRADE_STABILITY_ADD`：每级降级额外要求的稳定次数。
 - `ARB_DEGRADE_TOP_N_MIN`：降级时最小执行 TopN（默认 1）。
+- `ARB_RECHECK_BUMP_MS`：预检失败时额外增加的复核间隔（毫秒）。
+- `ARB_RECHECK_BUMP_MAX_MS`：复核间隔最大累积增量（毫秒）。
+- `ARB_RECHECK_BUMP_RECOVER`：成功后复核增量回撤系数（<1）。
 - `ARB_WS_HEALTH_LOG_MS`：WS 健康日志间隔，0=关闭。
 - `ARB_PREFLIGHT_ENABLED`：自动执行前二次确认机会是否仍有效。
 - `ARB_PREFLIGHT_MAX_AGE_MS`：预检时允许的 WS 最大延迟。

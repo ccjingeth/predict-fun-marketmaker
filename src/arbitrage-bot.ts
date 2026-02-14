@@ -49,6 +49,7 @@ class ArbitrageBot {
   private crossDirtyTokens: Set<string> = new Set();
   private arbPauseMs = 0;
   private arbDegradeLevel = 0;
+  private arbRecheckBumpMs = 0;
 
   constructor() {
     this.config = loadConfig();
@@ -250,13 +251,20 @@ class ArbitrageBot {
       if (!this.isStableOpportunity(opp, now)) {
         return;
       }
-      if (this.config.arbPreflightEnabled !== false) {
-        const ok = await this.preflightOpportunity(opp, markets);
-        if (!ok) {
-          console.log(`⚠️ Preflight failed for ${opp.type} ${opp.marketId}, skip execution.`);
-          return;
+    if (this.config.arbPreflightEnabled !== false) {
+      const ok = await this.preflightOpportunity(opp, markets);
+      if (!ok) {
+        const base = Math.max(0, this.config.arbRecheckMs || 0);
+        const bump = Math.max(0, this.arbRecheckBumpMs || 0);
+        const maxBump = Math.max(0, this.config.arbRecheckBumpMaxMs || 0);
+        const effective = Math.max(0, base + Math.min(bump, maxBump || bump));
+        if (effective > base) {
+          this.arbRecheckBumpMs = effective - base;
         }
+        console.log(`⚠️ Preflight failed for ${opp.type} ${opp.marketId}, skip execution.`);
+        return;
       }
+    }
       try {
         switch (opp.type) {
           case 'VALUE_MISMATCH':
@@ -666,7 +674,7 @@ class ArbitrageBot {
       this.config.arbMinProfitUsd || 0,
       this.config.arbMinDepthUsd || 0,
       this.config.arbMaxVwapDeviationBps || 0,
-      this.config.arbRecheckDeviationBps || 60,
+      this.getEffectiveRecheckDeviationBps(),
       this.config.arbMaxVwapLevels || 0
     );
     const refreshed = detector.scanMarkets([yesMarket, noMarket], orderbooks);
@@ -712,7 +720,7 @@ class ArbitrageBot {
       minProfitUsd: this.config.arbMinProfitUsd || 0,
       minDepthUsd: this.config.arbMinDepthUsd || 0,
       maxVwapDeviationBps: this.config.arbMaxVwapDeviationBps || 0,
-      recheckDeviationBps: this.config.arbRecheckDeviationBps || 60,
+      recheckDeviationBps: this.getEffectiveRecheckDeviationBps(),
       maxVwapLevels: this.config.arbMaxVwapLevels || 0,
     });
     const refreshed = detector.scanMarkets(group, orderbooks);
@@ -826,6 +834,15 @@ class ArbitrageBot {
     return Math.max(1, 1 / Math.max(0.05, factor));
   }
 
+  private getEffectiveRecheckDeviationBps(): number {
+    const base = Math.max(0, this.config.arbRecheckDeviationBps || 0);
+    if (!base) {
+      return base;
+    }
+    const factor = this.getDegradeProfitMultiplier();
+    return Math.round(base * factor);
+  }
+
   private async getMarketsCached(): Promise<Market[]> {
     const ttl = this.config.arbMarketsCacheMs || 10000;
     const now = Date.now();
@@ -865,21 +882,32 @@ class ArbitrageBot {
     if (maxLevel > 0) {
       this.arbDegradeLevel = Math.min(maxLevel, this.arbDegradeLevel + 1);
     }
+    const bump = Math.max(0, this.config.arbRecheckBumpMs || 0);
+    if (bump > 0) {
+      const maxBump = Math.max(bump, this.config.arbRecheckBumpMaxMs || bump * 5);
+      this.arbRecheckBumpMs = Math.min(maxBump, this.arbRecheckBumpMs + bump);
+    }
   }
 
   private recordArbSuccess(): void {
     const base = this.config.arbPauseOnErrorMs || 60000;
     if (!this.arbPauseMs || this.arbPauseMs <= 0) {
-      return;
+      // still allow recheck bump recovery
     }
     const recovery = this.config.arbPauseRecoveryFactor ?? 0.8;
     if (recovery <= 0 || recovery >= 1) {
       return;
     }
-    const next = Math.max(base, Math.round(this.arbPauseMs * recovery));
-    this.arbPauseMs = next;
+    if (this.arbPauseMs > 0) {
+      const next = Math.max(base, Math.round(this.arbPauseMs * recovery));
+      this.arbPauseMs = next;
+    }
     if (this.arbDegradeLevel > 0) {
       this.arbDegradeLevel -= 1;
+    }
+    const recheckRecovery = this.config.arbRecheckBumpRecover ?? 0.8;
+    if (this.arbRecheckBumpMs > 0 && recheckRecovery > 0 && recheckRecovery < 1) {
+      this.arbRecheckBumpMs = Math.max(0, Math.round(this.arbRecheckBumpMs * recheckRecovery));
     }
   }
 
