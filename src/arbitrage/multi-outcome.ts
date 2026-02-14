@@ -34,6 +34,7 @@ export interface MultiOutcomeConfig {
   minProfitUsd: number;
   maxVwapDeviationBps: number;
   recheckDeviationBps: number;
+  maxVwapLevels: number;
 }
 
 export class MultiOutcomeArbitrageDetector {
@@ -51,6 +52,7 @@ export class MultiOutcomeArbitrageDetector {
       minProfitUsd: 0,
       maxVwapDeviationBps: 0,
       recheckDeviationBps: 60,
+      maxVwapLevels: 0,
       ...config,
     };
     this.config.depthUsage = Math.max(0.05, Math.min(1, this.config.depthUsage));
@@ -171,6 +173,10 @@ export class MultiOutcomeArbitrageDetector {
         const feeBps = market.fee_rate_bps || this.config.feeBps;
         const fill = estimateBuy(book?.asks, size, feeBps, undefined, undefined, this.config.slippageBps);
         if (!fill) {
+          usable = false;
+          break;
+        }
+        if (this.config.maxVwapLevels > 0 && fill.levelsUsed > this.config.maxVwapLevels) {
           usable = false;
           break;
         }

@@ -633,6 +633,7 @@ export class CrossPlatformExecutionRouter {
       hedge: 0,
       unknown: 0,
     },
+    softBlocks: 0,
     emaPreflightMs: 0,
     emaExecMs: 0,
     emaTotalMs: 0,
@@ -1506,6 +1507,9 @@ export class CrossPlatformExecutionRouter {
 
   private classifyFailure(error: any): 'preflight' | 'execution' | 'postTrade' | 'hedge' | 'unknown' {
     const message = String(error?.message || error || '').toLowerCase();
+    if (message.includes('soft block')) {
+      return 'preflight';
+    }
     if (message.includes('preflight')) {
       return 'preflight';
     }
@@ -1567,6 +1571,9 @@ export class CrossPlatformExecutionRouter {
       if (input.error) {
         this.metrics.lastError = String(input.error?.message || input.error);
       }
+      if (this.metrics.lastError && this.metrics.lastError.toLowerCase().includes('soft block')) {
+        this.metrics.softBlocks += 1;
+      }
       if (input.reason) {
         this.metrics.failureReasons[input.reason] += 1;
       } else {
@@ -1616,7 +1623,7 @@ export class CrossPlatformExecutionRouter {
       `[CrossExec] attempts=${this.metrics.attempts} success=${this.metrics.successes} fail=${this.metrics.failures} ` +
         `preflight=${this.metrics.emaPreflightMs.toFixed(0)}ms exec=${this.metrics.emaExecMs.toFixed(0)}ms ` +
         `total=${this.metrics.emaTotalMs.toFixed(0)}ms postDrift=${this.metrics.emaPostTradeDriftBps.toFixed(1)}bps ` +
-        `alerts=${this.metrics.postTradeAlerts} quality=${this.qualityScore.toFixed(2)} ` +
+        `alerts=${this.metrics.postTradeAlerts} softBlocks=${this.metrics.softBlocks} quality=${this.qualityScore.toFixed(2)} ` +
         `failures=preflight:${reasons.preflight} exec:${reasons.execution} post:${reasons.postTrade} hedge:${reasons.hedge} ` +
         `lastError=${this.metrics.lastError || 'none'}`
     );
@@ -1888,6 +1895,12 @@ export class CrossPlatformExecutionRouter {
 
       if (!vwap) {
         throw new Error(`Preflight failed: insufficient depth for ${leg.platform}:${leg.tokenId}`);
+      }
+      const maxLevels = this.config.crossPlatformMaxVwapLevels ?? 0;
+      if (maxLevels > 0 && vwap.levelsUsed > maxLevels) {
+        throw new Error(
+          `Preflight failed: VWAP depth ${vwap.levelsUsed} levels (max ${maxLevels}) for ${leg.platform}:${leg.tokenId}`
+        );
       }
 
       const limit = leg.price;

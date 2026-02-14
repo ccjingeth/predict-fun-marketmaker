@@ -19,6 +19,7 @@ export class InPlatformArbitrageDetector {
   private minProfitUsd: number;
   private maxVwapDeviationBps: number;
   private recheckDeviationBps: number;
+  private maxVwapLevels: number;
 
   constructor(
     minProfitThreshold: number = 0.02,
@@ -30,7 +31,8 @@ export class InPlatformArbitrageDetector {
     minNotionalUsd: number = 0,
     minProfitUsd: number = 0,
     maxVwapDeviationBps: number = 0,
-    recheckDeviationBps: number = 60
+    recheckDeviationBps: number = 60,
+    maxVwapLevels: number = 0
   ) {
     this.minProfitThreshold = minProfitThreshold;
     this.estimatedFee = estimatedFee;
@@ -42,6 +44,7 @@ export class InPlatformArbitrageDetector {
     this.minProfitUsd = Math.max(0, minProfitUsd);
     this.maxVwapDeviationBps = Math.max(0, maxVwapDeviationBps);
     this.recheckDeviationBps = Math.max(0, recheckDeviationBps);
+    this.maxVwapLevels = Math.max(0, Math.floor(maxVwapLevels));
   }
 
 
@@ -146,6 +149,19 @@ export class InPlatformArbitrageDetector {
           if (needsRecheck) {
             return null;
           }
+        }
+      }
+    }
+
+    if (this.maxVwapLevels > 0) {
+      if (buyCandidate) {
+        if (buyCandidate.yes.levelsUsed > this.maxVwapLevels || buyCandidate.no.levelsUsed > this.maxVwapLevels) {
+          buyCandidate = null;
+        }
+      }
+      if (sellCandidate) {
+        if (sellCandidate.yes.levelsUsed > this.maxVwapLevels || sellCandidate.no.levelsUsed > this.maxVwapLevels) {
+          sellCandidate = null;
         }
       }
     }

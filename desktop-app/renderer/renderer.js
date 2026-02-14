@@ -32,6 +32,7 @@ const metricQuality = document.getElementById('metricQuality');
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
+const metricSoftBlocks = document.getElementById('metricSoftBlocks');
 const metricBlockedTokens = document.getElementById('metricBlockedTokens');
 const metricBlockedPlatforms = document.getElementById('metricBlockedPlatforms');
 const metricCooldown = document.getElementById('metricCooldown');
@@ -139,11 +140,16 @@ const FIX_HINTS = {
   PREDICT_WS_STALE_MS: '行情源过期阈值',
   MM_TOUCH_BUFFER_BPS: '盘口保护缓冲（越大越不易成交）',
   MM_FILL_RISK_SPREAD_BPS: '成交压力越高，自动放大价差',
+  MM_NEAR_TOUCH_PENALTY_BPS: '近触碰撤单后自动放大价差',
+  MM_NEAR_TOUCH_SIZE_PENALTY: '近触碰撤单后缩小挂单份额',
   ARB_MAX_VWAP_DEVIATION_BPS: 'VWAP 最大允许偏离（bps）',
   ARB_RECHECK_DEVIATION_BPS: '偏离过大时需要二次确认（bps）',
+  ARB_MAX_VWAP_LEVELS: '限制 VWAP 使用的档位数',
+  ARB_WS_REALTIME: '开启 WS 实时增量扫描',
   CROSS_PLATFORM_LEG_VWAP_DEVIATION_BPS: '腿间 VWAP 偏离阈值（bps）',
   CROSS_PLATFORM_LEG_MIN_DEPTH_USD: '腿间盘口最小深度（USD）',
   CROSS_PLATFORM_LEG_DEVIATION_SOFT_BPS: '腿间偏离软阈值（不自动执行）',
+  CROSS_PLATFORM_MAX_VWAP_LEVELS: '跨平台 VWAP 档位数上限',
 };
 const FIX_CATEGORY_KEYS = {
   深度不足: ['CROSS_PLATFORM_ADAPTIVE_SIZE', 'CROSS_PLATFORM_DEPTH_USAGE', 'CROSS_PLATFORM_CHUNK_MAX_SHARES'],
@@ -1553,6 +1559,8 @@ function applyMmPassiveTemplate() {
     {
       MM_TOUCH_BUFFER_BPS: '0.0008',
       MM_FILL_RISK_SPREAD_BPS: '0.0015',
+      MM_NEAR_TOUCH_PENALTY_BPS: '8',
+      MM_NEAR_TOUCH_SIZE_PENALTY: '0.85',
       MM_SOFT_CANCEL_BPS: '0.0012',
       MM_HARD_CANCEL_BPS: '0.0025',
       MM_HOLD_NEAR_TOUCH_MS: '800',
@@ -1571,8 +1579,10 @@ function applyArbSafeTemplate() {
     {
       ARB_PREFLIGHT_ENABLED: 'true',
       ARB_REQUIRE_WS: 'true',
+      ARB_WS_REALTIME: 'true',
       ARB_MAX_VWAP_DEVIATION_BPS: '200',
       ARB_RECHECK_DEVIATION_BPS: '60',
+      ARB_MAX_VWAP_LEVELS: '4',
       ARB_STABILITY_REQUIRED: 'true',
       ARB_STABILITY_MIN_COUNT: '2',
       ARB_STABILITY_WINDOW_MS: '2000',
@@ -2135,6 +2145,7 @@ async function loadMetrics() {
     setMetricText(metricChunkFactor, formatNumber(data.chunkFactor, 2));
     setMetricText(metricChunkDelay, formatMs(data.chunkDelayMs));
     setMetricText(metricAlerts, `${metrics.postTradeAlerts || 0}`);
+    setMetricText(metricSoftBlocks, `${metrics.softBlocks || 0}`);
     setMetricText(metricBlockedTokens, `${(data.blockedTokens || []).length}`);
     setMetricText(metricBlockedPlatforms, `${(data.blockedPlatforms || []).length}`);
     const cooldownUntil = Number(data.globalCooldownUntil || 0);

@@ -31,6 +31,7 @@ export class PredictWebSocketFeed {
   private lastMessageAt = 0;
   private messageCount = 0;
   private hasConnected = false;
+  private orderbookSubscribers = new Set<(tokenId: string, orderbook: Orderbook) => void>();
 
   constructor(config: PredictWsConfig) {
     this.config = config;
@@ -93,6 +94,13 @@ export class PredictWebSocketFeed {
         this.start();
       }
     }
+  }
+
+  onOrderbook(callback: (tokenId: string, orderbook: Orderbook) => void): () => void {
+    this.orderbookSubscribers.add(callback);
+    return () => {
+      this.orderbookSubscribers.delete(callback);
+    };
   }
 
   getStatus(): {
@@ -253,6 +261,25 @@ export class PredictWebSocketFeed {
       const orderbook = this.parseOrderbook(message?.data);
       if (orderbook) {
         this.cache.set(topicId, { orderbook, timestamp: Date.now() });
+        this.notifyOrderbook(topicId, orderbook);
+      }
+    }
+  }
+
+  private notifyOrderbook(topicId: string, orderbook: Orderbook): void {
+    if (this.orderbookSubscribers.size === 0) {
+      return;
+    }
+    const tokens = this.topicToTokens.get(topicId);
+    if (!tokens || tokens.size === 0) {
+      for (const callback of this.orderbookSubscribers) {
+        callback(topicId, { ...orderbook, token_id: topicId });
+      }
+      return;
+    }
+    for (const tokenId of tokens) {
+      for (const callback of this.orderbookSubscribers) {
+        callback(tokenId, { ...orderbook, token_id: tokenId });
       }
     }
   }

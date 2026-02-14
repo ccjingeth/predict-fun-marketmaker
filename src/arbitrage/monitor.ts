@@ -57,6 +57,7 @@ export interface ArbitrageConfig {
   arbMinProfitUsd: number;
   arbMaxVwapDeviationBps: number;
   arbRecheckDeviationBps: number;
+  arbMaxVwapLevels: number;
 }
 
 export class ArbitrageMonitor {
@@ -116,6 +117,7 @@ export class ArbitrageMonitor {
       arbMinProfitUsd: 0,
       arbMaxVwapDeviationBps: 0,
       arbRecheckDeviationBps: 60,
+      arbMaxVwapLevels: 0,
       ...config,
     };
 
@@ -130,7 +132,8 @@ export class ArbitrageMonitor {
       this.config.arbMinNotionalUsd,
       this.config.arbMinProfitUsd,
       this.config.arbMaxVwapDeviationBps,
-      this.config.arbRecheckDeviationBps
+      this.config.arbRecheckDeviationBps,
+      this.config.arbMaxVwapLevels
     );
     this.multiOutcomeDetector = new MultiOutcomeArbitrageDetector({
       minProfitThreshold: this.config.minProfitThreshold,
@@ -142,6 +145,7 @@ export class ArbitrageMonitor {
       minProfitUsd: this.config.arbMinProfitUsd,
       maxVwapDeviationBps: this.config.arbMaxVwapDeviationBps,
       recheckDeviationBps: this.config.arbRecheckDeviationBps,
+      maxVwapLevels: this.config.arbMaxVwapLevels,
     });
     this.crossArbDetector = new CrossPlatformArbitrageDetector(
       ['Predict', 'Polymarket', 'Opinion'],
@@ -242,6 +246,71 @@ export class ArbitrageMonitor {
 
     this.lastScanTime = Date.now();
     return results;
+  }
+
+  async scanRealtime(markets: Market[], orderbooks: Map<string, Orderbook>): Promise<{
+    valueMismatches: ArbitrageOpportunity[];
+    inPlatform: ArbitrageOpportunity[];
+    multiOutcome: ArbitrageOpportunity[];
+    crossPlatform: ArbitrageOpportunity[];
+    dependency: ArbitrageOpportunity[];
+  }> {
+    const results = {
+      valueMismatches: [] as ArbitrageOpportunity[],
+      inPlatform: [] as ArbitrageOpportunity[],
+      multiOutcome: [] as ArbitrageOpportunity[],
+      crossPlatform: [] as ArbitrageOpportunity[],
+      dependency: [] as ArbitrageOpportunity[],
+    };
+
+    if (this.config.enableValueMismatch) {
+      results.valueMismatches = this.valueDetector.scanMarkets(markets, orderbooks);
+    }
+
+    if (this.config.enableInPlatform) {
+      const intra = this.intraArbDetector.scanMarkets(markets, orderbooks);
+      results.inPlatform = intra.map((arb) => this.intraArbDetector.toOpportunity(arb));
+    }
+
+    if (this.config.enableMultiOutcome) {
+      results.multiOutcome = this.multiOutcomeDetector.scanMarkets(markets, orderbooks);
+    }
+
+    for (const opp of [
+      ...results.valueMismatches,
+      ...results.inPlatform,
+      ...results.multiOutcome,
+    ]) {
+      const key = this.getOpportunityKey(opp);
+      if (!this.opportunities.has(key) || this.isNewer(opp, this.opportunities.get(key)!)) {
+        if (this.config.alertOnNewOpportunity) {
+          this.alertNewOpportunity(opp);
+        }
+      }
+      this.opportunities.set(key, opp);
+    }
+
+    this.lastScanTime = Date.now();
+    return results;
+  }
+
+  printRealtimeReport(scanResults: {
+    valueMismatches: ArbitrageOpportunity[];
+    inPlatform: ArbitrageOpportunity[];
+    multiOutcome: ArbitrageOpportunity[];
+  }): void {
+    const total =
+      scanResults.valueMismatches.length +
+      scanResults.inPlatform.length +
+      scanResults.multiOutcome.length;
+    if (total === 0) {
+      return;
+    }
+    console.log('\n⚡ WS REALTIME ARB UPDATE');
+    console.log(`Timestamp: ${new Date().toISOString()}`);
+    console.log(
+      `Value ${scanResults.valueMismatches.length} | In-Platform ${scanResults.inPlatform.length} | Multi ${scanResults.multiOutcome.length}`
+    );
   }
 
   private getOpportunityKey(opp: ArbitrageOpportunity): string {

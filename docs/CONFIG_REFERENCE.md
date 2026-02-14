@@ -37,6 +37,10 @@
 - `MM_QUOTE_OFFSET_BPS`：额外偏离做市中间价的 bps 偏移。
 - `MM_TOUCH_BUFFER_BPS`：挂单离盘口最优价的最小缓冲（bps，>0 会更“被动”以防吃单）。
 - `MM_FILL_RISK_SPREAD_BPS`：成交压力越高，自动放大价差的系数（bps）。
+- `MM_NEAR_TOUCH_PENALTY_BPS`：近触碰撤单后给价差加的惩罚（bps）。
+- `MM_NEAR_TOUCH_PENALTY_MAX_BPS`：近触碰惩罚的上限（bps）。
+- `MM_NEAR_TOUCH_PENALTY_DECAY_MS`：近触碰惩罚衰减时间。
+- `MM_NEAR_TOUCH_SIZE_PENALTY`：近触碰撤单后挂单份额缩放（0-1，越小越保守）。
 - `MM_AGGRESSIVE_MOVE_BPS`：盘口快速逼近时的撤单阈值。
 - `MM_AGGRESSIVE_MOVE_WINDOW_MS`：快速逼近检测窗口。
 - `MM_VOLATILITY_HIGH_BPS`：高波动阈值（触发“波动档”）。
@@ -162,8 +166,13 @@
 - `ARB_ORDERBOOK_CONCURRENCY`：并发拉取 orderbook。
 - `ARB_MARKETS_CACHE_MS`：市场列表缓存。
 - `ARB_WS_MAX_AGE_MS`：WS 数据最大允许延迟。
+- `ARB_WS_REALTIME`：启用 WS 实时增量扫描。
+- `ARB_WS_REALTIME_INTERVAL_MS`：实时扫描合并窗口。
+- `ARB_WS_REALTIME_MAX_BATCH`：每批实时扫描最多处理的 token 数量。
+- `ARB_WS_REALTIME_QUIET`：实时扫描静默输出（只执行不刷屏）。
 - `ARB_MAX_VWAP_DEVIATION_BPS`：VWAP 与盘口最优价的最大偏离（bps，防止低流动性误判）。
 - `ARB_RECHECK_DEVIATION_BPS`：VWAP 偏离超过该阈值时要求二次确认（bps）。
+- `ARB_MAX_VWAP_LEVELS`：VWAP 计算允许使用的最大档位数（避免吃深度）。
 - `ARB_REQUIRE_WS`：仅使用 WS 数据（不回落 REST）。
 
 ## 5. 自动执行熔断
@@ -231,6 +240,7 @@
 - `CROSS_PLATFORM_SLIPPAGE_BPS`：最大滑点。
 - `CROSS_PLATFORM_MAX_SHARES`：跨平台 VWAP 估算的最大份额。
 - `CROSS_PLATFORM_DEPTH_LEVELS`：跨平台订单簿深度层级数。
+- `CROSS_PLATFORM_MAX_VWAP_LEVELS`：跨平台 VWAP 允许使用的最大档位数。
 - `CROSS_PLATFORM_EXECUTION_VWAP_CHECK`：跨平台执行前 VWAP 预检（更稳健）。
 - `CROSS_PLATFORM_PRICE_DRIFT_BPS`：预检时允许的最优价漂移上限（bps）。
 - `CROSS_PLATFORM_ADAPTIVE_SIZE`：执行前根据订单簿深度自动缩小下单份额。

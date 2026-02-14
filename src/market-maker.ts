@@ -70,6 +70,7 @@ export class MarketMaker {
   private recheckCooldownUntil: Map<string, number> = new Map();
   private fillPressure: Map<string, { score: number; ts: number }> = new Map();
   private cancelBoost: Map<string, { value: number; ts: number }> = new Map();
+  private nearTouchPenalty: Map<string, { value: number; ts: number }> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -718,6 +719,40 @@ export class MarketMaker {
     return this.clamp(recovered, entry.value, 1);
   }
 
+  private applyNearTouchPenalty(tokenId: string, intensity: number = 1): void {
+    const base = this.config.mmNearTouchPenaltyBps ?? 0;
+    if (!base || base <= 0) {
+      return;
+    }
+    const maxBps = this.config.mmNearTouchPenaltyMaxBps ?? base * 4;
+    const current = this.nearTouchPenalty.get(tokenId);
+    const scaled = base * this.clamp(intensity, 0.2, 2);
+    const next = Math.min((current?.value ?? 0) + scaled, maxBps);
+    this.nearTouchPenalty.set(tokenId, { value: next, ts: Date.now() });
+  }
+
+  private getNearTouchPenalty(tokenId: string): number {
+    const entry = this.nearTouchPenalty.get(tokenId);
+    if (!entry) {
+      return 0;
+    }
+    const decayMs = this.config.mmNearTouchPenaltyDecayMs ?? 60000;
+    if (!decayMs || decayMs <= 0) {
+      return entry.value;
+    }
+    const elapsed = Date.now() - entry.ts;
+    if (elapsed <= 0) {
+      return entry.value;
+    }
+    const decay = Math.exp(-elapsed / decayMs);
+    const value = entry.value * decay;
+    if (value <= 0.01) {
+      this.nearTouchPenalty.delete(tokenId);
+      return 0;
+    }
+    return value;
+  }
+
   private canRecheck(tokenId: string): boolean {
     const cooldown = Math.max(0, this.config.mmRecheckCooldownMs ?? 0);
     if (!cooldown) {
@@ -845,6 +880,7 @@ export class MarketMaker {
       topDepthUsd: metrics.topDepthUsd,
       imbalance,
       inventoryBias: prices.inventoryBias,
+      nearTouchPenaltyBps: this.getNearTouchPenalty(market.token_id),
       updatedAt: Date.now(),
     };
     this.mmMetrics.set(market.token_id, entry);
@@ -963,6 +999,11 @@ export class MarketMaker {
       if (fillRisk > 0) {
         adaptiveSpread += fillRisk * (fillRiskBps / 10000);
       }
+    }
+
+    const nearTouchPenalty = this.getNearTouchPenalty(market.token_id);
+    if (nearTouchPenalty > 0) {
+      adaptiveSpread += nearTouchPenalty / 10000;
     }
 
     const depthTarget = this.config.mmDepthTargetShares ?? 0;
@@ -1381,6 +1422,14 @@ export class MarketMaker {
         }
       }
       if (risk.cancel || shouldReprice) {
+        if (risk.cancel && (risk.reason.startsWith('near-touch') || risk.reason === 'anti-fill')) {
+          const intensity = risk.panic ? 1.5 : 1;
+          this.applyNearTouchPenalty(tokenId, intensity);
+          const sizePenalty = this.config.mmNearTouchSizePenalty ?? 0;
+          if (sizePenalty > 0 && sizePenalty < 1) {
+            this.applySizePenalty(tokenId, sizePenalty, true);
+          }
+        }
         await this.cancelOrder(existingBid);
         const softCooldown = this.config.mmSoftCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
         const hardCooldown = this.config.mmHardCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
@@ -1423,6 +1472,14 @@ export class MarketMaker {
         }
       }
       if (risk.cancel || shouldReprice) {
+        if (risk.cancel && (risk.reason.startsWith('near-touch') || risk.reason === 'anti-fill')) {
+          const intensity = risk.panic ? 1.5 : 1;
+          this.applyNearTouchPenalty(tokenId, intensity);
+          const sizePenalty = this.config.mmNearTouchSizePenalty ?? 0;
+          if (sizePenalty > 0 && sizePenalty < 1) {
+            this.applySizePenalty(tokenId, sizePenalty, true);
+          }
+        }
         await this.cancelOrder(existingAsk);
         const softCooldown = this.config.mmSoftCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
         const hardCooldown = this.config.mmHardCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);

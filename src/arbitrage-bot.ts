@@ -39,6 +39,10 @@ class ArbitrageBot {
   private wsHealthWarned = false;
   private wsHealthPenaltyUntil = 0;
   private oppStability: Map<string, { count: number; lastSeen: number }> = new Map();
+  private wsDirtyTokens: Set<string> = new Set();
+  private wsRealtimeTimer?: NodeJS.Timeout;
+  private wsRealtimeRunning = false;
+  private wsRealtimeUnsub?: () => void;
 
   constructor() {
     this.config = loadConfig();
@@ -87,6 +91,7 @@ class ArbitrageBot {
       arbDepthUsage: this.config.arbDepthUsage || 0.6,
       arbMinNotionalUsd: this.config.arbMinNotionalUsd || 0,
       arbMinProfitUsd: this.config.arbMinProfitUsd || 0,
+      arbMaxVwapLevels: this.config.arbMaxVwapLevels || 0,
     }, this.config.crossPlatformEnabled ? new CrossPlatformAggregator(this.config) : undefined);
 
     this.executor = new ArbitrageExecutor({
@@ -120,6 +125,9 @@ class ArbitrageBot {
     if (this.config.arbRequireWs && !this.config.predictWsEnabled) {
       throw new Error('ARB_REQUIRE_WS=true requires PREDICT_WS_ENABLED=true');
     }
+    if (this.config.arbWsRealtime && !this.config.predictWsEnabled) {
+      throw new Error('ARB_WS_REALTIME=true requires PREDICT_WS_ENABLED=true');
+    }
 
     if (this.config.enableTrading) {
       if (!this.config.jwtToken) {
@@ -151,6 +159,7 @@ class ArbitrageBot {
         resetOnReconnect: this.config.predictWsResetOnReconnect,
       });
       this.predictWs.start();
+      this.attachRealtimeSubscription();
     }
 
     this.startWsHealthLogger();
@@ -173,6 +182,8 @@ class ArbitrageBot {
 
   async startMonitoring(): Promise<void> {
     console.log('🔄 Starting continuous monitoring...\n');
+
+    this.startRealtimeLoop();
 
     await this.monitor.startMonitoring(
       async () => {
@@ -408,6 +419,116 @@ class ArbitrageBot {
     return orderbooks;
   }
 
+  private attachRealtimeSubscription(): void {
+    if (!this.predictWs || this.config.arbWsRealtime !== true) {
+      return;
+    }
+    if (this.wsRealtimeUnsub) {
+      return;
+    }
+    this.wsRealtimeUnsub = this.predictWs.onOrderbook((tokenId) => {
+      if (tokenId) {
+        this.wsDirtyTokens.add(tokenId);
+      }
+    });
+  }
+
+  private startRealtimeLoop(): void {
+    if (this.config.arbWsRealtime !== true) {
+      return;
+    }
+    if (!this.predictWs) {
+      return;
+    }
+    if (this.wsRealtimeTimer) {
+      return;
+    }
+    const interval = Math.max(100, this.config.arbWsRealtimeIntervalMs || 400);
+    this.wsRealtimeTimer = setInterval(() => {
+      void this.flushRealtime();
+    }, interval);
+  }
+
+  private async flushRealtime(): Promise<void> {
+    if (this.wsRealtimeRunning) {
+      return;
+    }
+    if (this.wsDirtyTokens.size === 0) {
+      return;
+    }
+    this.wsRealtimeRunning = true;
+    try {
+      const maxBatch = Math.max(1, this.config.arbWsRealtimeMaxBatch || 40);
+      const tokens = Array.from(this.wsDirtyTokens);
+      this.wsDirtyTokens.clear();
+      const batch = tokens.slice(0, maxBatch);
+      if (tokens.length > maxBatch) {
+        for (const tokenId of tokens.slice(maxBatch)) {
+          this.wsDirtyTokens.add(tokenId);
+        }
+      }
+      const markets = await this.getMarketsCached();
+      const subset = this.expandMarketsForTokens(markets, batch);
+      if (subset.length === 0) {
+        return;
+      }
+      const orderbooks = await this.loadOrderbooks(subset, this.config.arbWsMaxAgeMs || 10000);
+      const results = await this.monitor.scanRealtime(subset, orderbooks);
+      if (this.config.arbAutoExecute) {
+        await this.autoExecute(results);
+      }
+      if (this.config.arbWsRealtimeQuiet !== true) {
+        this.monitor.printRealtimeReport({
+          valueMismatches: results.valueMismatches,
+          inPlatform: results.inPlatform,
+          multiOutcome: results.multiOutcome,
+        });
+      }
+    } catch (error) {
+      console.warn('WS realtime scan failed:', error);
+    } finally {
+      this.wsRealtimeRunning = false;
+    }
+  }
+
+  private expandMarketsForTokens(markets: Market[], tokens: string[]): Market[] {
+    if (tokens.length === 0) {
+      return [];
+    }
+    const tokenSet = new Set(tokens);
+    const conditionMap = new Map<string, Market[]>();
+    const tokenMap = new Map<string, Market>();
+
+    for (const market of markets) {
+      tokenMap.set(market.token_id, market);
+      const key = market.condition_id || market.event_id;
+      if (key) {
+        if (!conditionMap.has(key)) {
+          conditionMap.set(key, []);
+        }
+        conditionMap.get(key)!.push(market);
+      }
+    }
+
+    const selected = new Map<string, Market>();
+    for (const tokenId of tokenSet) {
+      const market = tokenMap.get(tokenId);
+      if (!market) {
+        continue;
+      }
+      const key = market.condition_id || market.event_id;
+      if (key && conditionMap.has(key)) {
+        for (const entry of conditionMap.get(key)!) {
+          selected.set(entry.token_id, entry);
+        }
+      } else {
+        selected.set(tokenId, market);
+      }
+    }
+
+    return Array.from(selected.values());
+  }
+
   private async preflightOpportunity(opp: any, markets: Market[]): Promise<boolean> {
     switch (opp.type) {
       case 'IN_PLATFORM':
@@ -445,7 +566,8 @@ class ArbitrageBot {
       this.config.arbMinNotionalUsd || 0,
       this.config.arbMinProfitUsd || 0,
       this.config.arbMaxVwapDeviationBps || 0,
-      this.config.arbRecheckDeviationBps || 60
+      this.config.arbRecheckDeviationBps || 60,
+      this.config.arbMaxVwapLevels || 0
     );
     const refreshed = detector.scanMarkets([yesMarket, noMarket], orderbooks);
     if (refreshed.length === 0) {
@@ -479,6 +601,7 @@ class ArbitrageBot {
       minProfitUsd: this.config.arbMinProfitUsd || 0,
       maxVwapDeviationBps: this.config.arbMaxVwapDeviationBps || 0,
       recheckDeviationBps: this.config.arbRecheckDeviationBps || 60,
+      maxVwapLevels: this.config.arbMaxVwapLevels || 0,
     });
     const refreshed = detector.scanMarkets(group, orderbooks);
     if (refreshed.length === 0) {

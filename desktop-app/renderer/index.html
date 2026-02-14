@@ -70,6 +70,8 @@
               <label class="toggle"><input type="checkbox" data-env="MULTI_OUTCOME_ENABLED" />多结果套利</label>
               <label class="toggle"><input type="checkbox" data-env="POLYMARKET_WS_ENABLED" />Polymarket WS</label>
               <label class="toggle"><input type="checkbox" data-env="PREDICT_WS_ENABLED" />Predict WS</label>
+              <label class="toggle"><input type="checkbox" data-env="ARB_REQUIRE_WS" />套利强制 WS</label>
+              <label class="toggle"><input type="checkbox" data-env="ARB_WS_REALTIME" />套利 WS 实时扫描</label>
               <label class="toggle"><input type="checkbox" data-env="OPINION_WS_ENABLED" />Opinion WS</label>
             </div>
             <div class="button-row">
@@ -80,9 +82,9 @@
               <button class="btn ghost" id="applyArbSafe">套利稳健模板</button>
             </div>
             <div class="template-hint">
-              做市模板：`MM_TOUCH_BUFFER_BPS`、`MM_FILL_RISK_SPREAD_BPS`、`MM_DYNAMIC_CANCEL_ON_FILL` 等
+              做市模板：`MM_TOUCH_BUFFER_BPS`、`MM_FILL_RISK_SPREAD_BPS`、`MM_NEAR_TOUCH_PENALTY_BPS` 等
               <br />
-              套利模板：`ARB_PREFLIGHT_ENABLED`、`ARB_MAX_VWAP_DEVIATION_BPS`、`ARB_RECHECK_DEVIATION_BPS` 等
+              套利模板：`ARB_PREFLIGHT_ENABLED`、`ARB_WS_REALTIME`、`ARB_MAX_VWAP_DEVIATION_BPS` 等
             </div>
           </div>
         </section>
@@ -260,6 +262,11 @@
               <span class="metric-label">告警次数</span>
               <span class="metric-value" id="metricAlerts">--</span>
               <span class="metric-hint">post-trade 触发</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">软拒绝</span>
+              <span class="metric-value" id="metricSoftBlocks">--</span>
+              <span class="metric-hint">软阈值阻断</span>
             </div>
             <div class="metric">
               <span class="metric-label">封禁 Token</span>

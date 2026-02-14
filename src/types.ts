@@ -89,6 +89,10 @@ export interface Config {
   mmQuoteOffsetBps?: number;
   mmTouchBufferBps?: number;
   mmFillRiskSpreadBps?: number;
+  mmNearTouchPenaltyBps?: number;
+  mmNearTouchPenaltyMaxBps?: number;
+  mmNearTouchPenaltyDecayMs?: number;
+  mmNearTouchSizePenalty?: number;
   mmAggressiveMoveBps?: number;
   mmAggressiveMoveWindowMs?: number;
   mmVolatilityHighBps?: number;
@@ -149,6 +153,7 @@ export interface Config {
   crossPlatformSlippageBps?: number;
   crossPlatformMaxShares?: number;
   crossPlatformDepthLevels?: number;
+  crossPlatformMaxVwapLevels?: number;
   crossPlatformExecutionVwapCheck?: boolean;
   crossPlatformPriceDriftBps?: number;
   crossPlatformAdaptiveSize?: boolean;
@@ -298,6 +303,10 @@ export interface Config {
   arbOrderbookConcurrency?: number;
   arbMarketsCacheMs?: number;
   arbWsMaxAgeMs?: number;
+  arbWsRealtime?: boolean;
+  arbWsRealtimeIntervalMs?: number;
+  arbWsRealtimeMaxBatch?: number;
+  arbWsRealtimeQuiet?: boolean;
   arbRequireWs?: boolean;
   arbMaxErrors?: number;
   arbErrorWindowMs?: number;
@@ -310,6 +319,7 @@ export interface Config {
   arbMinProfitUsd?: number;
   arbMaxVwapDeviationBps?: number;
   arbRecheckDeviationBps?: number;
+  arbMaxVwapLevels?: number;
   arbStabilityRequired?: boolean;
   arbStabilityMinCount?: number;
   arbStabilityWindowMs?: number;

@@ -91,8 +91,12 @@
 - `ARB_MARKETS_CACHE_MS=10000`
 WS 最大可接受延迟：
 - `ARB_WS_MAX_AGE_MS=10000`
+- `ARB_WS_REALTIME=true`（WS 实时增量扫描）
+- `ARB_WS_REALTIME_INTERVAL_MS=400`（实时扫描合并窗口）
+- `ARB_WS_REALTIME_MAX_BATCH=40`（每批处理的 token 数量）
 - `ARB_MAX_VWAP_DEVIATION_BPS=200`（VWAP 允许偏离盘口上限）
 - `ARB_RECHECK_DEVIATION_BPS=60`（偏离过大时要求二次确认）
+- `ARB_MAX_VWAP_LEVELS=4`（限制 VWAP 使用深度档位数）
 自动执行错误熔断：
 - `ARB_MAX_ERRORS=5`
 - `ARB_ERROR_WINDOW_MS=60000`
@@ -107,6 +111,8 @@ WS 健康日志：
 
 - `MM_TOUCH_BUFFER_BPS=0.0008`：挂单远离盘口最优价，越大越不容易成交。
 - `MM_FILL_RISK_SPREAD_BPS=0.0015`：成交压力越高，自动放大价差。
+- `MM_NEAR_TOUCH_PENALTY_BPS=8`：近触碰撤单后自动放大价差。
+- `MM_NEAR_TOUCH_SIZE_PENALTY=0.85`：近触碰撤单后缩小挂单份额。
 - `MM_SOFT_CANCEL_BPS=0.0012` / `MM_HARD_CANCEL_BPS=0.0025`：提前撤单避免被吃。
 - `MM_HOLD_NEAR_TOUCH_MS=800`：接近成交时短暂观察，避免误撤。
 - `MM_DYNAMIC_CANCEL_ON_FILL=true`：一旦成交，提高撤单敏感度。
