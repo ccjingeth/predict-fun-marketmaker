@@ -81,6 +81,7 @@ const metricFailureReasons = document.getElementById('metricFailureReasons');
 const metricAlertsList = document.getElementById('metricAlertsList');
 const metricFailureAdviceList = document.getElementById('metricFailureAdviceList');
 const metricConsistencyList = document.getElementById('metricConsistencyList');
+const metricConsistencyHotspots = document.getElementById('metricConsistencyHotspots');
 const metricFixSummaryList = document.getElementById('metricFixSummaryList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
 const saveEnvButton = document.getElementById('saveEnv');
@@ -1993,6 +1994,53 @@ function renderConsistencyFailures() {
   });
 }
 
+function renderConsistencyHotspots() {
+  if (!metricConsistencyHotspots) return;
+  const buckets = buildConsistencyHeatmapSeries();
+  const entries = buckets
+    .map((count, idx) => ({ count, hour: idx }))
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+  metricConsistencyHotspots.innerHTML = '';
+  if (!entries.length) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无一致性热区。';
+    metricConsistencyHotspots.appendChild(item);
+    return;
+  }
+  entries.forEach((entry) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    const hourLabel = String(entry.hour).padStart(2, '0');
+    label.textContent = `${hourLabel}:00`;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.textContent = `${entry.count} 次`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    metricConsistencyHotspots.appendChild(row);
+  });
+}
+
+function computeConsistencyFailureRate() {
+  const now = Date.now();
+  const cutoff = now - 60 * 60 * 1000;
+  let total = 0;
+  let consistency = 0;
+  for (const event of failureEvents) {
+    if (!event?.ts) continue;
+    if (event.ts < cutoff) continue;
+    total += 1;
+    if (event.isConsistency) consistency += 1;
+  }
+  if (!total) return 0;
+  return (consistency / total) * 100;
+}
+
 function formatNumber(value, digits = 0) {
   if (!Number.isFinite(value)) return '--';
   return Number(value).toFixed(digits);
@@ -2104,6 +2152,9 @@ function renderAdvice(items, metricsSnapshot) {
     }
     if (metricsSnapshot.consistencyOverrideActive) {
       advice.push('一致性降级已触发：建议降低并发或提升稳定性阈值。');
+    }
+    if (metricsSnapshot.consistencyHigh) {
+      advice.push('一致性失败偏高：建议开启“一致性模板”或提高一致性阈值。');
     }
   }
   if (failureCounts.size > 0) {
@@ -2269,6 +2320,7 @@ function updateAlerts({
   postTradeDriftBps,
   qualityScore,
   consistencyOverrideActive,
+  consistencyFailureRate,
   cooldownUntil,
   metricsAgeMs,
 }) {
@@ -2304,6 +2356,9 @@ function updateAlerts({
   }
   if (consistencyOverrideActive) {
     warnings.push('一致性保守模式中，已自动降低风险策略。');
+  }
+  if (consistencyFailureRate >= 25) {
+    warnings.push('一致性失败率偏高，建议启用一致性模板或提升一致性阈值。');
   }
   if (cooldownUntil && cooldownUntil > Date.now()) {
     warnings.push('全局冷却中，执行将自动暂停。');
@@ -2531,6 +2586,7 @@ async function loadMetrics() {
     }
 
     updateCharts();
+    const consistencyFailureRate = computeConsistencyFailureRate();
     const metricsSnapshot = {
       successRate,
       postTradeDriftBps,
@@ -2544,6 +2600,8 @@ async function loadMetrics() {
       driftLimit: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80),
       minQuality: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7),
       consistencyOverrideActive: consistencyActive > 0,
+      consistencyFailureRate,
+      consistencyHigh: consistencyFailureRate >= 25,
     };
     updateAlerts(metricsSnapshot);
     renderAdvice(null, metricsSnapshot);
@@ -2559,6 +2617,7 @@ async function loadMetrics() {
     updateCharts();
     renderMetricFailureAdvice(metrics.failureReasons, metricsSnapshot);
     renderConsistencyFailures();
+    renderConsistencyHotspots();
     const changedCount = renderFixSummary();
     const hasPendingSave = !!(saveEnvButton && saveEnvButton.classList.contains('attention'));
     if (changedCount === 0) {
