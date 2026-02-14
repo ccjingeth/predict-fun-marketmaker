@@ -2313,6 +2313,10 @@ export class CrossPlatformExecutionRouter {
   ): Promise<{ maxDeviationBps: number; maxDriftBps: number }> {
     let maxDeviationBps = 0;
     let maxDriftBps = 0;
+    const extraDeviation =
+      this.circuitFailures > 0 || this.isDegraded()
+        ? Math.max(0, this.config.crossPlatformFailureVwapDeviationBps || 0)
+        : 0;
     const checks = legs.map(async (leg) => {
       if (!leg.tokenId || !leg.price || !leg.shares) {
         throw new Error(`Invalid leg for preflight: ${leg.platform}`);
@@ -2394,7 +2398,7 @@ export class CrossPlatformExecutionRouter {
         );
       }
 
-      const maxDeviation = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor());
+      const maxDeviation = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor() + extraDeviation);
       if (deviationBps > maxDeviation) {
         throw new Error(
           `Preflight failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${maxDeviation}) for ${leg.platform}:${leg.tokenId}`
@@ -2451,8 +2455,12 @@ export class CrossPlatformExecutionRouter {
   }
 
   private async stabilityCheck(legs: PlatformLeg[]): Promise<void> {
-    const samples = Math.max(1, this.config.crossPlatformStabilitySamples || 1);
-    const intervalMs = Math.max(0, this.config.crossPlatformStabilityIntervalMs || 0);
+    let samples = Math.max(1, this.config.crossPlatformStabilitySamples || 1);
+    let intervalMs = Math.max(0, this.config.crossPlatformStabilityIntervalMs || 0);
+    if (this.circuitFailures > 0 || this.isDegraded()) {
+      samples += Math.max(0, this.config.crossPlatformFailureStabilitySamplesAdd || 0);
+      intervalMs += Math.max(0, this.config.crossPlatformFailureStabilityIntervalAddMs || 0);
+    }
     const threshold = Math.max(0, this.getStabilityBps() * this.getAutoTuneFactor());
     if (samples <= 1 || threshold <= 0) {
       return;

@@ -310,6 +310,9 @@ export interface Config {
   crossPlatformFailureProfitBps?: number;
   crossPlatformFailureProfitUsd?: number;
   crossPlatformFailureStabilityBps?: number;
+  crossPlatformFailureStabilitySamplesAdd?: number;
+  crossPlatformFailureStabilityIntervalAddMs?: number;
+  crossPlatformFailureVwapDeviationBps?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;
