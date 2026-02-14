@@ -126,6 +126,9 @@ export function loadConfig(): Config {
     mmNearTouchPenaltyMaxBps: parseFloat(process.env.MM_NEAR_TOUCH_PENALTY_MAX_BPS || '0'),
     mmNearTouchPenaltyDecayMs: parseInt(process.env.MM_NEAR_TOUCH_PENALTY_DECAY_MS || '60000'),
     mmNearTouchSizePenalty: parseFloat(process.env.MM_NEAR_TOUCH_SIZE_PENALTY || '0'),
+    mmFillPenaltyBps: parseFloat(process.env.MM_FILL_PENALTY_BPS || '0'),
+    mmFillPenaltyMaxBps: parseFloat(process.env.MM_FILL_PENALTY_MAX_BPS || '0'),
+    mmFillPenaltyDecayMs: parseInt(process.env.MM_FILL_PENALTY_DECAY_MS || '90000'),
     mmAggressiveMoveBps: parseFloat(process.env.MM_AGGRESSIVE_MOVE_BPS || '0.002'),
     mmAggressiveMoveWindowMs: parseInt(process.env.MM_AGGRESSIVE_MOVE_WINDOW_MS || '1500'),
     mmVolatilityHighBps: parseFloat(process.env.MM_VOLATILITY_HIGH_BPS || '0.006'),
@@ -166,6 +169,7 @@ export function loadConfig(): Config {
     mmDynamicCancelBoost: parseFloat(process.env.MM_DYNAMIC_CANCEL_BOOST || '0.4'),
     mmDynamicCancelDecayMs: parseInt(process.env.MM_DYNAMIC_CANCEL_DECAY_MS || '60000'),
     mmDynamicCancelMaxBoost: parseFloat(process.env.MM_DYNAMIC_CANCEL_MAX_BOOST || '2'),
+    mmOnlyPointsMarkets: process.env.MM_ONLY_POINTS_MARKETS === 'true',
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -274,6 +278,10 @@ export function loadConfig(): Config {
     crossPlatformMetricsFlushMs: parseInt(process.env.CROSS_PLATFORM_METRICS_FLUSH_MS || '30000'),
     crossPlatformOrderType: (crossPlatformOrderTypeRaw || undefined) as Config['crossPlatformOrderType'],
     crossPlatformOrderTypeFallback: parseOrderTypeList(process.env.CROSS_PLATFORM_ORDER_TYPE_FALLBACK),
+    crossPlatformFallbackMode: (process.env.CROSS_PLATFORM_FALLBACK_MODE || 'AUTO').toUpperCase() as
+      | 'AUTO'
+      | 'SEQUENTIAL'
+      | 'SINGLE_LEG',
     crossPlatformBatchOrders: process.env.CROSS_PLATFORM_BATCH_ORDERS === 'true',
     crossPlatformBatchMax: parseInt(process.env.CROSS_PLATFORM_BATCH_MAX || '15'),
     crossPlatformUseFok: process.env.CROSS_PLATFORM_USE_FOK !== 'false',
@@ -329,6 +337,9 @@ export function loadConfig(): Config {
     crossPlatformNetRiskMaxFactor: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_MAX_FACTOR || '1'),
     crossPlatformNetRiskDegradeFactor: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_DEGRADE_FACTOR || '0.6'),
     crossPlatformNetRiskScaleOnQuality: process.env.CROSS_PLATFORM_NET_RISK_SCALE_ON_QUALITY !== 'false',
+    crossPlatformNetRiskAutoTighten: process.env.CROSS_PLATFORM_NET_RISK_AUTO_TIGHTEN !== 'false',
+    crossPlatformNetRiskTightenOnFailure: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_TIGHTEN_ON_FAILURE || '0.08'),
+    crossPlatformNetRiskRelaxOnSuccess: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_RELAX_ON_SUCCESS || '0.03'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -397,6 +408,7 @@ export function loadConfig(): Config {
     arbPreflightEnabled: process.env.ARB_PREFLIGHT_ENABLED !== 'false',
     arbPreflightMaxAgeMs: parseInt(process.env.ARB_PREFLIGHT_MAX_AGE_MS || '3000'),
     arbDepthUsage: parseFloat(process.env.ARB_DEPTH_USAGE || '0.6'),
+    arbMinDepthUsd: parseFloat(process.env.ARB_MIN_DEPTH_USD || '0'),
     arbMinNotionalUsd: parseFloat(process.env.ARB_MIN_NOTIONAL_USD || '0'),
     arbMinProfitUsd: parseFloat(process.env.ARB_MIN_PROFIT_USD || '0'),
     arbMinProfitBps: parseFloat(process.env.ARB_MIN_PROFIT_BPS || '0'),
@@ -491,6 +503,9 @@ export function loadConfig(): Config {
 
   if ((config.arbDepthUsage ?? 0) <= 0 || (config.arbDepthUsage ?? 0) > 1) {
     config.arbDepthUsage = 0.6;
+  }
+  if ((config.arbMinDepthUsd ?? 0) < 0) {
+    config.arbMinDepthUsd = 0;
   }
   if ((config.arbMinNotionalUsd ?? 0) < 0) {
     config.arbMinNotionalUsd = 0;
@@ -714,6 +729,19 @@ export function loadConfig(): Config {
     config.mmDynamicCancelMaxBoost = 1;
   }
 
+  if ((config.mmFillPenaltyBps ?? 0) < 0) {
+    config.mmFillPenaltyBps = 0;
+  }
+  if ((config.mmFillPenaltyMaxBps ?? 0) < 0) {
+    config.mmFillPenaltyMaxBps = 0;
+  }
+  if ((config.mmFillPenaltyMaxBps ?? 0) > 0 && (config.mmFillPenaltyMaxBps ?? 0) < (config.mmFillPenaltyBps ?? 0)) {
+    config.mmFillPenaltyMaxBps = config.mmFillPenaltyBps;
+  }
+  if ((config.mmFillPenaltyDecayMs ?? 0) < 0) {
+    config.mmFillPenaltyDecayMs = 0;
+  }
+
   return config;
 }
 
@@ -754,6 +782,9 @@ export function printConfig(config: Config): void {
     `MM Cancel Bands: soft=${(config.mmSoftCancelBps ?? 0) * 100}% hard=${(config.mmHardCancelBps ?? 0) * 100}%`
   );
   console.log(
+    `MM Fill Penalty: base=${config.mmFillPenaltyBps ?? 0}bps max=${config.mmFillPenaltyMaxBps ?? 0}bps decay=${config.mmFillPenaltyDecayMs}ms`
+  );
+  console.log(
     `MM Cancel Confirm: reprice=${config.mmRepriceConfirmMs}ms cancel=${config.mmCancelConfirmMs}ms`
   );
   console.log(
@@ -767,6 +798,7 @@ export function printConfig(config: Config): void {
   );
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);
+  console.log(`MM Only Points Markets: ${config.mmOnlyPointsMarkets ? '✅' : '❌'}`);
   console.log(`Hedge On Fill: ${config.hedgeOnFill ? '✅' : '❌'}`);
   console.log(`Hedge Mode: ${config.hedgeMode}`);
   console.log(`Cross-Platform Enabled: ${config.crossPlatformEnabled ? '✅' : '❌'}`);
@@ -780,6 +812,9 @@ export function printConfig(config: Config): void {
   console.log(`Cross-Platform Limit Orders: ${config.crossPlatformLimitOrders ? '✅' : '❌'}`);
   console.log(`Cross-Platform Use FOK: ${config.crossPlatformUseFok ? '✅' : '❌'}`);
   console.log(`Cross-Platform Parallel Submit: ${config.crossPlatformParallelSubmit ? '✅' : '❌'}`);
+  if (config.crossPlatformFallbackMode) {
+    console.log(`Cross-Platform Fallback Mode: ${config.crossPlatformFallbackMode}`);
+  }
   console.log(`Cross-Platform Cancel Open Ms: ${config.crossPlatformCancelOpenMs}`);
   console.log(`Cross-Platform Hedge On Failure: ${config.crossPlatformHedgeOnFailure ? '✅' : '❌'}`);
   console.log(`Cross-Platform Hedge Predict Only: ${config.crossPlatformHedgePredictOnly ? '✅' : '❌'}`);
@@ -835,7 +870,7 @@ export function printConfig(config: Config): void {
   console.log(`Arb WS Health Log: ${config.arbWsHealthLogMs}ms`);
   console.log(`Arb Preflight: ${config.arbPreflightEnabled ? '✅' : '❌'} maxAge=${config.arbPreflightMaxAgeMs}ms`);
   console.log(
-    `Arb Depth Usage: ${config.arbDepthUsage} minNotional=$${config.arbMinNotionalUsd} minProfit=$${config.arbMinProfitUsd}`
+    `Arb Depth Usage: ${config.arbDepthUsage} minDepth=$${config.arbMinDepthUsd} minNotional=$${config.arbMinNotionalUsd} minProfit=$${config.arbMinProfitUsd}`
   );
   console.log(
     `Arb Stability: ${config.arbStabilityRequired ? '✅' : '❌'} count=${config.arbStabilityMinCount} window=${config.arbStabilityWindowMs}ms`

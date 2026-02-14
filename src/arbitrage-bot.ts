@@ -659,6 +659,7 @@ class ArbitrageBot {
       this.config.arbDepthUsage || 0.6,
       this.config.arbMinNotionalUsd || 0,
       this.config.arbMinProfitUsd || 0,
+      this.config.arbMinDepthUsd || 0,
       this.config.arbMaxVwapDeviationBps || 0,
       this.config.arbRecheckDeviationBps || 60,
       this.config.arbMaxVwapLevels || 0
@@ -703,6 +704,7 @@ class ArbitrageBot {
       depthUsage: this.config.arbDepthUsage || 0.6,
       minNotionalUsd: this.config.arbMinNotionalUsd || 0,
       minProfitUsd: this.config.arbMinProfitUsd || 0,
+      minDepthUsd: this.config.arbMinDepthUsd || 0,
       maxVwapDeviationBps: this.config.arbMaxVwapDeviationBps || 0,
       recheckDeviationBps: this.config.arbRecheckDeviationBps || 60,
       maxVwapLevels: this.config.arbMaxVwapLevels || 0,

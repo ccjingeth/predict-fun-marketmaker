@@ -32,6 +32,7 @@ export interface MultiOutcomeConfig {
   depthUsage: number;
   minNotionalUsd: number;
   minProfitUsd: number;
+  minDepthUsd: number;
   maxVwapDeviationBps: number;
   recheckDeviationBps: number;
   maxVwapLevels: number;
@@ -50,6 +51,7 @@ export class MultiOutcomeArbitrageDetector {
       depthUsage: 0.6,
       minNotionalUsd: 0,
       minProfitUsd: 0,
+      minDepthUsd: 0,
       maxVwapDeviationBps: 0,
       recheckDeviationBps: 60,
       maxVwapLevels: 0,
@@ -71,6 +73,7 @@ export class MultiOutcomeArbitrageDetector {
 
       const outcomes: MultiOutcomeArbitrage['outcomes'] = [];
       let minDepth = Infinity;
+      let minDepthUsd = Infinity;
 
       for (const market of group) {
         const book = orderbooks.get(market.token_id);
@@ -84,6 +87,10 @@ export class MultiOutcomeArbitrageDetector {
 
         const depth = Math.max(sumDepth(book?.asks), askSize);
         minDepth = Math.min(minDepth, depth > 0 ? depth : minDepth);
+        const depthUsd = depth * ask;
+        if (Number.isFinite(depthUsd) && depthUsd > 0) {
+          minDepthUsd = Math.min(minDepthUsd, depthUsd);
+        }
 
         outcomes.push({
           tokenId: market.token_id,
@@ -94,6 +101,9 @@ export class MultiOutcomeArbitrageDetector {
       }
 
       if (!Number.isFinite(minDepth) || minDepth <= 0) {
+        continue;
+      }
+      if (this.config.minDepthUsd > 0 && (!Number.isFinite(minDepthUsd) || minDepthUsd < this.config.minDepthUsd)) {
         continue;
       }
 

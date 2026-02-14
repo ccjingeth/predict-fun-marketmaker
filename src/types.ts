@@ -93,6 +93,9 @@ export interface Config {
   mmNearTouchPenaltyMaxBps?: number;
   mmNearTouchPenaltyDecayMs?: number;
   mmNearTouchSizePenalty?: number;
+  mmFillPenaltyBps?: number;
+  mmFillPenaltyMaxBps?: number;
+  mmFillPenaltyDecayMs?: number;
   mmAggressiveMoveBps?: number;
   mmAggressiveMoveWindowMs?: number;
   mmVolatilityHighBps?: number;
@@ -133,6 +136,7 @@ export interface Config {
   mmDynamicCancelBoost?: number;
   mmDynamicCancelDecayMs?: number;
   mmDynamicCancelMaxBoost?: number;
+  mmOnlyPointsMarkets?: boolean;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;
@@ -241,6 +245,7 @@ export interface Config {
   crossPlatformMetricsFlushMs?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
   crossPlatformOrderTypeFallback?: string[];
+  crossPlatformFallbackMode?: 'AUTO' | 'SEQUENTIAL' | 'SINGLE_LEG';
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;
   crossPlatformUseFok?: boolean;
@@ -283,6 +288,9 @@ export interface Config {
   crossPlatformNetRiskMaxFactor?: number;
   crossPlatformNetRiskDegradeFactor?: number;
   crossPlatformNetRiskScaleOnQuality?: boolean;
+  crossPlatformNetRiskAutoTighten?: boolean;
+  crossPlatformNetRiskTightenOnFailure?: number;
+  crossPlatformNetRiskRelaxOnSuccess?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;
@@ -351,6 +359,7 @@ export interface Config {
   arbPreflightEnabled?: boolean;
   arbPreflightMaxAgeMs?: number;
   arbDepthUsage?: number;
+  arbMinDepthUsd?: number;
   arbMinNotionalUsd?: number;
   arbMinProfitUsd?: number;
   arbMinProfitBps?: number;

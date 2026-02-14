@@ -17,6 +17,7 @@ export class InPlatformArbitrageDetector {
   private depthUsage: number;
   private minNotionalUsd: number;
   private minProfitUsd: number;
+  private minDepthUsd: number;
   private maxVwapDeviationBps: number;
   private recheckDeviationBps: number;
   private maxVwapLevels: number;
@@ -30,6 +31,7 @@ export class InPlatformArbitrageDetector {
     depthUsage: number = 0.6,
     minNotionalUsd: number = 0,
     minProfitUsd: number = 0,
+    minDepthUsd: number = 0,
     maxVwapDeviationBps: number = 0,
     recheckDeviationBps: number = 60,
     maxVwapLevels: number = 0
@@ -42,6 +44,7 @@ export class InPlatformArbitrageDetector {
     this.depthUsage = Math.max(0.05, Math.min(1, depthUsage));
     this.minNotionalUsd = Math.max(0, minNotionalUsd);
     this.minProfitUsd = Math.max(0, minProfitUsd);
+    this.minDepthUsd = Math.max(0, minDepthUsd);
     this.maxVwapDeviationBps = Math.max(0, maxVwapDeviationBps);
     this.recheckDeviationBps = Math.max(0, recheckDeviationBps);
     this.maxVwapLevels = Math.max(0, Math.floor(maxVwapLevels));
@@ -90,6 +93,14 @@ export class InPlatformArbitrageDetector {
     const yesFeeBps = yesMarket.fee_rate_bps || fallbackBps;
     const noFeeBps = noMarket.fee_rate_bps || fallbackBps;
     const slippageBps = this.estimatedSlippage * 10000;
+
+    if (this.minDepthUsd > 0) {
+      const yesDepthUsd = sumDepth(yesBook.asks) * yesTop.ask;
+      const noDepthUsd = sumDepth(noBook.asks) * noTop.ask;
+      if (yesDepthUsd < this.minDepthUsd || noDepthUsd < this.minDepthUsd) {
+        return null;
+      }
+    }
 
     const buyDepth = Math.min(sumDepth(yesBook.asks), sumDepth(noBook.asks));
     const sellDepth = Math.min(sumDepth(yesBook.bids), sumDepth(noBook.bids));

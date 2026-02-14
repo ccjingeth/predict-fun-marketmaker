@@ -53,6 +53,7 @@ export interface ArbitrageConfig {
   alertMinIntervalMs?: number;
   alertOnNewOpportunity: boolean;
   arbDepthUsage: number;
+  arbMinDepthUsd: number;
   arbMinNotionalUsd: number;
   arbMinProfitUsd: number;
   arbMaxVwapDeviationBps: number;
@@ -113,6 +114,7 @@ export class ArbitrageMonitor {
       alertMinIntervalMs: 60000,
       alertOnNewOpportunity: true,
       arbDepthUsage: 0.6,
+      arbMinDepthUsd: 0,
       arbMinNotionalUsd: 0,
       arbMinProfitUsd: 0,
       arbMaxVwapDeviationBps: 0,
@@ -131,6 +133,7 @@ export class ArbitrageMonitor {
       this.config.arbDepthUsage,
       this.config.arbMinNotionalUsd,
       this.config.arbMinProfitUsd,
+      this.config.arbMinDepthUsd,
       this.config.arbMaxVwapDeviationBps,
       this.config.arbRecheckDeviationBps,
       this.config.arbMaxVwapLevels
@@ -143,6 +146,7 @@ export class ArbitrageMonitor {
       depthUsage: this.config.arbDepthUsage,
       minNotionalUsd: this.config.arbMinNotionalUsd,
       minProfitUsd: this.config.arbMinProfitUsd,
+      minDepthUsd: this.config.arbMinDepthUsd,
       maxVwapDeviationBps: this.config.arbMaxVwapDeviationBps,
       recheckDeviationBps: this.config.arbRecheckDeviationBps,
       maxVwapLevels: this.config.arbMaxVwapLevels,

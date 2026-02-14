@@ -71,6 +71,7 @@ export class MarketMaker {
   private fillPressure: Map<string, { score: number; ts: number }> = new Map();
   private cancelBoost: Map<string, { value: number; ts: number }> = new Map();
   private nearTouchPenalty: Map<string, { value: number; ts: number }> = new Map();
+  private fillPenalty: Map<string, { value: number; ts: number }> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -753,6 +754,40 @@ export class MarketMaker {
     return value;
   }
 
+  private applyFillPenalty(tokenId: string, intensity: number = 1): void {
+    const base = this.config.mmFillPenaltyBps ?? 0;
+    if (!base || base <= 0) {
+      return;
+    }
+    const maxBps = this.config.mmFillPenaltyMaxBps ?? base * 5;
+    const current = this.fillPenalty.get(tokenId);
+    const scaled = base * this.clamp(intensity, 0.2, 2);
+    const next = Math.min((current?.value ?? 0) + scaled, maxBps);
+    this.fillPenalty.set(tokenId, { value: next, ts: Date.now() });
+  }
+
+  private getFillPenalty(tokenId: string): number {
+    const entry = this.fillPenalty.get(tokenId);
+    if (!entry) {
+      return 0;
+    }
+    const decayMs = this.config.mmFillPenaltyDecayMs ?? 90000;
+    if (!decayMs || decayMs <= 0) {
+      return entry.value;
+    }
+    const elapsed = Date.now() - entry.ts;
+    if (elapsed <= 0) {
+      return entry.value;
+    }
+    const decay = Math.exp(-elapsed / decayMs);
+    const value = entry.value * decay;
+    if (value <= 0.01) {
+      this.fillPenalty.delete(tokenId);
+      return 0;
+    }
+    return value;
+  }
+
   private canRecheck(tokenId: string): boolean {
     const cooldown = Math.max(0, this.config.mmRecheckCooldownMs ?? 0);
     if (!cooldown) {
@@ -881,6 +916,7 @@ export class MarketMaker {
       imbalance,
       inventoryBias: prices.inventoryBias,
       nearTouchPenaltyBps: this.getNearTouchPenalty(market.token_id),
+      fillPenaltyBps: this.getFillPenalty(market.token_id),
       updatedAt: Date.now(),
     };
     this.mmMetrics.set(market.token_id, entry);
@@ -1004,6 +1040,10 @@ export class MarketMaker {
     const nearTouchPenalty = this.getNearTouchPenalty(market.token_id);
     if (nearTouchPenalty > 0) {
       adaptiveSpread += nearTouchPenalty / 10000;
+    }
+    const fillPenalty = this.getFillPenalty(market.token_id);
+    if (fillPenalty > 0) {
+      adaptiveSpread += fillPenalty / 10000;
     }
 
     const depthTarget = this.config.mmDepthTargetShares ?? 0;
@@ -1360,6 +1400,12 @@ export class MarketMaker {
     }
 
     const qualifiesForPoints = this.checkLiquidityPointsEligibility(market, orderbook);
+    if (this.config.mmOnlyPointsMarkets && !qualifiesForPoints) {
+      await this.cancelOrdersForMarket(tokenId);
+      this.markCooldown(tokenId, this.config.cooldownAfterCancelMs ?? 4000);
+      this.markAction(tokenId);
+      return;
+    }
 
     if (this.checkVolatility(tokenId, orderbook)) {
       console.log(`⚠️ Volatility spike detected for ${tokenId}, pausing quoting...`);
@@ -1659,6 +1705,10 @@ export class MarketMaker {
         this.updateFillPressure(tokenId, absDelta);
       }
       const partialThreshold = this.config.mmPartialFillShares ?? 5;
+      if (absDelta > 0) {
+        const intensity = this.clamp(absDelta / Math.max(1, partialThreshold), 0.2, 2);
+        this.applyFillPenalty(tokenId, intensity);
+      }
       if (absDelta > 0 && this.config.mmDynamicCancelOnFill) {
         const intensity = this.clamp(absDelta / Math.max(1, partialThreshold), 0.2, 2);
         this.bumpCancelBoost(tokenId, intensity);

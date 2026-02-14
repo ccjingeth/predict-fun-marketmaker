@@ -41,6 +41,9 @@
 - `MM_NEAR_TOUCH_PENALTY_MAX_BPS`：近触碰惩罚的上限（bps）。
 - `MM_NEAR_TOUCH_PENALTY_DECAY_MS`：近触碰惩罚衰减时间。
 - `MM_NEAR_TOUCH_SIZE_PENALTY`：近触碰撤单后挂单份额缩放（0-1，越小越保守）。
+- `MM_FILL_PENALTY_BPS`：真实成交后给价差加的惩罚（bps）。
+- `MM_FILL_PENALTY_MAX_BPS`：成交惩罚的上限（bps）。
+- `MM_FILL_PENALTY_DECAY_MS`：成交惩罚衰减时间（毫秒）。
 - `MM_AGGRESSIVE_MOVE_BPS`：盘口快速逼近时的撤单阈值。
 - `MM_AGGRESSIVE_MOVE_WINDOW_MS`：快速逼近检测窗口。
 - `MM_VOLATILITY_HIGH_BPS`：高波动阈值（触发“波动档”）。
@@ -81,6 +84,7 @@
 - `MM_DYNAMIC_CANCEL_BOOST`：撤单敏感度提升幅度。
 - `MM_DYNAMIC_CANCEL_DECAY_MS`：动态撤单敏感度恢复时间。
 - `MM_DYNAMIC_CANCEL_MAX_BOOST`：动态撤单最大提升倍率。
+- `MM_ONLY_POINTS_MARKETS`：只在有积分/做市激励的市场挂单。
 
 ### 做市自适应参数（新增）
 
@@ -184,6 +188,7 @@
 - `ARB_PREFLIGHT_ENABLED`：自动执行前二次确认机会是否仍有效。
 - `ARB_PREFLIGHT_MAX_AGE_MS`：预检时允许的 WS 最大延迟。
 - `ARB_DEPTH_USAGE`：套利计算使用的深度比例（降低吃深度滑点）。
+- `ARB_MIN_DEPTH_USD`：盘口最小深度（USD），低于则跳过。
 - `ARB_MIN_NOTIONAL_USD`：套利最小成交金额过滤。
 - `ARB_MIN_PROFIT_USD`：套利最小收益金额过滤。
 - `ARB_MIN_PROFIT_BPS`：套利最小收益占名义金额比例（bps）。
@@ -330,6 +335,7 @@
 - `CROSS_PLATFORM_METRICS_FLUSH_MS`：指标落盘间隔（毫秒）。
 - `CROSS_PLATFORM_ORDER_TYPE`：跨平台下单类型（FOK / FAK / GTC / GTD）。
 - `CROSS_PLATFORM_ORDER_TYPE_FALLBACK`：失败重试时使用的订单类型序列（逗号分隔）。
+- `CROSS_PLATFORM_FALLBACK_MODE`：失败时降级模式（AUTO / SEQUENTIAL / SINGLE_LEG）。
 - `CROSS_PLATFORM_BATCH_ORDERS`：Polymarket 批量下单（仅 Polymarket，最多 15）。
 - `CROSS_PLATFORM_BATCH_MAX`：批量下单单次最大腿数（默认 15）。
 - `CROSS_PLATFORM_USE_FOK`：Polymarket 使用 FOK 下单（更安全）。
@@ -372,6 +378,9 @@
 - `CROSS_PLATFORM_NET_RISK_MAX_FACTOR`：净风险预算缩放上限（质量分缩放）。
 - `CROSS_PLATFORM_NET_RISK_DEGRADE_FACTOR`：降级时额外缩放系数。
 - `CROSS_PLATFORM_NET_RISK_SCALE_ON_QUALITY`：是否随质量分自动缩放预算。
+- `CROSS_PLATFORM_NET_RISK_AUTO_TIGHTEN`：失败时自动收紧预算。
+- `CROSS_PLATFORM_NET_RISK_TIGHTEN_ON_FAILURE`：失败一次缩紧比例。
+- `CROSS_PLATFORM_NET_RISK_RELAX_ON_SUCCESS`：成功一次放宽比例。
 - `CROSS_PLATFORM_MAX_RETRIES`：跨平台执行失败时的重试次数。
 - `CROSS_PLATFORM_RETRY_DELAY_MS`：重试间隔（毫秒）。
 - `CROSS_PLATFORM_CIRCUIT_MAX_FAILURES`：熔断触发的最大失败次数。

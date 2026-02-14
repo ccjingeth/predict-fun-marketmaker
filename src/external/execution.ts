@@ -647,6 +647,7 @@ export class CrossPlatformExecutionRouter {
   private degradedReason = '';
   private degradedAt = 0;
   private degradedSuccesses = 0;
+  private netRiskTightenFactor = 1;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -821,14 +822,30 @@ export class CrossPlatformExecutionRouter {
       return executor.execute(legsForPlatform, options);
     };
 
-    const execOptions = this.resolveExecutionOptions(attempt);
+    let execOptions = this.resolveExecutionOptions(attempt);
+    const fallbackMode = (this.config.crossPlatformFallbackMode || 'AUTO').toUpperCase();
 
     const tasks: Promise<ExecutionResult>[] = [];
-    for (const [platform, legsForPlatform] of grouped.entries()) {
-      tasks.push(runExecution(platform, legsForPlatform, execOptions));
+    if (fallbackMode === 'SINGLE_LEG' && attempt > 0) {
+      const bestLegs = this.selectBestLegs(legs, 2);
+      const bestGrouped = new Map<ExternalPlatform, PlatformLeg[]>();
+      for (const leg of bestLegs) {
+        if (!bestGrouped.has(leg.platform)) {
+          bestGrouped.set(leg.platform, []);
+        }
+        bestGrouped.get(leg.platform)!.push(leg);
+      }
+      for (const [platform, legsForPlatform] of bestGrouped.entries()) {
+        tasks.push(runExecution(platform, legsForPlatform, execOptions));
+      }
+    } else {
+      for (const [platform, legsForPlatform] of grouped.entries()) {
+        tasks.push(runExecution(platform, legsForPlatform, execOptions));
+      }
     }
 
-    if (this.shouldParallelSubmit()) {
+    const shouldParallel = fallbackMode === 'SEQUENTIAL' && attempt > 0 ? false : this.shouldParallelSubmit();
+    if (shouldParallel) {
       const results = await Promise.allSettled(tasks);
       const failed = results.find((result) => result.status === 'rejected');
       if (failed) {
@@ -854,6 +871,24 @@ export class CrossPlatformExecutionRouter {
     }
 
     return results;
+  }
+
+  private selectBestLegs(legs: PlatformLeg[], maxLegs: number): PlatformLeg[] {
+    const sorted = [...legs].sort((a, b) => {
+      const aScore = this.legQualityScore(a);
+      const bScore = this.legQualityScore(b);
+      return bScore - aScore;
+    });
+    return sorted.slice(0, Math.max(1, maxLegs));
+  }
+
+  private legQualityScore(leg: PlatformLeg): number {
+    const tokenScore = this.tokenScores.get(leg.tokenId || '')?.score ?? 100;
+    const platformScore = this.platformScores.get(leg.platform)?.score ?? 100;
+    const price = Number.isFinite(leg.price) ? leg.price : 0;
+    const size = Number.isFinite(leg.shares) ? leg.shares : 0;
+    const liquidityScore = Math.min(1, (price * size) / 50);
+    return tokenScore * 0.6 + platformScore * 0.3 + liquidityScore * 10;
   }
 
   private async executeChunks(legs: PlatformLeg[], attempt: number): Promise<{ postTrade: { maxDriftBps: number; penalizedLegs: PlatformLeg[]; penalizedTokenIds: Set<string>; spreadPenalizedLegs: PlatformLeg[] } }> {
@@ -953,6 +988,7 @@ export class CrossPlatformExecutionRouter {
       const degrade = Math.max(0.05, this.config.crossPlatformNetRiskDegradeFactor || 0.6);
       factor *= degrade;
     }
+    factor *= this.netRiskTightenFactor;
     return factor;
   }
 
@@ -1368,6 +1404,7 @@ export class CrossPlatformExecutionRouter {
     this.circuitFailures += 1;
     this.applyFailurePause();
     this.applyDegrade('failure');
+    this.tightenNetRiskBudget();
   }
 
   private onSuccess(): void {
@@ -1376,6 +1413,29 @@ export class CrossPlatformExecutionRouter {
     this.circuitOpenedAt = 0;
     this.resetFailurePause();
     this.updateDegradeOnSuccess();
+    this.relaxNetRiskBudget();
+  }
+
+  private tightenNetRiskBudget(): void {
+    if (this.config.crossPlatformNetRiskAutoTighten === false) {
+      return;
+    }
+    const delta = Math.max(0, this.config.crossPlatformNetRiskTightenOnFailure || 0);
+    if (delta <= 0) {
+      return;
+    }
+    this.netRiskTightenFactor = Math.max(0.05, this.netRiskTightenFactor * (1 - delta));
+  }
+
+  private relaxNetRiskBudget(): void {
+    if (this.config.crossPlatformNetRiskAutoTighten === false) {
+      return;
+    }
+    const delta = Math.max(0, this.config.crossPlatformNetRiskRelaxOnSuccess || 0);
+    if (delta <= 0) {
+      return;
+    }
+    this.netRiskTightenFactor = Math.min(1, this.netRiskTightenFactor * (1 + delta));
   }
 
   private applyDegrade(reason: string): void {
