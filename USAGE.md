@@ -97,6 +97,9 @@ WS 最大可接受延迟：
 - `ARB_MAX_VWAP_DEVIATION_BPS=200`（VWAP 允许偏离盘口上限）
 - `ARB_RECHECK_DEVIATION_BPS=60`（偏离过大时要求二次确认）
 - `ARB_MAX_VWAP_LEVELS=4`（限制 VWAP 使用深度档位数）
+- `ARB_MIN_PROFIT_USD=0`（最低收益过滤）
+- `ARB_MIN_PROFIT_BPS=0`（按名义金额收取最低收益，bps）
+- `ARB_MIN_PROFIT_IMPACT_MULT=0`（冲击乘子，>0 更保守）
 自动执行错误熔断：
 - `ARB_MAX_ERRORS=5`
 - `ARB_ERROR_WINDOW_MS=60000`

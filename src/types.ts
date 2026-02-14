@@ -164,6 +164,8 @@ export interface Config {
   crossPlatformMinDepthShares?: number;
   crossPlatformMinNotionalUsd?: number;
   crossPlatformMinProfitUsd?: number;
+  crossPlatformMinProfitBps?: number;
+  crossPlatformMinProfitImpactMult?: number;
   crossPlatformVolatilityBps?: number;
   crossPlatformVolatilityLookbackMs?: number;
   crossPlatformTokenMaxFailures?: number;
@@ -321,6 +323,8 @@ export interface Config {
   arbDepthUsage?: number;
   arbMinNotionalUsd?: number;
   arbMinProfitUsd?: number;
+  arbMinProfitBps?: number;
+  arbMinProfitImpactMult?: number;
   arbMaxVwapDeviationBps?: number;
   arbRecheckDeviationBps?: number;
   arbMaxVwapLevels?: number;

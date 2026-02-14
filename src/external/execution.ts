@@ -642,6 +642,7 @@ export class CrossPlatformExecutionRouter {
     lastError: '',
   };
   private lastMetricsLogAt = 0;
+  private lastPreflight?: { maxDeviationBps: number; maxDriftBps: number };
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -1955,6 +1956,7 @@ export class CrossPlatformExecutionRouter {
     let adjustedLegs = legs;
 
     await this.stabilityCheck(legs);
+    this.lastPreflight = undefined;
 
     if (this.config.crossPlatformAdaptiveSize !== false) {
       let maxShares = await this.getMaxExecutableShares(legs, cache);
@@ -1983,7 +1985,8 @@ export class CrossPlatformExecutionRouter {
 
     if (this.config.crossPlatformExecutionVwapCheck !== false) {
       const preflight = await this.preflightVwapWithCache(adjustedLegs, cache);
-      await this.maybeRecheckPreflight(adjustedLegs, preflight);
+      const finalPreflight = await this.maybeRecheckPreflight(adjustedLegs, preflight);
+      this.lastPreflight = finalPreflight;
     }
 
     return adjustedLegs;
@@ -2086,10 +2089,10 @@ export class CrossPlatformExecutionRouter {
   private async maybeRecheckPreflight(
     legs: PlatformLeg[],
     stats: { maxDeviationBps: number; maxDriftBps: number }
-  ): Promise<void> {
+  ): Promise<{ maxDeviationBps: number; maxDriftBps: number }> {
     const recheckMs = Math.max(0, this.config.crossPlatformRecheckMs || 0);
     if (!recheckMs) {
-      return;
+      return stats;
     }
     const deviationTrigger = Math.max(0, this.config.crossPlatformRecheckDeviationBps || 0);
     const driftTrigger = Math.max(0, this.config.crossPlatformRecheckDriftBps || 0);
@@ -2097,11 +2100,11 @@ export class CrossPlatformExecutionRouter {
       (deviationTrigger > 0 && stats.maxDeviationBps >= deviationTrigger) ||
       (driftTrigger > 0 && stats.maxDriftBps >= driftTrigger);
     if (!shouldRecheck) {
-      return;
+      return stats;
     }
     await this.sleep(recheckMs);
     const freshCache = new Map<string, Promise<OrderbookSnapshot | null>>();
-    await this.preflightVwapWithCache(legs, freshCache);
+    return this.preflightVwapWithCache(legs, freshCache);
   }
 
   private assertMinNotionalAndProfit(legs: PlatformLeg[]): void {
@@ -2156,8 +2159,17 @@ export class CrossPlatformExecutionRouter {
     if (minNotional > 0 && notional < minNotional) {
       throw new Error(`Preflight failed: notional $${notional.toFixed(2)} < min ${minNotional}`);
     }
-    if (minProfit > 0 && profit < minProfit) {
-      throw new Error(`Preflight failed: profit $${profit.toFixed(2)} < min ${minProfit}`);
+    const baseBps = Math.max(0, this.config.crossPlatformMinProfitBps || 0);
+    const impactMult = Math.max(0, this.config.crossPlatformMinProfitImpactMult || 0);
+    const impactBps = Math.max(0, this.lastPreflight?.maxDeviationBps || 0);
+    const required =
+      minProfit +
+      notional * (baseBps / 10000) +
+      notional * (impactBps / 10000) * impactMult;
+    if (required > 0 && profit < required) {
+      throw new Error(
+        `Preflight failed: profit $${profit.toFixed(2)} < min ${required.toFixed(2)} (impact ${impactBps.toFixed(1)} bps)`
+      );
     }
   }
 

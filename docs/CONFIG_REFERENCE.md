@@ -186,6 +186,8 @@
 - `ARB_DEPTH_USAGE`：套利计算使用的深度比例（降低吃深度滑点）。
 - `ARB_MIN_NOTIONAL_USD`：套利最小成交金额过滤。
 - `ARB_MIN_PROFIT_USD`：套利最小收益金额过滤。
+- `ARB_MIN_PROFIT_BPS`：套利最小收益占名义金额比例（bps）。
+- `ARB_MIN_PROFIT_IMPACT_MULT`：冲击系数乘子（越大越保守）。
 - `ARB_STABILITY_REQUIRED`：自动执行前是否要求机会连续出现。
 - `ARB_STABILITY_MIN_COUNT`：连续出现次数阈值。
 - `ARB_STABILITY_WINDOW_MS`：连续出现的时间窗口（毫秒）。
@@ -251,6 +253,8 @@
 - `CROSS_PLATFORM_MIN_DEPTH_SHARES`：深度不足时的最小下单份额门槛。
 - `CROSS_PLATFORM_MIN_NOTIONAL_USD`：跨平台机会的最小成交金额过滤。
 - `CROSS_PLATFORM_MIN_PROFIT_USD`：跨平台机会的最小收益金额过滤。
+- `CROSS_PLATFORM_MIN_PROFIT_BPS`：跨平台最小收益占名义金额比例（bps）。
+- `CROSS_PLATFORM_MIN_PROFIT_IMPACT_MULT`：跨平台冲击系数乘子（越大越保守）。
 - `CROSS_PLATFORM_VOLATILITY_BPS`：短时间内价格波动阈值（bps），超出则跳过。
 - `CROSS_PLATFORM_VOLATILITY_LOOKBACK_MS`：波动检测的回看窗口（毫秒）。
 - `CROSS_PLATFORM_TOKEN_MAX_FAILURES`：单 token 失败次数阈值。

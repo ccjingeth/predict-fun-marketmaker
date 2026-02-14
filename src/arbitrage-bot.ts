@@ -667,8 +667,18 @@ class ArbitrageBot {
     if (refreshed.length === 0) {
       return false;
     }
+    const best = refreshed[0];
+    const size = Math.max(0, best.recommendedSize || 0);
+    const edge = (best.maxProfit || 0) / 100;
+    const profitUsd = edge * size;
+    const notional = (best.yesPlusNo || best.yesPrice + best.noPrice) * size;
+    const impactBps = this.estimateImpactBpsInPlatform(best);
+    const required = this.computeDynamicMinProfitUsd(notional, impactBps);
+    if (required > 0 && profitUsd < required) {
+      return false;
+    }
     const minProfitPct = minProfit * 100;
-    return refreshed[0].maxProfit >= minProfitPct;
+    return best.maxProfit >= minProfitPct;
   }
 
   private async preflightMultiOutcome(opp: any, markets: Market[]): Promise<boolean> {
@@ -701,8 +711,48 @@ class ArbitrageBot {
     if (refreshed.length === 0) {
       return false;
     }
+    const best = refreshed[0];
+    const size = Math.max(0, best.positionSize || 0);
+    const profitUsd = Math.max(0, (best.guaranteedProfit || 0) * size);
+    const notional = Math.max(0, (best.totalCost || 0) * size);
+    const impactBps = this.estimateImpactBpsMultiOutcome(best);
+    const required = this.computeDynamicMinProfitUsd(notional, impactBps);
+    if (required > 0 && profitUsd < required) {
+      return false;
+    }
     const minProfitPct = minProfit * 100;
-    return (refreshed[0].expectedReturn || 0) >= minProfitPct;
+    return (best.expectedReturn || 0) >= minProfitPct;
+  }
+
+  private computeDynamicMinProfitUsd(notional: number, impactBps: number): number {
+    const base = Math.max(0, this.config.arbMinProfitUsd || 0);
+    const baseBps = Math.max(0, this.config.arbMinProfitBps || 0);
+    const impactMult = Math.max(0, this.config.arbMinProfitImpactMult || 0);
+    if (!base && !baseBps && !impactMult) {
+      return base;
+    }
+    const notionalTerm = notional * (baseBps / 10000);
+    const impactTerm = notional * (Math.max(0, impactBps) / 10000) * impactMult;
+    return base + notionalTerm + impactTerm;
+  }
+
+  private estimateImpactBpsInPlatform(arb: any): number {
+    const isSell = arb?.action === 'SELL_BOTH';
+    const yesRef = isSell ? arb?.yesBid : arb?.yesAsk;
+    const noRef = isSell ? arb?.noBid : arb?.noAsk;
+    const yesImpact =
+      yesRef && arb?.yesPrice ? (Math.abs(arb.yesPrice - yesRef) / yesRef) * 10000 : 0;
+    const noImpact = noRef && arb?.noPrice ? (Math.abs(arb.noPrice - noRef) / noRef) * 10000 : 0;
+    return Math.max(yesImpact || 0, noImpact || 0);
+  }
+
+  private estimateImpactBpsMultiOutcome(opp: any): number {
+    const totalCost = Math.max(0, opp?.totalCost || 0);
+    const totalSlippage = Math.max(0, opp?.totalSlippage || 0);
+    if (totalCost <= 0) {
+      return 0;
+    }
+    return (totalSlippage / totalCost) * 10000;
   }
 
   private isStableOpportunity(opp: any, now: number): boolean {
