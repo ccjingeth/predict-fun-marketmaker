@@ -804,8 +804,29 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
       const keys = FIX_CATEGORY_KEYS[category] || [];
       keys.forEach((key) => keySet.add(key));
     });
-    const list = Array.from(keySet).slice(0, 6);
-    detail.textContent = list.length ? `关联参数: ${list.join('、')}` : '关联参数: 暂无';
+    const list = Array.from(keySet);
+    if (list.length <= 6) {
+      detail.textContent = list.length ? `关联参数: ${list.join('、')}` : '关联参数: 暂无';
+    } else {
+      const preview = list.slice(0, 6).join('、');
+      detail.textContent = `关联参数: ${preview} …`;
+      const more = document.createElement('button');
+      more.className = 'btn ghost';
+      more.textContent = '展开全部';
+      let expanded = false;
+      more.addEventListener('click', () => {
+        expanded = !expanded;
+        if (expanded) {
+          detail.textContent = `关联参数: ${list.join('、')}`;
+          more.textContent = '收起';
+        } else {
+          detail.textContent = `关联参数: ${preview} …`;
+          more.textContent = '展开全部';
+        }
+        detail.appendChild(more);
+      });
+      detail.appendChild(more);
+    }
     metricFailureAdviceList.appendChild(mapRow);
     metricFailureAdviceList.appendChild(detail);
   }
