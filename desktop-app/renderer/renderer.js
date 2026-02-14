@@ -2473,6 +2473,9 @@ function updateAlerts({
   qualityScore,
   consistencyOverrideActive,
   consistencyFailureRate,
+  consistencyCooldownActive,
+  consistencyRateLimitActive,
+  avoidActive,
   cooldownUntil,
   metricsAgeMs,
 }) {
@@ -2512,13 +2515,18 @@ function updateAlerts({
   if (consistencyFailureRate >= 25) {
     warnings.push('一致性失败率偏高，建议启用一致性模板或提升一致性阈值。');
   }
-  const { hours: avoidHours, hour, active: avoidActive } = getAvoidHourState();
+  const { hours: avoidHours, hour } = getAvoidHourState();
   if (avoidHours.length > 0 && avoidActive) {
     warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
   }
   const autoEnabled = String(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_AVOID_HOURS_AUTO') || '').toLowerCase() === 'true';
   if (autoEnabled) {
     warnings.push('已启用自动避开热区时段，并联动跨平台自动执行。');
+  }
+  if (consistencyCooldownActive) {
+    warnings.push('一致性冷却生效中，跨平台暂停执行。');
+  } else if (consistencyRateLimitActive) {
+    warnings.push('一致性限速生效中，执行频率已降低。');
   }
   if (cooldownUntil && cooldownUntil > Date.now()) {
     warnings.push('全局冷却中，执行将自动暂停。');
@@ -2549,6 +2557,9 @@ function computeRiskLevel({
   qualityScore,
   depthPenalty,
   consistencyOverrideActive,
+  consistencyCooldownActive,
+  consistencyRateLimitActive,
+  avoidActive,
   metricsAgeMs,
 }) {
   let score = 0;
@@ -2622,6 +2633,20 @@ function computeRiskLevel({
     const weighted = 25 * riskWeights.consistency;
     score += weighted;
     breakdown.push({ label: `一致性降级 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
+  }
+  if (consistencyCooldownActive) {
+    const weighted = 30 * riskWeights.consistency;
+    score += weighted;
+    breakdown.push({ label: `一致性冷却 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
+  } else if (consistencyRateLimitActive) {
+    const weighted = 15 * riskWeights.consistency;
+    score += weighted;
+    breakdown.push({ label: `一致性限速 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
+  }
+  if (avoidActive) {
+    const weighted = 35 * riskWeights.consistency;
+    score += weighted;
+    breakdown.push({ label: `避开时段 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
   }
 
   score = Math.max(0, Math.min(100, score));
@@ -2716,19 +2741,24 @@ async function loadMetrics() {
       const decay = Number(env.get('CROSS_PLATFORM_AVOID_HOURS_DECAY_DAYS') || 3);
       metricAvoidDecay.textContent = Number.isFinite(decay) ? `${decay} 天` : '未设置';
     }
+    const { hour: avoidHour, active: avoidActive } = getAvoidHourState();
+    const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
+    const overrideUntil = Number(data.consistencyOverrideUntil || 0);
+    const cooldownUntil = Number(data.consistencyCooldownUntil || 0);
+    const rateLimitUntil = Number(data.consistencyRateLimitUntil || 0);
+    const consistencyCooldownActive = cooldownUntil > Date.now();
+    const consistencyRateLimitActive = rateLimitUntil > Date.now();
     if (consistencyBadge) {
-      const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
-      const overrideUntil = Number(data.consistencyOverrideUntil || 0);
-      const cooldownUntil = Number(data.consistencyCooldownUntil || 0);
-      const { hour, active: avoidActive } = getAvoidHourState();
       if (avoidActive) {
-        setConsistencyBadge(`避开时段 ${String(hour).padStart(2, '0')}:00`, 'error');
-      } else if (cooldownUntil > Date.now()) {
+        setConsistencyBadge(`避开时段 ${String(avoidHour).padStart(2, '0')}:00`, 'error');
+      } else if (consistencyCooldownActive) {
         setConsistencyBadge('一致性冷却', 'error');
       } else if (templateUntil > Date.now()) {
         setConsistencyBadge('一致性模板中', 'warn');
       } else if (overrideUntil > Date.now()) {
         setConsistencyBadge('一致性保守中', 'warn');
+      } else if (consistencyRateLimitActive) {
+        setConsistencyBadge('一致性限速', 'warn');
       } else {
         setConsistencyBadge('一致性正常', 'ok');
       }
@@ -2788,6 +2818,9 @@ async function loadMetrics() {
       driftLimit: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80),
       minQuality: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7),
       consistencyOverrideActive: consistencyActive > 0,
+      consistencyCooldownActive,
+      consistencyRateLimitActive,
+      avoidActive,
       consistencyFailureRate,
       consistencyHigh: consistencyFailureRate >= 25,
     };

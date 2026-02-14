@@ -2263,6 +2263,8 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     const now = Date.now();
+    const wasRateLimited = this.consistencyRateLimitUntil > now;
+    const wasCooldown = this.consistencyCooldownUntil > now;
     const windowMs = Math.max(0, this.config.crossPlatformConsistencyFailWindowMs || 0);
     const rateWindowMs = Math.max(0, this.config.crossPlatformConsistencyRateLimitWindowMs || 0);
     const cooldownWindowMs = Math.max(0, this.config.crossPlatformConsistencyCooldownWindowMs || 0);
@@ -2304,6 +2306,15 @@ export class CrossPlatformExecutionRouter {
         if (rateLimitMs > 0) {
           this.consistencyRateLimitUntil = Math.max(this.consistencyRateLimitUntil, now + rateLimitMs);
           this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + rateLimitMs);
+          if (!wasRateLimited && this.consistencyRateLimitUntil > now && this.config.alertWebhookUrl) {
+            void sendAlert(
+              this.config.alertWebhookUrl,
+              `⏳ 一致性限速触发（${this.consistencyFailures.count}/${rateLimitThreshold}），暂停 ${Math.round(
+                rateLimitMs / 1000
+              )}s。`,
+              this.config.alertMinIntervalMs
+            );
+          }
         }
       }
       const cooldownThreshold = Math.max(0, this.config.crossPlatformConsistencyCooldownThreshold || 0);
@@ -2312,6 +2323,15 @@ export class CrossPlatformExecutionRouter {
         if (cooldownMs > 0) {
           this.consistencyCooldownUntil = Math.max(this.consistencyCooldownUntil, now + cooldownMs);
           this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + cooldownMs);
+          if (!wasCooldown && this.consistencyCooldownUntil > now && this.config.alertWebhookUrl) {
+            void sendAlert(
+              this.config.alertWebhookUrl,
+              `🧊 一致性冷却触发（${this.consistencyFailures.count}/${cooldownThreshold}），暂停 ${Math.round(
+                cooldownMs / 1000
+              )}s。`,
+              this.config.alertMinIntervalMs
+            );
+          }
         }
       }
     }
