@@ -855,20 +855,32 @@ function renderFixSummary() {
   return changed.length;
 }
 
-function renderFlowStatus({ appliedFixes, saved } = {}) {
+function renderFlowStatus({ appliedFixes = false, saved = false, hasAdvice = null } = {}) {
   if (!metricFlowList) return;
   const rows = Array.from(metricFlowList.querySelectorAll('.alert-item'));
   if (!rows.length) return;
+  const base = ['查看失败建议', '应用修复参数', '保存配置'];
   rows.forEach((row) => row.classList.remove('done'));
-  if (appliedFixes) {
-    rows[0]?.classList.add('done');
-    rows[1]?.classList.add('done');
+  if (hasAdvice !== null) {
+    rows[0].textContent = `${base[0]}（${hasAdvice ? '已就绪' : '待观察'}）`;
   }
   if (saved) {
     rows[0]?.classList.add('done');
     rows[1]?.classList.add('done');
     rows[2]?.classList.add('done');
+    rows[1].textContent = `${base[1]}（已完成）`;
+    rows[2].textContent = `${base[2]}（已保存）`;
+    return;
   }
+  if (appliedFixes) {
+    rows[0]?.classList.add('done');
+    rows[1]?.classList.add('done');
+    rows[1].textContent = `${base[1]}（已应用）`;
+    rows[2].textContent = `${base[2]}（待保存）`;
+    return;
+  }
+  rows[1].textContent = `${base[1]}（${hasAdvice === false ? '无需应用' : '待应用'}）`;
+  rows[2].textContent = `${base[2]}（待保存）`;
 }
 
 function renderMetricFailureReasons(reasons) {
@@ -1968,6 +1980,8 @@ async function loadMetrics() {
     const successes = Number(metrics.successes || 0);
     const failures = Number(metrics.failures || 0);
     const failureReasons = metrics.failureReasons || {};
+    const failureEntries = Object.entries(failureReasons).filter(([, v]) => Number(v) > 0);
+    const hasAdvice = failureEntries.length > 0;
     const preflightFailures = Number(failureReasons.preflight || 0);
     const postFailures = Number(failureReasons.postTrade || 0);
     const successRate = attempts > 0 ? (successes / attempts) * 100 : 0;
@@ -2050,11 +2064,11 @@ async function loadMetrics() {
     const changedCount = renderFixSummary();
     const hasPendingSave = !!(saveEnvButton && saveEnvButton.classList.contains('attention'));
     if (changedCount === 0) {
-      renderFlowStatus({ appliedFixes: true, saved: true });
+      renderFlowStatus({ appliedFixes: true, saved: true, hasAdvice });
     } else if (hasPendingSave) {
-      renderFlowStatus({ appliedFixes: true, saved: false });
+      renderFlowStatus({ appliedFixes: true, saved: false, hasAdvice });
     } else {
-      renderFlowStatus({ appliedFixes: false, saved: false });
+      renderFlowStatus({ appliedFixes: false, saved: false, hasAdvice });
     }
 
     const flushMs = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_METRICS_FLUSH_MS') || 30000);
