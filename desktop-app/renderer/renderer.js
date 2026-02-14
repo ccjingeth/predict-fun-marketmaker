@@ -35,6 +35,7 @@ const metricConsistencyFail = document.getElementById('metricConsistencyFail');
 const metricConsistencyReason = document.getElementById('metricConsistencyReason');
 const metricConsistencyOverride = document.getElementById('metricConsistencyOverride');
 const metricConsistencyRateLimit = document.getElementById('metricConsistencyRateLimit');
+const metricConsistencyTighten = document.getElementById('metricConsistencyTighten');
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -2546,6 +2547,10 @@ async function loadMetrics() {
       const until = Number(data.consistencyRateLimitUntil || 0);
       metricConsistencyRateLimit.textContent = until && until > Date.now() ? `限速中：${formatTimestamp(until)}` : '未触发';
     }
+    if (metricConsistencyTighten) {
+      const factor = Number(data.consistencyTemplateFactor || 1);
+      metricConsistencyTighten.textContent = formatNumber(factor, 2);
+    }
     if (consistencyBadge) {
       const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
       const overrideUntil = Number(data.consistencyOverrideUntil || 0);
@@ -2615,6 +2620,17 @@ async function loadMetrics() {
       consistencyFailureRate,
       consistencyHigh: consistencyFailureRate >= 25,
     };
+    if (applyConsistencyTemplateBtn) {
+      const env = parseEnv(envEditor.value || '');
+      const templateEnabled = String(env.get('CROSS_PLATFORM_CONSISTENCY_TEMPLATE_ENABLED') || '').toLowerCase() === 'true';
+      if (!templateEnabled && metricsSnapshot.consistencyHigh) {
+        applyConsistencyTemplateBtn.classList.add('attention');
+        applyConsistencyTemplateBtn.textContent = '建议启用一致性模板';
+      } else {
+        applyConsistencyTemplateBtn.classList.remove('attention');
+        applyConsistencyTemplateBtn.textContent = '一致性模板';
+      }
+    }
     updateAlerts(metricsSnapshot);
     renderAdvice(null, metricsSnapshot);
     const risk = computeRiskLevel(metricsSnapshot);
