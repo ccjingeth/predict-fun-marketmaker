@@ -1345,6 +1345,9 @@ function applySelectedFixes(quiet = false) {
   detectTradingMode(text);
   syncTogglesFromEnv(text);
   updateMetricsPaths();
+  if (healthExportHint) {
+    healthExportHint.textContent = '修复参数已写入配置编辑器，请点击“保存配置”生效。';
+  }
   if (!quiet) {
     pushLog({ type: 'system', level: 'system', message: `已应用 ${applied} 条修复建议（请保存生效）` });
   }
