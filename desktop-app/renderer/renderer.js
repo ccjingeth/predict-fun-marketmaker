@@ -803,7 +803,7 @@ function renderFixSummary() {
     item.className = 'alert-item warn';
     item.textContent = '暂无摘要';
     metricFixSummaryList.appendChild(item);
-    return;
+    return 0;
   }
   const lines = template.split('\n').filter(Boolean);
   if (!lines.length) {
@@ -811,7 +811,7 @@ function renderFixSummary() {
     item.className = 'alert-item warn';
     item.textContent = '暂无摘要';
     metricFixSummaryList.appendChild(item);
-    return;
+    return 0;
   }
   const topLine = lines.find((line) => line.includes('主要问题')) || '';
   if (topLine) {
@@ -852,6 +852,7 @@ function renderFixSummary() {
     actionRow.appendChild(button);
     metricFixSummaryList.appendChild(actionRow);
   }
+  return changed.length;
 }
 
 function renderFlowStatus({ appliedFixes, saved } = {}) {
@@ -1428,6 +1429,7 @@ function applySelectedFixes(quiet = false) {
   detectTradingMode(text);
   syncTogglesFromEnv(text);
   updateMetricsPaths();
+  updateFixPreview();
   if (healthExportHint) {
     healthExportHint.textContent = '修复参数已写入配置编辑器，请点击“保存配置”生效。';
   }
@@ -2045,7 +2047,15 @@ async function loadMetrics() {
     }
     updateCharts();
     renderMetricFailureAdvice(metrics.failureReasons, metricsSnapshot);
-    renderFixSummary();
+    const changedCount = renderFixSummary();
+    const hasPendingSave = !!(saveEnvButton && saveEnvButton.classList.contains('attention'));
+    if (changedCount === 0) {
+      renderFlowStatus({ appliedFixes: true, saved: true });
+    } else if (hasPendingSave) {
+      renderFlowStatus({ appliedFixes: true, saved: false });
+    } else {
+      renderFlowStatus({ appliedFixes: false, saved: false });
+    }
 
     const flushMs = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_METRICS_FLUSH_MS') || 30000);
     if (metricsAgeMs > flushMs * 2) {
