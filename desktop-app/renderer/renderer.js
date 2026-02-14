@@ -766,10 +766,18 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
     metricFailureAdviceList.appendChild(item);
     return;
   }
-  lines.forEach((text) => {
+  const recommendedCategories = top.map(([key]) => String(key));
+  lines.forEach((text, idx) => {
     const row = document.createElement('div');
     row.className = 'alert-item';
     row.textContent = text;
+    if (idx === 0 && recommendedCategories.length && fixSelectList) {
+      const action = document.createElement('button');
+      action.className = 'btn ghost';
+      action.textContent = '一键勾选';
+      action.addEventListener('click', () => autoSelectFixes(recommendedCategories));
+      row.appendChild(action);
+    }
     metricFailureAdviceList.appendChild(row);
   });
 }
@@ -1152,6 +1160,27 @@ function getTopFailureCategories(limit = 2) {
     .map(([category]) => category);
 }
 
+function autoSelectFixes(categories) {
+  if (!fixSelectList) return;
+  const recommendedKeys = new Set();
+  (categories || []).forEach((category) => {
+    const keys = FIX_CATEGORY_KEYS[category] || [];
+    keys.forEach((key) => recommendedKeys.add(key));
+  });
+  const env = parseEnv(envEditor.value || '');
+  const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
+  checkboxes.forEach((cb) => {
+    const key = cb.dataset.key;
+    const value = cb.dataset.value;
+    if (!key || value === undefined) return;
+    const current = env.get(key);
+    const normalizedCurrent = current === undefined ? '' : String(current).trim();
+    const normalizedValue = String(value || '').trim();
+    const isMismatch = normalizedCurrent !== normalizedValue;
+    cb.checked = recommendedKeys.has(key) && isMismatch;
+  });
+}
+
 function renderFixSelect(entries, env) {
   if (!fixSelectList) return;
   fixSelectList.innerHTML = '';
@@ -1254,17 +1283,7 @@ function renderFixSelect(entries, env) {
     });
   });
   selectRecommendedBtn.addEventListener('click', () => {
-    const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
-    checkboxes.forEach((cb) => {
-      const key = cb.dataset.key;
-      const value = cb.dataset.value;
-      if (!key || value === undefined) return;
-      const current = env.get(key);
-      const normalizedCurrent = current === undefined ? '' : String(current).trim();
-      const normalizedValue = String(value || '').trim();
-      const isMismatch = normalizedCurrent !== normalizedValue;
-      cb.checked = recommendedKeys.has(key) && isMismatch;
-    });
+    autoSelectFixes(topCategories);
   });
 }
 
