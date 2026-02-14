@@ -1130,6 +1130,21 @@ function renderFixSelect(entries, env) {
     fixSelectList.appendChild(item);
     return;
   }
+  const toolRow = document.createElement('div');
+  toolRow.className = 'health-item';
+  const selectAllBtn = document.createElement('button');
+  selectAllBtn.className = 'btn ghost';
+  selectAllBtn.textContent = '全选';
+  const selectNoneBtn = document.createElement('button');
+  selectNoneBtn.className = 'btn ghost';
+  selectNoneBtn.textContent = '取消全选';
+  const selectMismatchBtn = document.createElement('button');
+  selectMismatchBtn.className = 'btn ghost';
+  selectMismatchBtn.textContent = '仅选未匹配';
+  toolRow.appendChild(selectAllBtn);
+  toolRow.appendChild(selectNoneBtn);
+  toolRow.appendChild(selectMismatchBtn);
+  fixSelectList.appendChild(toolRow);
   entries.forEach((entry) => {
     const row = document.createElement('div');
     row.className = 'health-item';
@@ -1171,6 +1186,31 @@ function renderFixSelect(entries, env) {
   applyBtn.addEventListener('click', applySelectedFixes);
   applyRow.appendChild(applyBtn);
   fixSelectList.appendChild(applyRow);
+
+  selectAllBtn.addEventListener('click', () => {
+    const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
+    checkboxes.forEach((cb) => {
+      cb.checked = true;
+    });
+  });
+  selectNoneBtn.addEventListener('click', () => {
+    const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
+    checkboxes.forEach((cb) => {
+      cb.checked = false;
+    });
+  });
+  selectMismatchBtn.addEventListener('click', () => {
+    const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
+    checkboxes.forEach((cb) => {
+      const key = cb.dataset.key;
+      const value = cb.dataset.value;
+      if (!key || value === undefined) return;
+      const current = env.get(key);
+      const normalizedCurrent = current === undefined ? '' : String(current).trim();
+      const normalizedValue = String(value || '').trim();
+      cb.checked = normalizedCurrent !== normalizedValue;
+    });
+  });
 }
 
 function applySelectedFixes() {
