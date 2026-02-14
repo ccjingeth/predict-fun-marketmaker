@@ -18,6 +18,7 @@ const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 const metricsStatus = document.getElementById('metricsStatus');
 const metricSuccessRate = document.getElementById('metricSuccessRate');
 const metricSuccessRaw = document.getElementById('metricSuccessRaw');
+const metricFailureRate = document.getElementById('metricFailureRate');
 const metricAttempts = document.getElementById('metricAttempts');
 const metricPreflight = document.getElementById('metricPreflight');
 const metricExec = document.getElementById('metricExec');
@@ -1339,11 +1340,23 @@ function updateCharts() {
   drawSparkline(chartFailPost, postSeries, '#6dd3ce');
 }
 
-function updateAlerts({ successRate, postTradeDriftBps, qualityScore, cooldownUntil, metricsAgeMs }) {
+function updateAlerts({
+  successRate,
+  failureRate,
+  preflightFailRate,
+  postFailRate,
+  postTradeDriftBps,
+  qualityScore,
+  cooldownUntil,
+  metricsAgeMs,
+}) {
   if (!metricAlertsList) return;
   const env = parseEnv(envEditor.value || '');
   const minQuality = Number(env.get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7);
   const driftLimit = Number(env.get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80);
+  const failureWarn = 40;
+  const preflightWarn = 20;
+  const postWarn = 10;
   const warnings = [];
 
   if (metricsAgeMs > 60000) {
@@ -1351,6 +1364,15 @@ function updateAlerts({ successRate, postTradeDriftBps, qualityScore, cooldownUn
   }
   if (successRate < 60) {
     warnings.push('成功率偏低，建议提高滑点保护或缩小执行量。');
+  }
+  if (failureRate > failureWarn) {
+    warnings.push('失败率偏高，建议缩小执行量并提高深度与价格校验阈值。');
+  }
+  if (preflightFailRate > preflightWarn) {
+    warnings.push('预检失败率偏高，建议检查深度映射与目标平台报价稳定性。');
+  }
+  if (postFailRate > postWarn) {
+    warnings.push('成交后漂移失败率偏高，建议提高稳定窗口或降低执行速度。');
   }
   if (postTradeDriftBps > driftLimit) {
     warnings.push('Post-trade drift 偏高，建议检查深度与映射准确性。');
@@ -1378,7 +1400,15 @@ function updateAlerts({ successRate, postTradeDriftBps, qualityScore, cooldownUn
   });
 }
 
-function computeRiskLevel({ successRate, postTradeDriftBps, qualityScore, metricsAgeMs }) {
+function computeRiskLevel({
+  successRate,
+  failureRate,
+  preflightFailRate,
+  postFailRate,
+  postTradeDriftBps,
+  qualityScore,
+  metricsAgeMs,
+}) {
   let score = 0;
   const breakdown = [];
 
@@ -1399,6 +1429,21 @@ function computeRiskLevel({ successRate, postTradeDriftBps, qualityScore, metric
     const weighted = 10 * riskWeights.success;
     score += weighted;
     breakdown.push({ label: `成功率一般 x${riskWeights.success.toFixed(1)}`, score: weighted.toFixed(1) });
+  }
+  if (failureRate > 40) {
+    const weighted = Math.min(30, (failureRate - 40) * 0.6);
+    score += weighted;
+    breakdown.push({ label: '失败率偏高', score: weighted.toFixed(1) });
+  }
+  if (preflightFailRate > 20) {
+    const weighted = Math.min(20, (preflightFailRate - 20) * 0.8);
+    score += weighted;
+    breakdown.push({ label: '预检失败率偏高', score: weighted.toFixed(1) });
+  }
+  if (postFailRate > 10) {
+    const weighted = Math.min(25, (postFailRate - 10) * 1.2);
+    score += weighted;
+    breakdown.push({ label: '成交后失败偏高', score: weighted.toFixed(1) });
   }
   if (postTradeDriftBps > 120) {
     const weighted = 30 * riskWeights.drift;
@@ -1466,6 +1511,7 @@ async function loadMetrics() {
 
     setMetricText(metricSuccessRate, `${formatNumber(successRate, 1)}%`);
     setMetricText(metricSuccessRaw, `${successes}/${attempts} 成功`);
+    setMetricText(metricFailureRate, `${formatNumber(failureRate, 1)}%`);
     setMetricText(metricAttempts, `${attempts}`);
     setMetricText(metricPreflight, formatMs(metrics.emaPreflightMs));
     setMetricText(metricExec, formatMs(metrics.emaExecMs));
@@ -1511,6 +1557,9 @@ async function loadMetrics() {
       qualityScore: Number(data.qualityScore || 0),
       cooldownUntil,
       metricsAgeMs,
+      failureRate,
+      preflightFailRate,
+      postFailRate,
       driftLimit: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80),
       minQuality: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7),
     };
