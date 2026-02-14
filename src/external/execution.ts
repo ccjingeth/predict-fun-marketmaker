@@ -696,7 +696,7 @@ export class CrossPlatformExecutionRouter {
     this.assertCircuitHealthy();
     this.assertGlobalCooldown();
 
-    const maxRetries = Math.max(0, this.config.crossPlatformMaxRetries || 0);
+    const maxRetries = this.getMaxRetries();
     const retryDelayMs = this.getRetryDelayMs();
 
     let attempt = 0;
@@ -1395,6 +1395,17 @@ export class CrossPlatformExecutionRouter {
 
   private getRetryDelayMs(): number {
     return Math.max(0, this.retryDelayMsDynamic || this.resolveDynamicRetryDelay());
+  }
+
+  private getMaxRetries(): number {
+    const base = Math.max(0, this.config.crossPlatformMaxRetries || 0);
+    const cut = Math.max(0, this.config.crossPlatformFailureMaxRetriesCut || 0);
+    const minFloor = Math.max(0, this.config.crossPlatformFailureMaxRetriesMin || 0);
+    const min = Math.min(base, minFloor);
+    if ((this.circuitFailures > 0 || this.isDegraded()) && cut > 0) {
+      return Math.max(min, base - cut);
+    }
+    return base;
   }
 
   private adjustFailureProfitBps(success: boolean): void {
@@ -2760,11 +2771,16 @@ export class CrossPlatformExecutionRouter {
     const failureUsd = Math.max(0, this.config.crossPlatformFailureProfitUsd || 0);
     const impactMult = Math.max(0, this.config.crossPlatformMinProfitImpactMult || 0);
     const impactBps = Math.max(0, this.lastPreflight?.maxDeviationBps || 0);
+    let requiredBps = baseBps + failureBps * failureMult + this.failureProfitBpsBump;
+    const bpsCap = Math.max(0, this.config.crossPlatformFailureProfitBpsCap || 0);
+    if (bpsCap > 0) {
+      requiredBps = Math.min(requiredBps, bpsCap);
+    }
     const required =
       baseProfit +
       failureUsd * failureMult +
       this.failureProfitUsdBump +
-      notional * ((baseBps + failureBps * failureMult + this.failureProfitBpsBump) / 10000) +
+      notional * (requiredBps / 10000) +
       notional * (impactBps / 10000) * impactMult;
     if (required > 0 && profit < required) {
       throw new Error(
