@@ -10,6 +10,7 @@ const logFilterPreset = document.getElementById('logFilterPreset');
 const deleteLogFilterBtn = document.getElementById('deleteLogFilter');
 const globalStatus = document.getElementById('globalStatus');
 const tradingMode = document.getElementById('tradingMode');
+const consistencyBadge = document.getElementById('consistencyBadge');
 const statusMM = document.getElementById('statusMM');
 const statusArb = document.getElementById('statusArb');
 const toggleInputs = Array.from(document.querySelectorAll('.toggle input[data-env]'));
@@ -329,6 +330,26 @@ function setMetricsStatus(text, active) {
     : 'rgba(247, 196, 108, 0.15)';
   metricsStatus.style.color = active ? '#51d1b6' : '#f7c46c';
   metricsStatus.style.borderColor = active ? 'rgba(81, 209, 182, 0.45)' : 'rgba(247, 196, 108, 0.35)';
+}
+
+function setConsistencyBadge(text, tone) {
+  if (!consistencyBadge) return;
+  consistencyBadge.textContent = text;
+  if (tone === 'error') {
+    consistencyBadge.style.background = 'rgba(255, 107, 107, 0.2)';
+    consistencyBadge.style.color = '#ff6b6b';
+    consistencyBadge.style.borderColor = 'rgba(255, 107, 107, 0.4)';
+    return;
+  }
+  if (tone === 'warn') {
+    consistencyBadge.style.background = 'rgba(247, 196, 108, 0.15)';
+    consistencyBadge.style.color = '#f7c46c';
+    consistencyBadge.style.borderColor = 'rgba(247, 196, 108, 0.35)';
+    return;
+  }
+  consistencyBadge.style.background = 'rgba(81, 209, 182, 0.2)';
+  consistencyBadge.style.color = '#51d1b6';
+  consistencyBadge.style.borderColor = 'rgba(81, 209, 182, 0.45)';
 }
 
 function setHealthStatus(text, tone) {
@@ -843,7 +864,8 @@ function updateFailureCounts(line) {
   const count = failureCounts.get(normalized) || 0;
   failureCounts.set(normalized, count + 1);
   const category = classifyFailure(normalized);
-  failureEvents.push({ ts: Date.now(), category });
+  const isConsistency = normalized.toLowerCase().includes('consistency');
+  failureEvents.push({ ts: Date.now(), category, isConsistency });
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   while (failureEvents.length > 0 && failureEvents[0].ts < cutoff) {
     failureEvents.shift();
@@ -2133,6 +2155,36 @@ function drawSparkline(canvas, values, color) {
   ctx.stroke();
 }
 
+function drawHeatmap(canvas, values, color) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  const width = canvas.clientWidth || canvas.width;
+  const height = canvas.clientHeight || canvas.height;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
+  ctx.scale(ratio, ratio);
+
+  ctx.clearRect(0, 0, width, height);
+  if (!values.length) {
+    ctx.fillStyle = 'rgba(255,255,255,0.04)';
+    ctx.fillRect(0, 0, width, height);
+    return;
+  }
+  const max = Math.max(...values, 1);
+  const barWidth = width / values.length;
+  values.forEach((value, idx) => {
+    const intensity = Math.max(0, Math.min(1, value / max));
+    const alpha = 0.15 + intensity * 0.75;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = color;
+    const x = idx * barWidth;
+    ctx.fillRect(x, 0, barWidth - 1, height);
+  });
+  ctx.globalAlpha = 1;
+}
+
 function updateCharts() {
   const successSeries = metricsHistory.map((item) => item.successRate);
   const driftSeries = metricsHistory.map((item) => item.postTradeDriftBps);
@@ -2140,14 +2192,28 @@ function updateCharts() {
   const failureSeries = metricsHistory.map((item) => item.failureRate || 0);
   const preflightSeries = metricsHistory.map((item) => item.preflightFailRate || 0);
   const postSeries = metricsHistory.map((item) => item.postFailRate || 0);
-  const consistencySeries = metricsHistory.map((item) => item.consistencyActive || 0);
+  const consistencySeries = buildConsistencyHeatmapSeries();
   drawSparkline(chartSuccess, successSeries, '#6aa3ff');
   drawSparkline(chartDrift, driftSeries, '#f7c46c');
   drawSparkline(chartRisk, riskSeries, '#ff6b6b');
   drawSparkline(chartFailure, failureSeries, '#f07ca2');
   drawSparkline(chartFailPreflight, preflightSeries, '#9b8cff');
   drawSparkline(chartFailPost, postSeries, '#6dd3ce');
-  drawSparkline(chartConsistency, consistencySeries, '#ff9f43');
+  drawHeatmap(chartConsistency, consistencySeries, '#ff9f43');
+}
+
+function buildConsistencyHeatmapSeries() {
+  const buckets = new Array(24).fill(0);
+  const now = Date.now();
+  for (const event of failureEvents) {
+    if (!event?.isConsistency || !event?.ts) continue;
+    const ageMs = now - event.ts;
+    if (ageMs < 0 || ageMs > 24 * 60 * 60 * 1000) continue;
+    const hourIndex = Math.floor(ageMs / (60 * 60 * 1000));
+    const bucket = Math.max(0, Math.min(23, 23 - hourIndex));
+    buckets[bucket] += 1;
+  }
+  return buckets;
 }
 
 function updateAlerts({
@@ -2157,6 +2223,7 @@ function updateAlerts({
   postFailRate,
   postTradeDriftBps,
   qualityScore,
+  consistencyOverrideActive,
   cooldownUntil,
   metricsAgeMs,
 }) {
@@ -2189,6 +2256,9 @@ function updateAlerts({
   }
   if (qualityScore < minQuality) {
     warnings.push('质量分偏低，系统可能触发降级或冷却。');
+  }
+  if (consistencyOverrideActive) {
+    warnings.push('一致性保守模式中，已自动降低风险策略。');
   }
   if (cooldownUntil && cooldownUntil > Date.now()) {
     warnings.push('全局冷却中，执行将自动暂停。');
@@ -2363,6 +2433,17 @@ async function loadMetrics() {
       const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
       const until = Math.max(overrideUntil, templateUntil);
       metricConsistencyOverride.textContent = until && until > Date.now() ? `保守中：${formatTimestamp(until)}` : '未触发';
+    }
+    if (consistencyBadge) {
+      const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
+      const overrideUntil = Number(data.consistencyOverrideUntil || 0);
+      if (templateUntil > Date.now()) {
+        setConsistencyBadge('一致性模板中', 'warn');
+      } else if (overrideUntil > Date.now()) {
+        setConsistencyBadge('一致性保守中', 'warn');
+      } else {
+        setConsistencyBadge('一致性正常', 'ok');
+      }
     }
     setMetricText(metricChunkFactor, formatNumber(data.chunkFactor, 2));
     setMetricText(metricChunkDelay, formatMs(data.chunkDelayMs));
