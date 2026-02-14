@@ -314,12 +314,23 @@ canvas {
   border-radius: 10px;
   padding: 8px 10px;
   font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .alert-item.ok {
   background: rgba(81, 209, 182, 0.12);
   border-color: rgba(81, 209, 182, 0.35);
   color: #b5f3e6;
+}
+
+.alert-item .btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 999px;
 }
 
 .health-list {
