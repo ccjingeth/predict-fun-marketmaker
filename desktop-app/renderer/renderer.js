@@ -797,7 +797,17 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
     const mapRow = document.createElement('div');
     mapRow.className = 'alert-item warn';
     mapRow.textContent = `关联分类: ${recommendedCategories.join(' / ')}`;
+    const detail = document.createElement('div');
+    detail.className = 'alert-item warn';
+    const keySet = new Set();
+    recommendedCategories.forEach((category) => {
+      const keys = FIX_CATEGORY_KEYS[category] || [];
+      keys.forEach((key) => keySet.add(key));
+    });
+    const list = Array.from(keySet).slice(0, 6);
+    detail.textContent = list.length ? `关联参数: ${list.join('、')}` : '关联参数: 暂无';
     metricFailureAdviceList.appendChild(mapRow);
+    metricFailureAdviceList.appendChild(detail);
   }
 }
 
