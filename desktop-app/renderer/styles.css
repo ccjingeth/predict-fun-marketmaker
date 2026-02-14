@@ -321,6 +321,12 @@ canvas {
   flex-wrap: wrap;
 }
 
+.alert-item.warn {
+  background: rgba(247, 196, 108, 0.12);
+  border-color: rgba(247, 196, 108, 0.45);
+  color: #ffe1a3;
+}
+
 .alert-item.ok {
   background: rgba(81, 209, 182, 0.12);
   border-color: rgba(81, 209, 182, 0.35);

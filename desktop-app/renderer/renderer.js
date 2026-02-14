@@ -727,7 +727,7 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
   metricFailureAdviceList.innerHTML = '';
   if (!reasons) {
     const item = document.createElement('div');
-    item.className = 'alert-item';
+    item.className = 'alert-item warn';
     item.textContent = '暂无建议';
     metricFailureAdviceList.appendChild(item);
     return;
@@ -735,7 +735,7 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
   const entries = Object.entries(reasons).filter(([, v]) => Number(v) > 0);
   if (!entries.length) {
     const item = document.createElement('div');
-    item.className = 'alert-item';
+    item.className = 'alert-item warn';
     item.textContent = '暂无建议';
     metricFailureAdviceList.appendChild(item);
     return;
@@ -763,7 +763,7 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
   const lines = Array.from(new Set(hints)).slice(0, 5);
   if (!lines.length) {
     const item = document.createElement('div');
-    item.className = 'alert-item';
+    item.className = 'alert-item warn';
     item.textContent = '暂无建议';
     metricFailureAdviceList.appendChild(item);
     return;
@@ -771,7 +771,7 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
   const recommendedCategories = top.map(([key]) => String(key));
   lines.forEach((text, idx) => {
     const row = document.createElement('div');
-    row.className = 'alert-item';
+    row.className = 'alert-item warn';
     row.textContent = text;
     if (idx === 0 && recommendedCategories.length && fixSelectList) {
       const action = document.createElement('button');
@@ -799,7 +799,7 @@ function renderFixSummary() {
   metricFixSummaryList.innerHTML = '';
   if (!template) {
     const item = document.createElement('div');
-    item.className = 'alert-item';
+    item.className = 'alert-item warn';
     item.textContent = '暂无摘要';
     metricFixSummaryList.appendChild(item);
     return;
@@ -807,7 +807,7 @@ function renderFixSummary() {
   const lines = template.split('\n').filter(Boolean);
   if (!lines.length) {
     const item = document.createElement('div');
-    item.className = 'alert-item';
+    item.className = 'alert-item warn';
     item.textContent = '暂无摘要';
     metricFixSummaryList.appendChild(item);
     return;
@@ -815,7 +815,7 @@ function renderFixSummary() {
   const topLine = lines.find((line) => line.includes('主要问题')) || '';
   if (topLine) {
     const item = document.createElement('div');
-    item.className = 'alert-item';
+    item.className = 'alert-item warn';
     item.textContent = topLine.replace(/^#\s*/, '');
     metricFixSummaryList.appendChild(item);
   }
@@ -828,12 +828,12 @@ function renderFixSummary() {
     return normalizedCurrent !== normalizedValue;
   });
   const item = document.createElement('div');
-  item.className = 'alert-item';
+  item.className = 'alert-item warn';
   item.textContent = `建议可应用 ${changed.length} 项参数`;
   metricFixSummaryList.appendChild(item);
   if (changed.length) {
     const actionRow = document.createElement('div');
-    actionRow.className = 'alert-item';
+    actionRow.className = 'alert-item warn';
     const button = document.createElement('button');
     button.className = 'btn ghost';
     button.textContent = '一键按摘要应用';
@@ -1837,7 +1837,7 @@ function updateAlerts({
   }
   warnings.forEach((text) => {
     const item = document.createElement('div');
-    item.className = 'alert-item';
+    item.className = 'alert-item warn';
     item.textContent = text;
     metricAlertsList.appendChild(item);
   });
