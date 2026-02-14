@@ -2457,6 +2457,7 @@ export class CrossPlatformExecutionRouter {
     const vwapByLeg = new Map<string, { avgAllIn: number; totalAllIn: number; filledShares: number }>();
     const deviationByLeg = new Map<string, number>();
     const driftByLeg = new Map<string, number>();
+    const depthByLeg = new Map<string, { depthUsd: number; depthShares: number }>();
     const extraDeviation =
       this.circuitFailures > 0 || this.isDegraded()
         ? Math.max(0, this.config.crossPlatformFailureVwapDeviationBps || 0)
@@ -2471,6 +2472,24 @@ export class CrossPlatformExecutionRouter {
       }
       this.checkVolatility(leg, book);
 
+      const levels = leg.side === 'BUY' ? book.asks : book.bids;
+      const depthLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
+      const capped = depthLevels > 0 ? levels.slice(0, depthLevels) : levels;
+      const depth = capped.reduce(
+        (acc, entry) => {
+          const price = Number(entry.price);
+          const shares = Number(entry.shares);
+          if (!Number.isFinite(price) || !Number.isFinite(shares) || price <= 0 || shares <= 0) {
+            return acc;
+          }
+          acc.depthUsd += price * shares;
+          acc.depthShares += shares;
+          return acc;
+        },
+        { depthUsd: 0, depthShares: 0 }
+      );
+      depthByLeg.set(`${leg.platform}:${leg.tokenId}:${leg.side}`, depth);
+
       let minDepthUsd = Math.max(0, this.config.crossPlatformLegMinDepthUsd || 0);
       if (this.circuitFailures > 0 || this.isDegraded()) {
         minDepthUsd += Math.max(0, this.config.crossPlatformFailureLegMinDepthUsdAdd || 0);
@@ -2478,21 +2497,19 @@ export class CrossPlatformExecutionRouter {
       if (this.failureDepthUsdBump > 0) {
         minDepthUsd += this.failureDepthUsdBump;
       }
-      if (minDepthUsd > 0) {
-        const levels = leg.side === 'BUY' ? book.asks : book.bids;
-        const maxLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
-        const capped = maxLevels > 0 ? levels.slice(0, maxLevels) : levels;
-        const depthUsd = capped.reduce((sum, entry) => {
-          const price = Number(entry.price);
-          const shares = Number(entry.shares);
-          if (!Number.isFinite(price) || !Number.isFinite(shares) || price <= 0 || shares <= 0) {
-            return sum;
-          }
-          return sum + price * shares;
-        }, 0);
-        if (depthUsd < minDepthUsd) {
+      if (minDepthUsd > 0 && depth.depthUsd < minDepthUsd) {
+        throw new Error(
+          `Preflight failed: depth $${depth.depthUsd.toFixed(2)} < min $${minDepthUsd} for ${leg.platform}:${leg.tokenId}`
+        );
+      }
+
+      const maxUsageRaw = Math.max(0, this.config.crossPlatformLegDepthUsageMax || 0);
+      const maxUsage = Math.min(1, maxUsageRaw * this.getAutoTuneFactor());
+      if (maxUsage > 0 && depth.depthShares > 0) {
+        const usage = leg.shares / depth.depthShares;
+        if (usage > maxUsage) {
           throw new Error(
-            `Preflight failed: depth $${depthUsd.toFixed(2)} < min $${minDepthUsd} for ${leg.platform}:${leg.tokenId}`
+            `Preflight failed: depth usage ${(usage * 100).toFixed(1)}% > max ${(maxUsage * 100).toFixed(1)}% for ${leg.platform}:${leg.tokenId}`
           );
         }
       }
@@ -2537,7 +2554,7 @@ export class CrossPlatformExecutionRouter {
       }
 
       const driftBase = this.config.crossPlatformPriceDriftBps ?? 40;
-        const driftBps = Math.max(1, driftBase * this.getAutoTuneFactor());
+      const driftBps = Math.max(1, driftBase * this.getAutoTuneFactor());
       const bestRef = leg.side === 'BUY' ? book.bestAsk : book.bestBid;
       if (bestRef && Number.isFinite(bestRef) && bestRef > 0) {
         const drift = Math.abs((bestRef - limit) / limit) * 10000;
@@ -2591,6 +2608,26 @@ export class CrossPlatformExecutionRouter {
         throw new Error(`Preflight failed: leg drift spread ${spread.toFixed(1)} bps (max ${driftSpreadThreshold})`);
       }
     }
+    const depthRatioMin = Math.max(
+      0,
+      Math.min(1, (this.config.crossPlatformLegDepthRatioMin || 0) * this.getAutoTuneFactor())
+    );
+    if (depthRatioMin > 0 && depthByLeg.size >= 2) {
+      const values = Array.from(depthByLeg.values())
+        .map((entry) => entry.depthUsd)
+        .filter((val) => Number.isFinite(val) && val > 0);
+      if (values.length >= 2) {
+        const minDepth = Math.min(...values);
+        const maxDepth = Math.max(...values);
+        const ratio = maxDepth > 0 ? minDepth / maxDepth : 1;
+        if (ratio < depthRatioMin) {
+          throw new Error(
+            `Preflight failed: leg depth ratio ${(ratio * 100).toFixed(1)}% < min ${(depthRatioMin * 100).toFixed(1)}%`
+          );
+        }
+      }
+    }
+
     const spreadThreshold = Math.max(
       0,
       (this.config.crossPlatformLegDeviationSpreadBps || 0) * this.getAutoTuneFactor()

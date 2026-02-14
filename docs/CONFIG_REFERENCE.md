@@ -329,6 +329,8 @@
 - `CROSS_PLATFORM_LEG_MIN_DEPTH_USD`：腿间盘口最小深度（USD），低于则预检失败并记录降级。
 - `CROSS_PLATFORM_LEG_DEVIATION_SOFT_BPS`：腿间偏离软阈值（bps），超出则拒绝自动执行但保留机会。
 - `CROSS_PLATFORM_LEG_DEVIATION_SPREAD_BPS`：腿间偏离差阈值（bps），超出则拒绝自动执行。
+- `CROSS_PLATFORM_LEG_DEPTH_USAGE_MAX`：单腿最大深度使用比例（0-1）。
+- `CROSS_PLATFORM_LEG_DEPTH_RATIO_MIN`：腿间深度比最小值（0-1，越大越严格）。
 - `CROSS_PLATFORM_ALLOWLIST_TOKENS`：token 白名单（逗号分隔）。
 - `CROSS_PLATFORM_BLOCKLIST_TOKENS`：token 黑名单（逗号分隔）。
 - `CROSS_PLATFORM_ALLOWLIST_PLATFORMS`：平台白名单（Predict/Polymarket/Opinion）。
