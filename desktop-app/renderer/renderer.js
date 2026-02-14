@@ -29,6 +29,7 @@ const metricExec = document.getElementById('metricExec');
 const metricTotal = document.getElementById('metricTotal');
 const metricPostDrift = document.getElementById('metricPostDrift');
 const metricQuality = document.getElementById('metricQuality');
+const metricDepthPenalty = document.getElementById('metricDepthPenalty');
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -746,7 +747,7 @@ function classifyFailure(line) {
   if (/drift/.test(text)) return '价格漂移';
   if (/post[- ]?trade|posttrade/.test(text)) return '成交后漂移';
   if (/volatility/.test(text)) return '高波动';
-  if (/preflight|sanity check|validation/.test(text)) return '预检失败';
+  if (/preflight|sanity check|validation|consistency/.test(text)) return '预检失败';
   if (/hedge/.test(text)) return '对冲失败';
   if (/execution|submit|fill failed|order failed/.test(text)) return '执行失败';
   if (/open orders remain/.test(text)) return '未成交订单';
@@ -1978,6 +1979,9 @@ function renderAdvice(items, metricsSnapshot) {
     if (metricsSnapshot.qualityScore < metricsSnapshot.minQuality) {
       advice.push('质量分偏低：建议开启自动降级或暂时降低频率。');
     }
+    if (metricsSnapshot.depthPenalty > 0.2) {
+      advice.push('腿间深度不对称加重：建议提高深度比软阈值或缩小下单量。');
+    }
   }
   if (failureCounts.size > 0) {
     const categories = new Map();
@@ -2155,6 +2159,7 @@ function computeRiskLevel({
   postFailRate,
   postTradeDriftBps,
   qualityScore,
+  depthPenalty,
   metricsAgeMs,
 }) {
   let score = 0;
@@ -2215,6 +2220,15 @@ function computeRiskLevel({
     score += weighted;
     breakdown.push({ label: `质量分偏低 x${riskWeights.quality.toFixed(1)}`, score: weighted.toFixed(1) });
   }
+  if (depthPenalty >= 0.3) {
+    const weighted = 20 * riskWeights.quality;
+    score += weighted;
+    breakdown.push({ label: `深度惩罚偏高 x${riskWeights.quality.toFixed(1)}`, score: weighted.toFixed(1) });
+  } else if (depthPenalty >= 0.15) {
+    const weighted = 10 * riskWeights.quality;
+    score += weighted;
+    breakdown.push({ label: `深度惩罚上升 x${riskWeights.quality.toFixed(1)}`, score: weighted.toFixed(1) });
+  }
 
   score = Math.max(0, Math.min(100, score));
 
@@ -2270,6 +2284,10 @@ async function loadMetrics() {
     setMetricText(metricTotal, formatMs(metrics.emaTotalMs));
     setMetricText(metricPostDrift, formatBps(postTradeDriftBps));
     setMetricText(metricQuality, formatNumber(data.qualityScore, 2));
+    if (metricDepthPenalty) {
+      const penalty = Number(data.depthRatioPenalty || 0);
+      setMetricText(metricDepthPenalty, `${formatNumber(penalty * 100, 1)}%`);
+    }
     setMetricText(metricChunkFactor, formatNumber(data.chunkFactor, 2));
     setMetricText(metricChunkDelay, formatMs(data.chunkDelayMs));
     setMetricText(metricAlerts, `${metrics.postTradeAlerts || 0}`);
@@ -2308,6 +2326,7 @@ async function loadMetrics() {
       successRate,
       postTradeDriftBps,
       qualityScore: Number(data.qualityScore || 0),
+      depthPenalty: Number(data.depthRatioPenalty || 0),
       cooldownUntil,
       metricsAgeMs,
       failureRate,

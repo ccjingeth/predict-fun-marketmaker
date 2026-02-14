@@ -2119,6 +2119,9 @@ export class CrossPlatformExecutionRouter {
     if (message.includes('preflight')) {
       return 'preflight';
     }
+    if (message.includes('consistency')) {
+      return 'preflight';
+    }
     if (message.includes('post-trade') || message.includes('post trade')) {
       return 'postTrade';
     }
@@ -2790,7 +2793,7 @@ export class CrossPlatformExecutionRouter {
       for (const leg of legs) {
         const book = await this.fetchOrderbookInternal(leg);
         if (!book) {
-          throw new Error(`Consistency failed: missing orderbook for ${leg.platform}:${leg.tokenId}`);
+          throw new Error(`Preflight failed: consistency missing orderbook for ${leg.platform}:${leg.tokenId}`);
         }
         const levels = leg.side === 'BUY' ? book.asks : book.bids;
         const capped = depthLevels > 0 ? levels.slice(0, depthLevels) : levels;
@@ -2803,7 +2806,7 @@ export class CrossPlatformExecutionRouter {
           return sum + price * shares;
         }, 0);
         if (!Number.isFinite(depthUsd) || depthUsd <= 0) {
-          throw new Error(`Consistency failed: invalid depth for ${leg.platform}:${leg.tokenId}`);
+          throw new Error(`Preflight failed: consistency invalid depth for ${leg.platform}:${leg.tokenId}`);
         }
         const legKey = `${leg.platform}:${leg.tokenId}:${leg.side}`;
         depthByLeg.set(legKey, depthUsd);
@@ -2816,11 +2819,11 @@ export class CrossPlatformExecutionRouter {
             ? estimateBuy(book.asks, leg.shares, feeBps, curveRate, curveExponent, slippageBps)
             : estimateSell(book.bids, leg.shares, feeBps, curveRate, curveExponent, slippageBps);
         if (!vwap) {
-          throw new Error(`Consistency failed: insufficient VWAP depth for ${leg.platform}:${leg.tokenId}`);
+          throw new Error(`Preflight failed: consistency insufficient VWAP depth for ${leg.platform}:${leg.tokenId}`);
         }
         const limit = leg.price;
         if (!Number.isFinite(limit) || limit <= 0) {
-          throw new Error(`Consistency failed: invalid price for ${leg.platform}:${leg.tokenId}`);
+          throw new Error(`Preflight failed: consistency invalid price for ${leg.platform}:${leg.tokenId}`);
         }
         const vwapAllIn = Number.isFinite(vwap.avgAllIn) ? vwap.avgAllIn : vwap.avgPrice;
         const deviationBps =
@@ -2829,7 +2832,7 @@ export class CrossPlatformExecutionRouter {
             : ((limit - vwapAllIn) / limit) * 10000;
         if (vwapMaxBps > 0 && deviationBps > vwapMaxBps) {
           throw new Error(
-            `Consistency failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${vwapMaxBps}) for ${leg.platform}:${leg.tokenId}`
+            `Preflight failed: consistency VWAP deviates ${deviationBps.toFixed(1)} bps (max ${vwapMaxBps}) for ${leg.platform}:${leg.tokenId}`
           );
         }
         const list = deviationSamples.get(legKey) || [];
@@ -2846,7 +2849,7 @@ export class CrossPlatformExecutionRouter {
           ratioSamples.push(ratio);
           if (ratioMin > 0 && ratio < ratioMin) {
             throw new Error(
-              `Consistency failed: leg depth ratio ${(ratio * 100).toFixed(1)}% < min ${(ratioMin * 100).toFixed(1)}%`
+              `Preflight failed: consistency leg depth ratio ${(ratio * 100).toFixed(1)}% < min ${(ratioMin * 100).toFixed(1)}%`
             );
           }
         }
@@ -2867,7 +2870,7 @@ export class CrossPlatformExecutionRouter {
         const drift = maxDev - minDev;
         if (drift > vwapDriftBps) {
           throw new Error(
-            `Consistency failed: VWAP drift ${drift.toFixed(1)} bps (max ${vwapDriftBps}) for ${legKey}`
+            `Preflight failed: consistency VWAP drift ${drift.toFixed(1)} bps (max ${vwapDriftBps}) for ${legKey}`
           );
         }
       }
@@ -2878,7 +2881,7 @@ export class CrossPlatformExecutionRouter {
       const drift = maxRatio - minRatio;
       if (drift > ratioDrift) {
         throw new Error(
-          `Consistency failed: leg depth ratio drift ${(drift * 100).toFixed(1)}% (max ${(ratioDrift * 100).toFixed(1)}%)`
+          `Preflight failed: consistency leg depth ratio drift ${(drift * 100).toFixed(1)}% (max ${(ratioDrift * 100).toFixed(1)}%)`
         );
       }
     }
