@@ -620,6 +620,8 @@ export class CrossPlatformExecutionRouter {
   private stabilityBpsDynamic = 0;
   private retryDelayMsDynamic = 0;
   private failureProfitBpsBump = 0;
+  private failureProfitUsdBump = 0;
+  private failureDepthUsdBump = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -666,6 +668,8 @@ export class CrossPlatformExecutionRouter {
     this.stabilityBpsDynamic = this.resolveDynamicStability();
     this.retryDelayMsDynamic = this.resolveDynamicRetryDelay();
     this.failureProfitBpsBump = 0;
+    this.failureProfitUsdBump = 0;
+    this.failureDepthUsdBump = 0;
     this.restoreState().catch((error) => {
       console.warn('Cross-platform state restore failed:', error);
     });
@@ -732,6 +736,8 @@ export class CrossPlatformExecutionRouter {
         this.adjustDynamicStability(true);
         this.adjustDynamicRetryDelay(true);
         this.adjustFailureProfitBps(true);
+        this.adjustFailureProfitUsd(true);
+        this.adjustFailureDepthUsd(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -790,6 +796,8 @@ export class CrossPlatformExecutionRouter {
         this.adjustDynamicStability(false);
         this.adjustDynamicRetryDelay(false);
         this.adjustFailureProfitBps(false);
+        this.adjustFailureProfitUsd(false);
+        this.adjustFailureDepthUsd(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -1398,6 +1406,38 @@ export class CrossPlatformExecutionRouter {
       }
     } else {
       this.failureProfitBpsBump = Math.min(maxBump, this.failureProfitBpsBump + bump);
+    }
+  }
+
+  private adjustFailureProfitUsd(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureProfitUsdBump || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureProfitUsdBumpMax || bump * 5);
+    const recover = this.config.crossPlatformFailureProfitUsdBumpRecover ?? 0.8;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureProfitUsdBump = Math.max(0, this.failureProfitUsdBump * recover);
+      }
+    } else {
+      this.failureProfitUsdBump = Math.min(maxBump, this.failureProfitUsdBump + bump);
+    }
+  }
+
+  private adjustFailureDepthUsd(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureLegMinDepthUsdBump || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureLegMinDepthUsdBumpMax || bump * 5);
+    const recover = this.config.crossPlatformFailureLegMinDepthUsdBumpRecover ?? 0.8;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureDepthUsdBump = Math.max(0, this.failureDepthUsdBump * recover);
+      }
+    } else {
+      this.failureDepthUsdBump = Math.min(maxBump, this.failureDepthUsdBump + bump);
     }
   }
 
@@ -2378,6 +2418,9 @@ export class CrossPlatformExecutionRouter {
       if (this.circuitFailures > 0 || this.isDegraded()) {
         minDepthUsd += Math.max(0, this.config.crossPlatformFailureLegMinDepthUsdAdd || 0);
       }
+      if (this.failureDepthUsdBump > 0) {
+        minDepthUsd += this.failureDepthUsdBump;
+      }
       if (minDepthUsd > 0) {
         const levels = leg.side === 'BUY' ? book.asks : book.bids;
         const maxLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
@@ -2700,6 +2743,7 @@ export class CrossPlatformExecutionRouter {
     const required =
       baseProfit +
       failureUsd * failureMult +
+      this.failureProfitUsdBump +
       notional * ((baseBps + failureBps * failureMult + this.failureProfitBpsBump) / 10000) +
       notional * (impactBps / 10000) * impactMult;
     if (required > 0 && profit < required) {

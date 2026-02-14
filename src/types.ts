@@ -325,6 +325,12 @@ export interface Config {
   crossPlatformFailureProfitBpsBumpRecover?: number;
   crossPlatformFailureStabilitySamplesMax?: number;
   crossPlatformFailureStabilityIntervalMaxMs?: number;
+  crossPlatformFailureProfitUsdBump?: number;
+  crossPlatformFailureProfitUsdBumpMax?: number;
+  crossPlatformFailureProfitUsdBumpRecover?: number;
+  crossPlatformFailureLegMinDepthUsdBump?: number;
+  crossPlatformFailureLegMinDepthUsdBumpMax?: number;
+  crossPlatformFailureLegMinDepthUsdBumpRecover?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;

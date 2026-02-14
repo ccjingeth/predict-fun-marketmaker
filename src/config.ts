@@ -374,6 +374,12 @@ export function loadConfig(): Config {
     crossPlatformFailureProfitBpsBumpRecover: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PROFIT_BPS_BUMP_RECOVER || '0.8'),
     crossPlatformFailureStabilitySamplesMax: parseInt(process.env.CROSS_PLATFORM_FAILURE_STABILITY_SAMPLES_MAX || '0'),
     crossPlatformFailureStabilityIntervalMaxMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_STABILITY_INTERVAL_MAX_MS || '0'),
+    crossPlatformFailureProfitUsdBump: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PROFIT_USD_BUMP || '0'),
+    crossPlatformFailureProfitUsdBumpMax: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PROFIT_USD_BUMP_MAX || '0'),
+    crossPlatformFailureProfitUsdBumpRecover: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PROFIT_USD_BUMP_RECOVER || '0.8'),
+    crossPlatformFailureLegMinDepthUsdBump: parseFloat(process.env.CROSS_PLATFORM_FAILURE_LEG_MIN_DEPTH_USD_BUMP || '0'),
+    crossPlatformFailureLegMinDepthUsdBumpMax: parseFloat(process.env.CROSS_PLATFORM_FAILURE_LEG_MIN_DEPTH_USD_BUMP_MAX || '0'),
+    crossPlatformFailureLegMinDepthUsdBumpRecover: parseFloat(process.env.CROSS_PLATFORM_FAILURE_LEG_MIN_DEPTH_USD_BUMP_RECOVER || '0.8'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -792,6 +798,36 @@ export function loadConfig(): Config {
   }
   if ((config.crossPlatformFailureStabilityIntervalMaxMs ?? 0) < 0) {
     config.crossPlatformFailureStabilityIntervalMaxMs = 0;
+  }
+  if ((config.crossPlatformFailureProfitUsdBump ?? 0) < 0) {
+    config.crossPlatformFailureProfitUsdBump = 0;
+  }
+  if ((config.crossPlatformFailureProfitUsdBumpMax ?? 0) < 0) {
+    config.crossPlatformFailureProfitUsdBumpMax = 0;
+  }
+  const profitUsdBumpMax = config.crossPlatformFailureProfitUsdBumpMax ?? 0;
+  if (profitUsdBumpMax > 0) {
+    if ((config.crossPlatformFailureProfitUsdBump ?? 0) > profitUsdBumpMax) {
+      config.crossPlatformFailureProfitUsdBump = profitUsdBumpMax;
+    }
+  }
+  if ((config.crossPlatformFailureProfitUsdBumpRecover ?? 0) <= 0 || (config.crossPlatformFailureProfitUsdBumpRecover ?? 0) >= 1) {
+    config.crossPlatformFailureProfitUsdBumpRecover = 0.8;
+  }
+  if ((config.crossPlatformFailureLegMinDepthUsdBump ?? 0) < 0) {
+    config.crossPlatformFailureLegMinDepthUsdBump = 0;
+  }
+  if ((config.crossPlatformFailureLegMinDepthUsdBumpMax ?? 0) < 0) {
+    config.crossPlatformFailureLegMinDepthUsdBumpMax = 0;
+  }
+  const depthUsdBumpMax = config.crossPlatformFailureLegMinDepthUsdBumpMax ?? 0;
+  if (depthUsdBumpMax > 0) {
+    if ((config.crossPlatformFailureLegMinDepthUsdBump ?? 0) > depthUsdBumpMax) {
+      config.crossPlatformFailureLegMinDepthUsdBump = depthUsdBumpMax;
+    }
+  }
+  if ((config.crossPlatformFailureLegMinDepthUsdBumpRecover ?? 0) <= 0 || (config.crossPlatformFailureLegMinDepthUsdBumpRecover ?? 0) >= 1) {
+    config.crossPlatformFailureLegMinDepthUsdBumpRecover = 0.8;
   }
   if ((config.crossPlatformFailureChunkDelayBumpMs ?? 0) < 0) {
     config.crossPlatformFailureChunkDelayBumpMs = 0;
