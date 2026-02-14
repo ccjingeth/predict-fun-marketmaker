@@ -2199,13 +2199,22 @@ export class CrossPlatformExecutionRouter {
       }
     }
 
+    const vwapThreshold = Math.max(0, this.config.crossPlatformLegVwapDeviationBps || 0);
+    if (vwapThreshold > 0 && drifts.length >= 2) {
+      for (const entry of drifts) {
+        if (entry.drift >= vwapThreshold) {
+          spreadPenalizedLegs.push(entry.leg);
+        }
+      }
+    }
+
     if (penalizedLegs.length > 0) {
       console.warn(`[CrossExec] post-trade drift exceeded ${threshold} bps on ${penalizedLegs.length} legs`);
     }
 
-    if (spreadPenalizedLegs.length > 0 && spreadThreshold > 0) {
+    if (spreadPenalizedLegs.length > 0 && (spreadThreshold > 0 || vwapThreshold > 0)) {
       console.warn(
-        `[CrossExec] drift spread exceeded ${spreadThreshold} bps on ${spreadPenalizedLegs.length} legs`
+        `[CrossExec] drift spread/vwap exceeded on ${spreadPenalizedLegs.length} legs`
       );
       for (const leg of spreadPenalizedLegs) {
         this.adjustPlatformScoreSingle(

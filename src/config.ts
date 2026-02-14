@@ -221,6 +221,7 @@ export function loadConfig(): Config {
     crossPlatformPlatformScoreOnPostTrade: parseInt(process.env.CROSS_PLATFORM_PLATFORM_SCORE_ON_POST_TRADE || '8'),
     crossPlatformPlatformScoreOnSpread: parseInt(process.env.CROSS_PLATFORM_PLATFORM_SCORE_ON_SPREAD || '6'),
     crossPlatformLegDriftSpreadBps: parseInt(process.env.CROSS_PLATFORM_LEG_DRIFT_SPREAD_BPS || '0'),
+    crossPlatformLegVwapDeviationBps: parseInt(process.env.CROSS_PLATFORM_LEG_VWAP_DEVIATION_BPS || '0'),
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),
