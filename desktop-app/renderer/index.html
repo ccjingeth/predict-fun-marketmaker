@@ -226,6 +226,11 @@
               <span class="metric-hint">模板收紧系数</span>
             </div>
             <div class="metric">
+              <span class="metric-label">避开时段</span>
+              <span class="metric-value" id="metricAvoidHours">--</span>
+              <span class="metric-hint">跨平台暂停的小时</span>
+            </div>
+            <div class="metric">
               <span class="metric-label">Chunk 因子</span>
               <span class="metric-value" id="metricChunkFactor">--</span>
               <span class="metric-hint">自动调参</span>
@@ -388,6 +393,9 @@
               <span class="metric-label">一致性热区提示</span>
               <div class="health-list" id="metricConsistencyHotspots">
                 <div class="health-item ok">暂无一致性热区。</div>
+              </div>
+              <div class="button-row">
+                <button class="btn ghost" id="applyConsistencyAvoid">避开热区时段</button>
               </div>
             </div>
             <div class="metric full">

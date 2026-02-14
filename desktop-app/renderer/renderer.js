@@ -36,6 +36,7 @@ const metricConsistencyReason = document.getElementById('metricConsistencyReason
 const metricConsistencyOverride = document.getElementById('metricConsistencyOverride');
 const metricConsistencyRateLimit = document.getElementById('metricConsistencyRateLimit');
 const metricConsistencyTighten = document.getElementById('metricConsistencyTighten');
+const metricAvoidHours = document.getElementById('metricAvoidHours');
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -53,6 +54,7 @@ const downgradeProfileBtn = document.getElementById('downgradeProfile');
 const downgradeSafeBtn = document.getElementById('downgradeSafe');
 const downgradeUltraBtn = document.getElementById('downgradeUltra');
 const applyConsistencyTemplateBtn = document.getElementById('applyConsistencyTemplate');
+const applyConsistencyAvoidBtn = document.getElementById('applyConsistencyAvoid');
 const applyFixTemplateBtn = document.getElementById('applyFixTemplate');
 const weightSuccess = document.getElementById('weightSuccess');
 const weightDrift = document.getElementById('weightDrift');
@@ -238,6 +240,7 @@ const FIX_HINTS = {
   CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_MS: '一致性限速冷却（毫秒）',
   CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_THRESHOLD: '一致性限速阈值次数',
   CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_WINDOW_MS: '一致性限速统计窗口（毫秒）',
+  CROSS_PLATFORM_AVOID_HOURS: '跨平台避开小时（0-23）',
   CROSS_PLATFORM_QUALITY_PROFIT_MULT: '质量分收益门槛放大系数',
   CROSS_PLATFORM_QUALITY_PROFIT_MAX: '质量分收益门槛放大上限',
   CROSS_PLATFORM_MAX_VWAP_LEVELS: '跨平台 VWAP 档位数上限',
@@ -1820,6 +1823,26 @@ function applyConsistencyTemplate() {
   );
 }
 
+function getConsistencyHotspotHours() {
+  const buckets = buildConsistencyHeatmapSeries();
+  return buckets
+    .map((count, hour) => ({ count, hour }))
+    .filter((entry) => entry.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 4)
+    .map((entry) => entry.hour);
+}
+
+function applyConsistencyAvoidHours() {
+  const hours = getConsistencyHotspotHours();
+  if (!hours.length) {
+    pushLog({ type: 'system', level: 'system', message: '暂无一致性热区，未写入避开时段。' });
+    return;
+  }
+  const value = hours.map((h) => String(h).padStart(2, '0')).join(',');
+  applyTemplate({ CROSS_PLATFORM_AVOID_HOURS: value }, '避开一致性热区');
+}
+
 function buildFixTemplate() {
   const categories = new Map();
   for (const [line, count] of failureCounts.entries()) {
@@ -2310,13 +2333,12 @@ function updateCharts() {
 function buildConsistencyHeatmapSeries() {
   const buckets = new Array(24).fill(0);
   const now = Date.now();
+  const cutoff = now - 24 * 60 * 60 * 1000;
   for (const event of failureEvents) {
     if (!event?.isConsistency || !event?.ts) continue;
-    const ageMs = now - event.ts;
-    if (ageMs < 0 || ageMs > 24 * 60 * 60 * 1000) continue;
-    const hourIndex = Math.floor(ageMs / (60 * 60 * 1000));
-    const bucket = Math.max(0, Math.min(23, 23 - hourIndex));
-    buckets[bucket] += 1;
+    if (event.ts < cutoff) continue;
+    const hour = new Date(event.ts).getHours();
+    buckets[hour] += 1;
   }
   return buckets;
 }
@@ -2550,6 +2572,11 @@ async function loadMetrics() {
     if (metricConsistencyTighten) {
       const factor = Number(data.consistencyTemplateFactor || 1);
       metricConsistencyTighten.textContent = formatNumber(factor, 2);
+    }
+    if (metricAvoidHours) {
+      const env = parseEnv(envEditor.value || '');
+      const value = env.get('CROSS_PLATFORM_AVOID_HOURS') || '';
+      metricAvoidHours.textContent = value ? String(value) : '未设置';
     }
     if (consistencyBadge) {
       const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
@@ -2841,6 +2868,9 @@ downgradeUltraBtn.addEventListener('click', () => applyDowngradeProfile('ultra')
 applyFixTemplateBtn.addEventListener('click', applyFixTemplate);
 if (applyConsistencyTemplateBtn) {
   applyConsistencyTemplateBtn.addEventListener('click', applyConsistencyTemplate);
+}
+if (applyConsistencyAvoidBtn) {
+  applyConsistencyAvoidBtn.addEventListener('click', applyConsistencyAvoidHours);
 }
 refreshMmMetrics.addEventListener('click', loadMmMetrics);
 if (applyMmPassiveBtn) {

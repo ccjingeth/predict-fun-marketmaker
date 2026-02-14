@@ -22,6 +22,16 @@ const parseList = (value?: string): string[] | undefined => {
   return items.length > 0 ? items : undefined;
 };
 
+const parseNumberList = (value?: string): number[] | undefined => {
+  const items = parseList(value);
+  if (!items) return undefined;
+  const nums = items
+    .map((item) => Number(item))
+    .filter((item) => Number.isFinite(item))
+    .map((item) => Math.floor(item));
+  return nums.length > 0 ? nums : undefined;
+};
+
 const parseOrderTypeList = (value?: string): string[] | undefined => {
   const items = parseList(value);
   if (!items) return undefined;
@@ -340,6 +350,7 @@ export function loadConfig(): Config {
     crossPlatformConsistencyRateLimitWindowMs: parseInt(
       process.env.CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_WINDOW_MS || '0'
     ),
+    crossPlatformAvoidHours: parseNumberList(process.env.CROSS_PLATFORM_AVOID_HOURS),
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),

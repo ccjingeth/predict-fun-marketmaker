@@ -709,6 +709,7 @@ export class CrossPlatformExecutionRouter {
   }
 
   async execute(legs: PlatformLeg[]): Promise<void> {
+    this.assertAvoidHours();
     this.assertCircuitHealthy();
     this.assertGlobalCooldown();
 
@@ -2019,6 +2020,18 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private assertAvoidHours(): void {
+    const hours = this.config.crossPlatformAvoidHours;
+    if (!hours || hours.length === 0) {
+      return;
+    }
+    const now = new Date();
+    const hour = now.getHours();
+    if (hours.includes(hour)) {
+      throw new Error(`Preflight failed: avoid hour ${hour}`);
+    }
+  }
+
   private maybeAutoBlock(legs: PlatformLeg[]): void {
     if (!this.config.crossPlatformAutoBlocklist) {
       return;
@@ -2205,6 +2218,9 @@ export class CrossPlatformExecutionRouter {
       return 'preflight';
     }
     if (message.includes('consistency')) {
+      return 'preflight';
+    }
+    if (message.includes('avoid hour')) {
       return 'preflight';
     }
     if (message.includes('post-trade') || message.includes('post trade')) {
