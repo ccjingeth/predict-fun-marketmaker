@@ -80,6 +80,7 @@ const healthExportHint = document.getElementById('healthExportHint');
 const runDiagnosticsBtn = document.getElementById('runDiagnostics');
 const exportDiagnosticsBtn = document.getElementById('exportDiagnostics');
 const copyFailuresBtn = document.getElementById('copyFailures');
+const copyFixTemplateBtn = document.getElementById('copyFixTemplate');
 const mmStatus = document.getElementById('mmStatus');
 const mmTradingStatus = document.getElementById('mmTradingStatus');
 const mmPnL = document.getElementById('mmPnL');
@@ -786,6 +787,20 @@ async function copyFailures() {
   }
 }
 
+async function copyFixTemplate() {
+  const template = buildFixTemplate();
+  if (!template) {
+    if (healthExportHint) healthExportHint.textContent = '暂无修复模板可复制。';
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(template);
+    if (healthExportHint) healthExportHint.textContent = '修复模板已复制到剪贴板。';
+  } catch {
+    if (healthExportHint) healthExportHint.textContent = '复制失败，请手动选择。';
+  }
+}
+
 function getFailureAdvice(line) {
   const hints = [];
   if (/insufficient depth|insufficient/i.test(line)) {
@@ -1046,14 +1061,19 @@ function updateFixPreview() {
     const key = line.slice(0, idx).trim();
     const value = line.slice(idx + 1).trim();
     const row = document.createElement('div');
-    row.className = 'health-item warn';
     const label = document.createElement('div');
     label.className = 'health-label';
     label.textContent = key;
     const hint = document.createElement('div');
     hint.className = 'health-hint';
     const current = env.get(key);
-    hint.textContent = `当前: ${current ?? '未设置'} → 建议: ${value}`;
+    const normalizedCurrent = current === undefined ? '' : String(current).trim();
+    const normalizedValue = String(value || '').trim();
+    const isSame = normalizedCurrent === normalizedValue;
+    row.className = `health-item ${isSame ? 'ok' : 'warn'}`;
+    hint.textContent = isSame
+      ? `当前: ${current ?? '未设置'}（已匹配）`
+      : `当前: ${current ?? '未设置'} → 建议: ${value}`;
     row.appendChild(label);
     row.appendChild(hint);
     fixPreviewList.appendChild(row);
@@ -1097,7 +1117,13 @@ function renderFixSelect(entries, env) {
     const hint = document.createElement('div');
     hint.className = 'health-hint';
     const current = env.get(entry.key);
-    hint.textContent = `当前: ${current ?? '未设置'} → 建议: ${entry.value}`;
+    const normalizedCurrent = current === undefined ? '' : String(current).trim();
+    const normalizedValue = String(entry.value || '').trim();
+    const isSame = normalizedCurrent === normalizedValue;
+    checkbox.checked = !isSame;
+    hint.textContent = isSame
+      ? `当前: ${current ?? '未设置'}（已匹配）`
+      : `当前: ${current ?? '未设置'} → 建议: ${entry.value}`;
 
     row.appendChild(checkboxWrap);
     row.appendChild(hint);
@@ -1933,6 +1959,9 @@ refreshMetrics.addEventListener('click', loadMetrics);
 runDiagnosticsBtn.addEventListener('click', runDiagnostics);
 exportDiagnosticsBtn.addEventListener('click', exportDiagnostics);
 copyFailuresBtn.addEventListener('click', copyFailures);
+if (copyFixTemplateBtn) {
+  copyFixTemplateBtn.addEventListener('click', copyFixTemplate);
+}
 downgradeProfileBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
 downgradeSafeBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
 downgradeUltraBtn.addEventListener('click', () => applyDowngradeProfile('ultra'));
