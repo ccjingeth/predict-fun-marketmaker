@@ -678,6 +678,7 @@ function renderMetricFailureReasons(reasons) {
     metricFailureReasons.appendChild(item);
     return;
   }
+  const total = entries.reduce((sum, [, value]) => sum + Number(value || 0), 0);
   const sorted = entries.sort((a, b) => Number(b[1]) - Number(a[1]));
   for (const [key, value] of sorted) {
     const row = document.createElement('div');
@@ -687,7 +688,12 @@ function renderMetricFailureReasons(reasons) {
     label.textContent = key;
     const hint = document.createElement('div');
     hint.className = 'health-hint';
-    hint.textContent = `${value} 次`;
+    if (total > 0) {
+      const ratio = (Number(value || 0) / total) * 100;
+      hint.textContent = `${value} 次（${formatNumber(ratio, 1)}%）`;
+    } else {
+      hint.textContent = `${value} 次`;
+    }
     row.appendChild(label);
     row.appendChild(hint);
     metricFailureReasons.appendChild(row);
