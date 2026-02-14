@@ -618,6 +618,7 @@ export class CrossPlatformExecutionRouter {
   private retryFactor = 1;
   private slippageBpsDynamic = 0;
   private stabilityBpsDynamic = 0;
+  private retryDelayMsDynamic = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -662,6 +663,7 @@ export class CrossPlatformExecutionRouter {
     this.retryFactor = maxRetry;
     this.slippageBpsDynamic = this.resolveDynamicSlippage();
     this.stabilityBpsDynamic = this.resolveDynamicStability();
+    this.retryDelayMsDynamic = this.resolveDynamicRetryDelay();
     this.restoreState().catch((error) => {
       console.warn('Cross-platform state restore failed:', error);
     });
@@ -687,7 +689,7 @@ export class CrossPlatformExecutionRouter {
     this.assertGlobalCooldown();
 
     const maxRetries = Math.max(0, this.config.crossPlatformMaxRetries || 0);
-    const retryDelayMs = Math.max(0, this.config.crossPlatformRetryDelayMs || 0);
+    const retryDelayMs = this.getRetryDelayMs();
 
     let attempt = 0;
     while (true) {
@@ -726,6 +728,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustRetryFactor(true);
         this.adjustDynamicSlippage(true);
         this.adjustDynamicStability(true);
+        this.adjustDynamicRetryDelay(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -782,6 +785,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustRetryFactor(false);
         this.adjustDynamicSlippage(false);
         this.adjustDynamicStability(false);
+        this.adjustDynamicRetryDelay(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -1352,6 +1356,29 @@ export class CrossPlatformExecutionRouter {
     } else {
       this.stabilityBpsDynamic = base + up;
     }
+  }
+
+  private resolveDynamicRetryDelay(): number {
+    return Math.max(0, this.config.crossPlatformRetryDelayMs || 0);
+  }
+
+  private adjustDynamicRetryDelay(success: boolean): void {
+    const base = this.resolveDynamicRetryDelay();
+    const floor = Math.max(0, this.config.crossPlatformRetryDelayFloorMs || 0);
+    const ceil = Math.max(floor, this.config.crossPlatformRetryDelayCeilMs || 0);
+    const up = Math.max(0, this.config.crossPlatformFailureRetryDelayBumpMs || 0);
+    const down = Math.max(0, this.config.crossPlatformSuccessRetryDelayTightenMs || 0);
+    const current = this.retryDelayMsDynamic || base;
+    if (success) {
+      this.retryDelayMsDynamic = Math.max(floor, current - down);
+    } else {
+      const next = current + up;
+      this.retryDelayMsDynamic = ceil > 0 ? Math.min(ceil, next) : next;
+    }
+  }
+
+  private getRetryDelayMs(): number {
+    return Math.max(0, this.retryDelayMsDynamic || this.resolveDynamicRetryDelay());
   }
 
   private getStabilityBps(): number {
@@ -2631,15 +2658,17 @@ export class CrossPlatformExecutionRouter {
       profit = (totalProceedsPerShare - totalCostPerShare - transfer) * shares;
     }
 
-    if (minNotional > 0 && notional < minNotional) {
-      throw new Error(`Preflight failed: notional $${notional.toFixed(2)} < min ${minNotional}`);
+    const failureMult = this.circuitFailures > 0 || this.isDegraded() ? 1 : 0;
+    const failureNotional = Math.max(0, this.config.crossPlatformFailureMinNotionalUsdAdd || 0) * failureMult;
+    const requiredNotional = minNotional + failureNotional;
+    if (requiredNotional > 0 && notional < requiredNotional) {
+      throw new Error(`Preflight failed: notional $${notional.toFixed(2)} < min ${requiredNotional}`);
     }
     const baseBps = Math.max(0, this.config.crossPlatformMinProfitBps || 0);
     const failureBps = Math.max(0, this.config.crossPlatformFailureProfitBps || 0);
     const failureUsd = Math.max(0, this.config.crossPlatformFailureProfitUsd || 0);
     const impactMult = Math.max(0, this.config.crossPlatformMinProfitImpactMult || 0);
     const impactBps = Math.max(0, this.lastPreflight?.maxDeviationBps || 0);
-    const failureMult = this.circuitFailures > 0 || this.isDegraded() ? 1 : 0;
     const required =
       baseProfit +
       failureUsd * failureMult +

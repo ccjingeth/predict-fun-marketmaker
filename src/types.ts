@@ -315,6 +315,11 @@ export interface Config {
   crossPlatformFailureVwapDeviationBps?: number;
   crossPlatformFailureLegMinDepthUsdAdd?: number;
   crossPlatformFailureMaxVwapLevelsCut?: number;
+  crossPlatformFailureMinNotionalUsdAdd?: number;
+  crossPlatformFailureRetryDelayBumpMs?: number;
+  crossPlatformSuccessRetryDelayTightenMs?: number;
+  crossPlatformRetryDelayFloorMs?: number;
+  crossPlatformRetryDelayCeilMs?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;

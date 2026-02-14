@@ -364,6 +364,11 @@ export function loadConfig(): Config {
     crossPlatformFailureVwapDeviationBps: parseInt(process.env.CROSS_PLATFORM_FAILURE_VWAP_DEVIATION_BPS || '0'),
     crossPlatformFailureLegMinDepthUsdAdd: parseFloat(process.env.CROSS_PLATFORM_FAILURE_LEG_MIN_DEPTH_USD_ADD || '0'),
     crossPlatformFailureMaxVwapLevelsCut: parseInt(process.env.CROSS_PLATFORM_FAILURE_MAX_VWAP_LEVELS_CUT || '0'),
+    crossPlatformFailureMinNotionalUsdAdd: parseFloat(process.env.CROSS_PLATFORM_FAILURE_MIN_NOTIONAL_USD_ADD || '0'),
+    crossPlatformFailureRetryDelayBumpMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_RETRY_DELAY_BUMP_MS || '0'),
+    crossPlatformSuccessRetryDelayTightenMs: parseInt(process.env.CROSS_PLATFORM_SUCCESS_RETRY_DELAY_TIGHTEN_MS || '0'),
+    crossPlatformRetryDelayFloorMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_FLOOR_MS || '0'),
+    crossPlatformRetryDelayCeilMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_CEIL_MS || '0'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -739,6 +744,29 @@ export function loadConfig(): Config {
   if ((config.crossPlatformFailureMaxVwapLevelsCut ?? 0) < 0) {
     config.crossPlatformFailureMaxVwapLevelsCut = 0;
   }
+  if ((config.crossPlatformFailureMinNotionalUsdAdd ?? 0) < 0) {
+    config.crossPlatformFailureMinNotionalUsdAdd = 0;
+  }
+  if ((config.crossPlatformFailureRetryDelayBumpMs ?? 0) < 0) {
+    config.crossPlatformFailureRetryDelayBumpMs = 0;
+  }
+  if ((config.crossPlatformSuccessRetryDelayTightenMs ?? 0) < 0) {
+    config.crossPlatformSuccessRetryDelayTightenMs = 0;
+  }
+  if ((config.crossPlatformRetryDelayFloorMs ?? 0) < 0) {
+    config.crossPlatformRetryDelayFloorMs = 0;
+  }
+  if ((config.crossPlatformRetryDelayCeilMs ?? 0) < 0) {
+    config.crossPlatformRetryDelayCeilMs = 0;
+  }
+  if ((config.crossPlatformRetryDelayCeilMs ?? 0) > 0) {
+    const floor = config.crossPlatformRetryDelayFloorMs ?? 0;
+    const ceil = config.crossPlatformRetryDelayCeilMs ?? 0;
+    if (ceil < floor) {
+      config.crossPlatformRetryDelayCeilMs = floor;
+      config.crossPlatformRetryDelayFloorMs = ceil;
+    }
+  }
   if ((config.crossPlatformFailureChunkDelayBumpMs ?? 0) < 0) {
     config.crossPlatformFailureChunkDelayBumpMs = 0;
   }
@@ -991,6 +1019,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `Cross-Platform Retry Factor: ${config.crossPlatformRetryFactorMin}-${config.crossPlatformRetryFactorMax} up=${config.crossPlatformRetryFactorUp} down=${config.crossPlatformRetryFactorDown}`
+  );
+  console.log(
+    `Cross-Platform Retry Delay: base=${config.crossPlatformRetryDelayMs}ms floor=${config.crossPlatformRetryDelayFloorMs}ms ceil=${config.crossPlatformRetryDelayCeilMs}ms`
   );
   console.log(
     `Cross-Platform Slippage Dynamic: ${config.crossPlatformSlippageDynamic ? '✅' : '❌'} floor=${config.crossPlatformSlippageFloorBps} ceil=${config.crossPlatformSlippageCeilBps}`
