@@ -55,6 +55,7 @@ export interface ArbitrageConfig {
   arbDepthUsage: number;
   arbMinNotionalUsd: number;
   arbMinProfitUsd: number;
+  arbMaxVwapDeviationBps: number;
 }
 
 export class ArbitrageMonitor {
@@ -112,6 +113,7 @@ export class ArbitrageMonitor {
       arbDepthUsage: 0.6,
       arbMinNotionalUsd: 0,
       arbMinProfitUsd: 0,
+      arbMaxVwapDeviationBps: 0,
       ...config,
     };
 
@@ -124,7 +126,8 @@ export class ArbitrageMonitor {
       undefined,
       this.config.arbDepthUsage,
       this.config.arbMinNotionalUsd,
-      this.config.arbMinProfitUsd
+      this.config.arbMinProfitUsd,
+      this.config.arbMaxVwapDeviationBps
     );
     this.multiOutcomeDetector = new MultiOutcomeArbitrageDetector({
       minProfitThreshold: this.config.minProfitThreshold,
@@ -134,6 +137,7 @@ export class ArbitrageMonitor {
       depthUsage: this.config.arbDepthUsage,
       minNotionalUsd: this.config.arbMinNotionalUsd,
       minProfitUsd: this.config.arbMinProfitUsd,
+      maxVwapDeviationBps: this.config.arbMaxVwapDeviationBps,
     });
     this.crossArbDetector = new CrossPlatformArbitrageDetector(
       ['Predict', 'Polymarket', 'Opinion'],

@@ -32,6 +32,7 @@ export interface MultiOutcomeConfig {
   depthUsage: number;
   minNotionalUsd: number;
   minProfitUsd: number;
+  maxVwapDeviationBps: number;
 }
 
 export class MultiOutcomeArbitrageDetector {
@@ -47,6 +48,7 @@ export class MultiOutcomeArbitrageDetector {
       depthUsage: 0.6,
       minNotionalUsd: 0,
       minProfitUsd: 0,
+      maxVwapDeviationBps: 0,
       ...config,
     };
     this.config.depthUsage = Math.max(0.05, Math.min(1, this.config.depthUsage));
@@ -169,6 +171,16 @@ export class MultiOutcomeArbitrageDetector {
         if (!fill) {
           usable = false;
           break;
+        }
+        if (this.config.maxVwapDeviationBps > 0) {
+          const ask = book?.best_ask ?? 0;
+          if (ask > 0) {
+            const maxDev = this.config.maxVwapDeviationBps / 10000;
+            if (fill.avgPrice > ask * (1 + maxDev)) {
+              usable = false;
+              break;
+            }
+          }
         }
         totalCost += fill.totalNotional;
         totalFees += fill.totalFees;

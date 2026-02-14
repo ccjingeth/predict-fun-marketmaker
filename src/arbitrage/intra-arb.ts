@@ -17,6 +17,7 @@ export class InPlatformArbitrageDetector {
   private depthUsage: number;
   private minNotionalUsd: number;
   private minProfitUsd: number;
+  private maxVwapDeviationBps: number;
 
   constructor(
     minProfitThreshold: number = 0.02,
@@ -26,7 +27,8 @@ export class InPlatformArbitrageDetector {
     maxRecommendedShares: number = 500,
     depthUsage: number = 0.6,
     minNotionalUsd: number = 0,
-    minProfitUsd: number = 0
+    minProfitUsd: number = 0,
+    maxVwapDeviationBps: number = 0
   ) {
     this.minProfitThreshold = minProfitThreshold;
     this.estimatedFee = estimatedFee;
@@ -36,6 +38,7 @@ export class InPlatformArbitrageDetector {
     this.depthUsage = Math.max(0.05, Math.min(1, depthUsage));
     this.minNotionalUsd = Math.max(0, minNotionalUsd);
     this.minProfitUsd = Math.max(0, minProfitUsd);
+    this.maxVwapDeviationBps = Math.max(0, maxVwapDeviationBps);
   }
 
 
@@ -87,7 +90,7 @@ export class InPlatformArbitrageDetector {
 
     const buySize = Math.floor(Math.min(buyDepth * this.depthUsage, this.maxRecommendedShares));
     const sellSize = Math.floor(Math.min(sellDepth * this.depthUsage, this.maxRecommendedShares));
-    const buyCandidate = this.findBestBuySize(
+    let buyCandidate = this.findBestBuySize(
       yesBook,
       noBook,
       yesFeeBps,
@@ -95,7 +98,7 @@ export class InPlatformArbitrageDetector {
       slippageBps,
       buySize
     );
-    const sellCandidate = this.findBestSellSize(
+    let sellCandidate = this.findBestSellSize(
       yesBook,
       noBook,
       yesFeeBps,
@@ -103,6 +106,26 @@ export class InPlatformArbitrageDetector {
       slippageBps,
       sellSize
     );
+
+    if (this.maxVwapDeviationBps > 0) {
+      const maxDev = this.maxVwapDeviationBps / 10000;
+      if (buyCandidate) {
+        const buyTooDeep =
+          buyCandidate.yes.avgPrice > yesTop.ask * (1 + maxDev) ||
+          buyCandidate.no.avgPrice > noTop.ask * (1 + maxDev);
+        if (buyTooDeep) {
+          buyCandidate = null;
+        }
+      }
+      if (sellCandidate) {
+        const sellTooDeep =
+          sellCandidate.yes.avgPrice < yesTop.bid * (1 - maxDev) ||
+          sellCandidate.no.avgPrice < noTop.bid * (1 - maxDev);
+        if (sellTooDeep) {
+          sellCandidate = null;
+        }
+      }
+    }
 
     const buyNetEdge = buyCandidate?.edge ?? -Infinity;
     const sellNetEdge = sellCandidate?.edge ?? -Infinity;
