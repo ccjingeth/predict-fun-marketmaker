@@ -3173,17 +3173,28 @@ export class CrossPlatformExecutionRouter {
     let totalProceedsPerShare = 0;
     let hasBuy = false;
     let hasSell = false;
+    const vwapByLeg = this.lastPreflight?.vwapByLeg || this.lastBatchPreflight?.vwapByLeg;
 
     for (const leg of legs) {
       const feeBps = this.getFeeBps(leg.platform);
       const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
       const fee = calcFeeCost(leg.price, feeBps, curveRate, curveExponent);
+      const legKey = `${leg.platform}:${leg.tokenId}:${leg.side}`;
+      const vwap = vwapByLeg?.get(legKey);
+      const useVwap =
+        vwap &&
+        Number.isFinite(vwap.avgAllIn) &&
+        Number.isFinite(vwap.filledShares) &&
+        vwap.filledShares > 0 &&
+        Math.abs(vwap.filledShares - leg.shares) / leg.shares < 0.01;
+      const unitAllIn = useVwap ? vwap.avgAllIn : leg.price + fee + leg.price * slippage;
+      const unitAllInSell = useVwap ? vwap.avgAllIn : leg.price - fee - leg.price * slippage;
       if (leg.side === 'BUY') {
         hasBuy = true;
-        totalCostPerShare += leg.price + fee + leg.price * slippage;
+        totalCostPerShare += unitAllIn;
       } else {
         hasSell = true;
-        totalProceedsPerShare += leg.price - fee - leg.price * slippage;
+        totalProceedsPerShare += unitAllInSell;
       }
     }
 
