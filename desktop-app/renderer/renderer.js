@@ -68,6 +68,7 @@ const chartFailPost = document.getElementById('chartFailPost');
 const metricFailureReasons = document.getElementById('metricFailureReasons');
 const metricAlertsList = document.getElementById('metricAlertsList');
 const metricFailureAdviceList = document.getElementById('metricFailureAdviceList');
+const metricFixSummaryList = document.getElementById('metricFixSummaryList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
 const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
@@ -789,6 +790,46 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
     }
     metricFailureAdviceList.appendChild(row);
   });
+}
+
+function renderFixSummary() {
+  if (!metricFixSummaryList) return;
+  const template = buildFixTemplate();
+  metricFixSummaryList.innerHTML = '';
+  if (!template) {
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.textContent = '暂无摘要';
+    metricFixSummaryList.appendChild(item);
+    return;
+  }
+  const lines = template.split('\n').filter(Boolean);
+  if (!lines.length) {
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.textContent = '暂无摘要';
+    metricFixSummaryList.appendChild(item);
+    return;
+  }
+  const topLine = lines.find((line) => line.includes('主要问题')) || '';
+  if (topLine) {
+    const item = document.createElement('div');
+    item.className = 'alert-item';
+    item.textContent = topLine.replace(/^#\s*/, '');
+    metricFixSummaryList.appendChild(item);
+  }
+  const entries = parseFixTemplate(template);
+  const env = parseEnv(envEditor.value || '');
+  const changed = entries.filter((entry) => {
+    const current = env.get(entry.key);
+    const normalizedCurrent = current === undefined ? '' : String(current).trim();
+    const normalizedValue = String(entry.value || '').trim();
+    return normalizedCurrent !== normalizedValue;
+  });
+  const item = document.createElement('div');
+  item.className = 'alert-item';
+  item.textContent = `建议可应用 ${changed.length} 项参数`;
+  metricFixSummaryList.appendChild(item);
 }
 
 function renderMetricFailureReasons(reasons) {
@@ -1958,6 +1999,7 @@ async function loadMetrics() {
     }
     updateCharts();
     renderMetricFailureAdvice(metrics.failureReasons, metricsSnapshot);
+    renderFixSummary();
 
     const flushMs = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_METRICS_FLUSH_MS') || 30000);
     if (metricsAgeMs > flushMs * 2) {
