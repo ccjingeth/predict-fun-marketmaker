@@ -1020,27 +1020,50 @@ function updateFixPreview() {
   const entries = parseFixTemplate(template);
   const env = parseEnv(envEditor.value || '');
   fixPreviewList.innerHTML = '';
-  if (!entries.length) {
+  if (!template || !entries.length) {
     const item = document.createElement('div');
     item.className = 'health-item ok';
     item.textContent = '暂无修复建议。';
     fixPreviewList.appendChild(item);
     return;
   }
-  entries.forEach((entry) => {
+  const lines = template.split('\n');
+  let hasEntries = false;
+  lines.forEach((line) => {
+    if (!line || !line.trim()) return;
+    if (line.trim().startsWith('#')) {
+      if (line.includes('分类:') || line.includes('主要问题')) {
+        const header = document.createElement('div');
+        header.className = 'health-item ok';
+        header.textContent = line.replace(/^#\s*/, '');
+        fixPreviewList.appendChild(header);
+      }
+      return;
+    }
+    const idx = line.indexOf('=');
+    if (idx === -1) return;
+    hasEntries = true;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
     const row = document.createElement('div');
     row.className = 'health-item warn';
     const label = document.createElement('div');
     label.className = 'health-label';
-    label.textContent = entry.key;
+    label.textContent = key;
     const hint = document.createElement('div');
     hint.className = 'health-hint';
-    const current = env.get(entry.key);
-    hint.textContent = `当前: ${current ?? '未设置'} → 建议: ${entry.value}`;
+    const current = env.get(key);
+    hint.textContent = `当前: ${current ?? '未设置'} → 建议: ${value}`;
     row.appendChild(label);
     row.appendChild(hint);
     fixPreviewList.appendChild(row);
   });
+  if (!hasEntries) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无修复建议。';
+    fixPreviewList.appendChild(item);
+  }
 
   renderFixSelect(entries, env);
 }
@@ -1135,65 +1158,102 @@ function buildFixTemplate() {
     const category = classifyFailure(line);
     categories.set(category, (categories.get(category) || 0) + count);
   }
-  const topCategory = Array.from(categories.entries()).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const sortedCategories = Array.from(categories.entries()).sort((a, b) => b[1] - a[1]);
+  const topCategories = sortedCategories.slice(0, 2).map(([category]) => category);
   const template = [];
   template.push('# 自动修复建议（根据高频失败分类生成）');
-  if (!topCategory) {
+  if (!topCategories.length) {
     template.push('# 暂无足够失败数据，建议先运行一段时间再应用。');
     return template.join('\n');
   }
-  template.push(`# 主要问题: ${topCategory}`);
-  if (topCategory === '深度不足') {
-    template.push('CROSS_PLATFORM_ADAPTIVE_SIZE=true');
-    template.push('CROSS_PLATFORM_DEPTH_USAGE=0.25');
-    template.push('CROSS_PLATFORM_CHUNK_MAX_SHARES=8');
-  } else if (topCategory === '预检失败') {
-    template.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
-    template.push('CROSS_PLATFORM_STABILITY_INTERVAL_MS=160');
-    template.push('CROSS_PLATFORM_MIN_PROFIT_USD=0.02');
-    template.push('CROSS_PLATFORM_MIN_NOTIONAL_USD=10');
-  } else if (topCategory === 'VWAP 偏离') {
-    template.push('CROSS_PLATFORM_SLIPPAGE_BPS=250');
-    template.push('CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true');
-    template.push('CROSS_PLATFORM_RECHECK_MS=300');
-  } else if (topCategory === '价格漂移') {
-    template.push('CROSS_PLATFORM_PRICE_DRIFT_BPS=40');
-    template.push('CROSS_PLATFORM_RECHECK_MS=300');
-    template.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
-  } else if (topCategory === '成交后漂移') {
-    template.push('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS=60');
-    template.push('CROSS_PLATFORM_STABILITY_BPS=25');
-    template.push('CROSS_PLATFORM_CHUNK_FACTOR_MIN=0.6');
-  } else if (topCategory === '执行失败') {
-    template.push('CROSS_PLATFORM_MAX_RETRIES=1');
-    template.push('CROSS_PLATFORM_RETRY_DELAY_MS=500');
-    template.push('CROSS_PLATFORM_ABORT_COOLDOWN_MS=120000');
-  } else if (topCategory === '高波动') {
-    template.push('CROSS_PLATFORM_VOLATILITY_BPS=80');
-    template.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
-  } else if (topCategory === '对冲失败') {
-    template.push('CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD=0.02');
-    template.push('CROSS_PLATFORM_HEDGE_MIN_EDGE=0.01');
-    template.push('CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS=450');
-  } else if (topCategory === '未成交订单') {
-    template.push('CROSS_PLATFORM_POST_FILL_CHECK=true');
-    template.push('CROSS_PLATFORM_USE_FOK=true');
-  } else if (topCategory === '权限/密钥') {
-    template.push('# 请补齐 API_KEY / PRIVATE_KEY / JWT_TOKEN');
-  } else if (topCategory === '熔断触发') {
-    template.push('CROSS_PLATFORM_CIRCUIT_MAX_FAILURES=3');
-    template.push('CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS=120000');
-  } else if (topCategory === '冷却触发') {
-    template.push('CROSS_PLATFORM_GLOBAL_MIN_QUALITY=0.8');
-    template.push('CROSS_PLATFORM_GLOBAL_COOLDOWN_MS=120000');
-  } else if (topCategory === '映射/依赖') {
-    template.push('# 检查 cross-platform-mapping.json 与 dependency-constraints.json');
-  } else if (topCategory === '网络/请求') {
-    template.push('ARB_WS_HEALTH_LOG_MS=5000');
-    template.push('PREDICT_WS_STALE_MS=20000');
-  } else {
-    template.push('# 先应用保守档位再观察。');
-  }
+  template.push(`# 主要问题: ${topCategories.join(' + ')}`);
+  const seen = new Set();
+  const appendLines = (category, lines) => {
+    if (!lines.length) return;
+    template.push(`# 分类: ${category}`);
+    lines.forEach((line) => {
+      const idx = line.indexOf('=');
+      if (idx === -1) {
+        template.push(line);
+        return;
+      }
+      const key = line.slice(0, idx).trim();
+      if (seen.has(key)) return;
+      seen.add(key);
+      template.push(line);
+    });
+  };
+  topCategories.forEach((category) => {
+    if (category === '深度不足') {
+      appendLines(category, [
+        'CROSS_PLATFORM_ADAPTIVE_SIZE=true',
+        'CROSS_PLATFORM_DEPTH_USAGE=0.25',
+        'CROSS_PLATFORM_CHUNK_MAX_SHARES=8',
+      ]);
+    } else if (category === '预检失败') {
+      appendLines(category, [
+        'CROSS_PLATFORM_STABILITY_SAMPLES=3',
+        'CROSS_PLATFORM_STABILITY_INTERVAL_MS=160',
+        'CROSS_PLATFORM_MIN_PROFIT_USD=0.02',
+        'CROSS_PLATFORM_MIN_NOTIONAL_USD=10',
+      ]);
+    } else if (category === 'VWAP 偏离') {
+      appendLines(category, [
+        'CROSS_PLATFORM_SLIPPAGE_BPS=250',
+        'CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true',
+        'CROSS_PLATFORM_RECHECK_MS=300',
+      ]);
+    } else if (category === '价格漂移') {
+      appendLines(category, [
+        'CROSS_PLATFORM_PRICE_DRIFT_BPS=40',
+        'CROSS_PLATFORM_RECHECK_MS=300',
+        'CROSS_PLATFORM_STABILITY_SAMPLES=3',
+      ]);
+    } else if (category === '成交后漂移') {
+      appendLines(category, [
+        'CROSS_PLATFORM_POST_TRADE_DRIFT_BPS=60',
+        'CROSS_PLATFORM_STABILITY_BPS=25',
+        'CROSS_PLATFORM_CHUNK_FACTOR_MIN=0.6',
+      ]);
+    } else if (category === '执行失败') {
+      appendLines(category, [
+        'CROSS_PLATFORM_MAX_RETRIES=1',
+        'CROSS_PLATFORM_RETRY_DELAY_MS=500',
+        'CROSS_PLATFORM_ABORT_COOLDOWN_MS=120000',
+      ]);
+    } else if (category === '高波动') {
+      appendLines(category, [
+        'CROSS_PLATFORM_VOLATILITY_BPS=80',
+        'CROSS_PLATFORM_STABILITY_SAMPLES=3',
+      ]);
+    } else if (category === '对冲失败') {
+      appendLines(category, [
+        'CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD=0.02',
+        'CROSS_PLATFORM_HEDGE_MIN_EDGE=0.01',
+        'CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS=450',
+      ]);
+    } else if (category === '未成交订单') {
+      appendLines(category, ['CROSS_PLATFORM_POST_FILL_CHECK=true', 'CROSS_PLATFORM_USE_FOK=true']);
+    } else if (category === '权限/密钥') {
+      appendLines(category, ['# 请补齐 API_KEY / PRIVATE_KEY / JWT_TOKEN']);
+    } else if (category === '熔断触发') {
+      appendLines(category, [
+        'CROSS_PLATFORM_CIRCUIT_MAX_FAILURES=3',
+        'CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS=120000',
+      ]);
+    } else if (category === '冷却触发') {
+      appendLines(category, [
+        'CROSS_PLATFORM_GLOBAL_MIN_QUALITY=0.8',
+        'CROSS_PLATFORM_GLOBAL_COOLDOWN_MS=120000',
+      ]);
+    } else if (category === '映射/依赖') {
+      appendLines(category, ['# 检查 cross-platform-mapping.json 与 dependency-constraints.json']);
+    } else if (category === '网络/请求') {
+      appendLines(category, ['ARB_WS_HEALTH_LOG_MS=5000', 'PREDICT_WS_STALE_MS=20000']);
+    } else {
+      appendLines(category, ['# 先应用保守档位再观察。']);
+    }
+  });
   return template.join('\n');
 }
 
