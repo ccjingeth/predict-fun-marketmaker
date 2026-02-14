@@ -22,6 +22,14 @@ const parseList = (value?: string): string[] | undefined => {
   return items.length > 0 ? items : undefined;
 };
 
+const parseOrderTypeList = (value?: string): string[] | undefined => {
+  const items = parseList(value);
+  if (!items) return undefined;
+  const valid = new Set(['FOK', 'FAK', 'GTC', 'GTD']);
+  const normalized = items.map((item) => item.toUpperCase()).filter((item) => valid.has(item));
+  return normalized.length > 0 ? normalized : undefined;
+};
+
 /**
  * Load and validate configuration
  */
@@ -265,6 +273,7 @@ export function loadConfig(): Config {
     crossPlatformMetricsPath: process.env.CROSS_PLATFORM_METRICS_PATH || 'data/cross-platform-metrics.json',
     crossPlatformMetricsFlushMs: parseInt(process.env.CROSS_PLATFORM_METRICS_FLUSH_MS || '30000'),
     crossPlatformOrderType: (crossPlatformOrderTypeRaw || undefined) as Config['crossPlatformOrderType'],
+    crossPlatformOrderTypeFallback: parseOrderTypeList(process.env.CROSS_PLATFORM_ORDER_TYPE_FALLBACK),
     crossPlatformBatchOrders: process.env.CROSS_PLATFORM_BATCH_ORDERS === 'true',
     crossPlatformBatchMax: parseInt(process.env.CROSS_PLATFORM_BATCH_MAX || '15'),
     crossPlatformUseFok: process.env.CROSS_PLATFORM_USE_FOK !== 'false',
@@ -306,8 +315,20 @@ export function loadConfig(): Config {
     crossPlatformDegradeOnPostTrade: process.env.CROSS_PLATFORM_DEGRADE_ON_POST_TRADE === 'true',
     crossPlatformDegradeExitMs: parseInt(process.env.CROSS_PLATFORM_DEGRADE_EXIT_MS || '0'),
     crossPlatformDegradeExitSuccesses: parseInt(process.env.CROSS_PLATFORM_DEGRADE_EXIT_SUCCESSES || '0'),
+    crossPlatformDegradeOrderType: (process.env.CROSS_PLATFORM_DEGRADE_ORDER_TYPE || '').toUpperCase() as
+      | 'FOK'
+      | 'FAK'
+      | 'GTC'
+      | 'GTD',
+    crossPlatformDegradeDisableBatch: process.env.CROSS_PLATFORM_DEGRADE_DISABLE_BATCH === 'true',
+    crossPlatformDegradeLimitOrders: process.env.CROSS_PLATFORM_DEGRADE_LIMIT_ORDERS === 'true',
+    crossPlatformDegradeUseFok: process.env.CROSS_PLATFORM_DEGRADE_USE_FOK === 'true',
     crossPlatformNetRiskUsd: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_USD || '0'),
     crossPlatformNetRiskUsdPerToken: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_USD_PER_TOKEN || '0'),
+    crossPlatformNetRiskMinFactor: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_MIN_FACTOR || '0.4'),
+    crossPlatformNetRiskMaxFactor: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_MAX_FACTOR || '1'),
+    crossPlatformNetRiskDegradeFactor: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_DEGRADE_FACTOR || '0.6'),
+    crossPlatformNetRiskScaleOnQuality: process.env.CROSS_PLATFORM_NET_RISK_SCALE_ON_QUALITY !== 'false',
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),

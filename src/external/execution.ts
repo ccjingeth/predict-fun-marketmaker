@@ -711,7 +711,7 @@ export class CrossPlatformExecutionRouter {
         this.assertMinNotionalAndProfit(preparedLegs);
 
         const execStart = Date.now();
-        const chunkResult = await this.executeChunks(preparedLegs);
+        const chunkResult = await this.executeChunks(preparedLegs, attempt);
         execMs = Date.now() - execStart;
         const postTrade = chunkResult.postTrade;
         this.onSuccess();
@@ -803,7 +803,7 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
-  private async executeOnce(legs: PlatformLeg[]): Promise<ExecutionResult[]> {
+  private async executeOnce(legs: PlatformLeg[], attempt: number): Promise<ExecutionResult[]> {
     const grouped = new Map<ExternalPlatform, PlatformLeg[]>();
 
     for (const leg of legs) {
@@ -813,22 +813,19 @@ export class CrossPlatformExecutionRouter {
       grouped.get(leg.platform)!.push(leg);
     }
 
-    const runExecution = async (platform: ExternalPlatform, legsForPlatform: PlatformLeg[]) => {
+    const runExecution = async (platform: ExternalPlatform, legsForPlatform: PlatformLeg[], options: PlatformExecuteOptions) => {
       const executor = this.executors.get(platform);
       if (!executor) {
         throw new Error(`No executor configured for ${platform}`);
       }
-      return executor.execute(legsForPlatform, {
-        useFok: this.config.crossPlatformUseFok,
-        useLimit: this.config.crossPlatformLimitOrders,
-        orderType: this.config.crossPlatformOrderType,
-        batch: this.config.crossPlatformBatchOrders,
-      });
+      return executor.execute(legsForPlatform, options);
     };
+
+    const execOptions = this.resolveExecutionOptions(attempt);
 
     const tasks: Promise<ExecutionResult>[] = [];
     for (const [platform, legsForPlatform] of grouped.entries()) {
-      tasks.push(runExecution(platform, legsForPlatform));
+      tasks.push(runExecution(platform, legsForPlatform, execOptions));
     }
 
     if (this.shouldParallelSubmit()) {
@@ -859,7 +856,7 @@ export class CrossPlatformExecutionRouter {
     return results;
   }
 
-  private async executeChunks(legs: PlatformLeg[]): Promise<{ postTrade: { maxDriftBps: number; penalizedLegs: PlatformLeg[]; penalizedTokenIds: Set<string>; spreadPenalizedLegs: PlatformLeg[] } }> {
+  private async executeChunks(legs: PlatformLeg[], attempt: number): Promise<{ postTrade: { maxDriftBps: number; penalizedLegs: PlatformLeg[]; penalizedTokenIds: Set<string>; spreadPenalizedLegs: PlatformLeg[] } }> {
     this.assertNetRiskBudget(legs);
     const chunks = this.splitLegsIntoChunks(legs);
     let maxDriftBps = 0;
@@ -876,7 +873,7 @@ export class CrossPlatformExecutionRouter {
         this.lastPreflight = preflight;
         this.assertMinNotionalAndProfit(chunk);
       }
-      const results = await this.executeOnce(chunk);
+      const results = await this.executeOnce(chunk, attempt);
       await this.postFillCheck(results);
       await this.hedgeResidualExposure(results);
       const post = await this.postTradeCheck(chunk);
@@ -911,14 +908,17 @@ export class CrossPlatformExecutionRouter {
   }
 
   private assertNetRiskBudget(legs: PlatformLeg[]): void {
-    const totalBudget = Math.max(0, this.config.crossPlatformNetRiskUsd || 0);
-    const perTokenBudget = Math.max(0, this.config.crossPlatformNetRiskUsdPerToken || 0);
-    if (!totalBudget && !perTokenBudget) {
+    const totalBudgetRaw = Math.max(0, this.config.crossPlatformNetRiskUsd || 0);
+    const perTokenRaw = Math.max(0, this.config.crossPlatformNetRiskUsdPerToken || 0);
+    if (!totalBudgetRaw && !perTokenRaw) {
       return;
     }
     if (!legs.length) {
       return;
     }
+    const factor = this.getNetRiskScaleFactor();
+    const totalBudget = totalBudgetRaw > 0 ? totalBudgetRaw * factor : 0;
+    const perTokenBudget = perTokenRaw > 0 ? perTokenRaw * factor : 0;
     const totals = new Map<string, number>();
     let global = 0;
     for (const leg of legs) {
@@ -939,6 +939,21 @@ export class CrossPlatformExecutionRouter {
         }
       }
     }
+  }
+
+  private getNetRiskScaleFactor(): number {
+    let factor = 1;
+    if (this.config.crossPlatformNetRiskScaleOnQuality !== false) {
+      const min = Math.max(0.05, this.config.crossPlatformNetRiskMinFactor || 0.4);
+      const max = Math.max(min, this.config.crossPlatformNetRiskMaxFactor || 1);
+      const quality = Math.max(0, Math.min(1, this.qualityScore / 100));
+      factor *= Math.max(min, Math.min(max, quality));
+    }
+    if (this.isDegraded()) {
+      const degrade = Math.max(0.05, this.config.crossPlatformNetRiskDegradeFactor || 0.6);
+      factor *= degrade;
+    }
+    return factor;
   }
 
   private async hedgeResidualExposure(results: ExecutionResult[]): Promise<void> {
@@ -1409,6 +1424,46 @@ export class CrossPlatformExecutionRouter {
       return false;
     }
     return true;
+  }
+
+  private resolveExecutionOptions(attempt: number): PlatformExecuteOptions {
+    const fallback = this.getOrderTypeFallback(attempt);
+    const degradeOrderType = this.isDegraded() ? this.config.crossPlatformDegradeOrderType : undefined;
+    const orderType = degradeOrderType || fallback || this.config.crossPlatformOrderType;
+
+    let useFok = this.config.crossPlatformUseFok;
+    if (this.isDegraded() && this.config.crossPlatformDegradeUseFok !== undefined) {
+      useFok = this.config.crossPlatformDegradeUseFok;
+    }
+
+    let useLimit = this.config.crossPlatformLimitOrders;
+    if (this.isDegraded() && this.config.crossPlatformDegradeLimitOrders !== undefined) {
+      useLimit = this.config.crossPlatformDegradeLimitOrders;
+    }
+
+    let batch = this.config.crossPlatformBatchOrders;
+    if (this.isDegraded() && this.config.crossPlatformDegradeDisableBatch) {
+      batch = false;
+    }
+
+    return {
+      useFok,
+      useLimit,
+      orderType,
+      batch,
+    };
+  }
+
+  private getOrderTypeFallback(attempt: number): string | undefined {
+    const fallback = this.config.crossPlatformOrderTypeFallback;
+    if (!fallback || fallback.length === 0) {
+      return undefined;
+    }
+    if (attempt <= 0) {
+      return undefined;
+    }
+    const index = Math.min(attempt - 1, fallback.length - 1);
+    return fallback[index];
   }
 
   private applyFailurePause(): void {

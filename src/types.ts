@@ -240,6 +240,7 @@ export interface Config {
   crossPlatformMetricsPath?: string;
   crossPlatformMetricsFlushMs?: number;
   crossPlatformOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
+  crossPlatformOrderTypeFallback?: string[];
   crossPlatformBatchOrders?: boolean;
   crossPlatformBatchMax?: number;
   crossPlatformUseFok?: boolean;
@@ -272,8 +273,16 @@ export interface Config {
   crossPlatformDegradeOnPostTrade?: boolean;
   crossPlatformDegradeExitMs?: number;
   crossPlatformDegradeExitSuccesses?: number;
+  crossPlatformDegradeOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD';
+  crossPlatformDegradeDisableBatch?: boolean;
+  crossPlatformDegradeLimitOrders?: boolean;
+  crossPlatformDegradeUseFok?: boolean;
   crossPlatformNetRiskUsd?: number;
   crossPlatformNetRiskUsdPerToken?: number;
+  crossPlatformNetRiskMinFactor?: number;
+  crossPlatformNetRiskMaxFactor?: number;
+  crossPlatformNetRiskDegradeFactor?: number;
+  crossPlatformNetRiskScaleOnQuality?: boolean;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;
