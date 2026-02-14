@@ -283,6 +283,7 @@
 - `CROSS_PLATFORM_MIN_PROFIT_USD`：跨平台机会的最小收益金额过滤。
 - `CROSS_PLATFORM_MIN_PROFIT_BPS`：跨平台最小收益占名义金额比例（bps）。
 - `CROSS_PLATFORM_MIN_PROFIT_IMPACT_MULT`：跨平台冲击系数乘子（越大越保守）。
+- `CROSS_PLATFORM_MISSING_VWAP_PENALTY_BPS`：预检 VWAP 缺失时额外提高的收益门槛（bps）。
 - `CROSS_PLATFORM_VOLATILITY_BPS`：短时间内价格波动阈值（bps），超出则跳过。
 - `CROSS_PLATFORM_VOLATILITY_LOOKBACK_MS`：波动检测的回看窗口（毫秒）。
 - `CROSS_PLATFORM_TOKEN_MAX_FAILURES`：单 token 失败次数阈值。
@@ -327,6 +328,7 @@
 - `CROSS_PLATFORM_LEG_VWAP_DEVIATION_BPS`：腿间 VWAP 偏离阈值（bps）。
 - `CROSS_PLATFORM_LEG_MIN_DEPTH_USD`：腿间盘口最小深度（USD），低于则预检失败并记录降级。
 - `CROSS_PLATFORM_LEG_DEVIATION_SOFT_BPS`：腿间偏离软阈值（bps），超出则拒绝自动执行但保留机会。
+- `CROSS_PLATFORM_LEG_DEVIATION_SPREAD_BPS`：腿间偏离差阈值（bps），超出则拒绝自动执行。
 - `CROSS_PLATFORM_ALLOWLIST_TOKENS`：token 白名单（逗号分隔）。
 - `CROSS_PLATFORM_BLOCKLIST_TOKENS`：token 黑名单（逗号分隔）。
 - `CROSS_PLATFORM_ALLOWLIST_PLATFORMS`：平台白名单（Predict/Polymarket/Opinion）。

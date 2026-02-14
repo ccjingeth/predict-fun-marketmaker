@@ -183,6 +183,7 @@ export interface Config {
   crossPlatformMinProfitUsd?: number;
   crossPlatformMinProfitBps?: number;
   crossPlatformMinProfitImpactMult?: number;
+  crossPlatformMissingVwapPenaltyBps?: number;
   crossPlatformVolatilityBps?: number;
   crossPlatformVolatilityLookbackMs?: number;
   crossPlatformTokenMaxFailures?: number;
@@ -227,6 +228,7 @@ export interface Config {
   crossPlatformLegVwapDeviationBps?: number;
   crossPlatformLegMinDepthUsd?: number;
   crossPlatformLegDeviationSoftBps?: number;
+  crossPlatformLegDeviationSpreadBps?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];

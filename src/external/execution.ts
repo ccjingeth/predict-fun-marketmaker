@@ -654,6 +654,7 @@ export class CrossPlatformExecutionRouter {
   };
   private lastMetricsLogAt = 0;
   private lastPreflight?: PreflightResult;
+  private lastBatchPreflight?: PreflightResult;
   private degradedUntil = 0;
   private degradedReason = '';
   private degradedAt = 0;
@@ -985,6 +986,7 @@ export class CrossPlatformExecutionRouter {
         const cache = new Map<string, Promise<OrderbookSnapshot | null>>();
         const preflight = await this.preflightVwapWithCache(chunk, cache);
         this.lastPreflight = preflight;
+        this.lastBatchPreflight = preflight;
         this.assertMinNotionalAndProfit(chunk);
       }
       const results = await this.executeOnce(chunk, attempt);
@@ -2449,6 +2451,7 @@ export class CrossPlatformExecutionRouter {
     let maxDeviationBps = 0;
     let maxDriftBps = 0;
     const vwapByLeg = new Map<string, { avgAllIn: number; totalAllIn: number; filledShares: number }>();
+    const deviationByLeg = new Map<string, number>();
     const extraDeviation =
       this.circuitFailures > 0 || this.isDegraded()
         ? Math.max(0, this.config.crossPlatformFailureVwapDeviationBps || 0)
@@ -2548,6 +2551,7 @@ export class CrossPlatformExecutionRouter {
         leg.side === 'BUY'
           ? ((vwapAllIn - limit) / limit) * 10000
           : ((limit - vwapAllIn) / limit) * 10000;
+      deviationByLeg.set(legKey, deviationBps);
 
       const softThreshold = Math.max(0, (this.config.crossPlatformLegDeviationSoftBps || 0) * this.getAutoTuneFactor());
       if (softThreshold > 0 && deviationBps > softThreshold) {
@@ -2568,6 +2572,19 @@ export class CrossPlatformExecutionRouter {
     });
 
     await Promise.all(checks);
+    const spreadThreshold = Math.max(
+      0,
+      (this.config.crossPlatformLegDeviationSpreadBps || 0) * this.getAutoTuneFactor()
+    );
+    if (spreadThreshold > 0 && deviationByLeg.size >= 2) {
+      const values = Array.from(deviationByLeg.values());
+      const minDev = Math.min(...values);
+      const maxDev = Math.max(...values);
+      const spread = maxDev - minDev;
+      if (spread > spreadThreshold) {
+        throw new Error(`Preflight failed: leg deviation spread ${spread.toFixed(1)} bps (max ${spreadThreshold})`);
+      }
+    }
     return { maxDeviationBps, maxDriftBps, vwapByLeg };
   }
 
@@ -2577,6 +2594,7 @@ export class CrossPlatformExecutionRouter {
 
     await this.stabilityCheck(legs);
     this.lastPreflight = undefined;
+    this.lastBatchPreflight = undefined;
 
     if (this.config.crossPlatformAdaptiveSize !== false) {
       let maxShares = await this.getMaxExecutableShares(legs, cache);
@@ -2607,6 +2625,7 @@ export class CrossPlatformExecutionRouter {
       const preflight = await this.preflightVwapWithCache(adjustedLegs, cache);
       const finalPreflight = await this.maybeRecheckPreflight(adjustedLegs, preflight);
       this.lastPreflight = finalPreflight;
+      this.lastBatchPreflight = finalPreflight;
     }
 
     return adjustedLegs;
@@ -2758,8 +2777,9 @@ export class CrossPlatformExecutionRouter {
     let totalProceedsPerShare = 0;
     let hasBuy = false;
     let hasSell = false;
-    const vwapByLeg = this.lastPreflight?.vwapByLeg;
+    const vwapByLeg = this.lastPreflight?.vwapByLeg || this.lastBatchPreflight?.vwapByLeg;
 
+    let hasMissingVwap = false;
     for (const leg of legs) {
       const feeBps = this.getFeeBps(leg.platform);
       const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
@@ -2772,6 +2792,9 @@ export class CrossPlatformExecutionRouter {
         Number.isFinite(vwap.filledShares) &&
         vwap.filledShares > 0 &&
         Math.abs(vwap.filledShares - leg.shares) / leg.shares < 0.01;
+      if (!useVwap) {
+        hasMissingVwap = true;
+      }
       const unitAllIn = useVwap ? vwap.avgAllIn : leg.price + fee + leg.price * slippage;
       const unitAllInSell = useVwap ? vwap.avgAllIn : leg.price - fee - leg.price * slippage;
       if (leg.side === 'BUY') {
@@ -2821,6 +2844,17 @@ export class CrossPlatformExecutionRouter {
       this.failureProfitUsdBump +
       notional * (requiredBps / 10000) +
       notional * (impactBps / 10000) * impactMult;
+    if (hasMissingVwap) {
+      const penaltyBps = Math.max(0, this.config.crossPlatformMissingVwapPenaltyBps || 0);
+      if (penaltyBps > 0) {
+        const vwapPenalty = notional * (penaltyBps / 10000);
+        if (profit < required + vwapPenalty) {
+          throw new Error(
+            `Preflight failed: missing VWAP coverage, profit $${profit.toFixed(2)} < min ${(required + vwapPenalty).toFixed(2)}`
+          );
+        }
+      }
+    }
     if (required > 0 && profit < required) {
       throw new Error(
         `Preflight failed: profit $${profit.toFixed(2)} < min ${required.toFixed(2)} (impact ${impactBps.toFixed(1)} bps)`
