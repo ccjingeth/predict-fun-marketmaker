@@ -1462,6 +1462,9 @@ function renderFixSelect(entries, env) {
   });
   selectRecommendedBtn.addEventListener('click', () => {
     autoSelectFixes(topCategories);
+    if (healthExportHint) {
+      healthExportHint.textContent = `已按高频失败分类勾选（${topCategories.join(' / ')}），可直接应用。`;
+    }
   });
 }
 
