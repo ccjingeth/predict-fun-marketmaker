@@ -34,6 +34,7 @@ const metricDepthPenalty = document.getElementById('metricDepthPenalty');
 const metricConsistencyFail = document.getElementById('metricConsistencyFail');
 const metricConsistencyReason = document.getElementById('metricConsistencyReason');
 const metricConsistencyOverride = document.getElementById('metricConsistencyOverride');
+const metricConsistencyRateLimit = document.getElementById('metricConsistencyRateLimit');
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -229,6 +230,13 @@ const FIX_HINTS = {
   CROSS_PLATFORM_CONSISTENCY_TEMPLATE_USE_FOK: '一致性模板强制 FOK',
   CROSS_PLATFORM_CONSISTENCY_TEMPLATE_LIMIT_ORDERS: '一致性模板强制限价单',
   CROSS_PLATFORM_CONSISTENCY_TEMPLATE_DISABLE_BATCH: '一致性模板禁用批量下单',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_TIGHTEN_UP: '一致性模板收紧幅度',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_TIGHTEN_DOWN: '一致性模板放宽幅度',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_TIGHTEN_MAX: '一致性模板收紧上限',
+  CROSS_PLATFORM_CONSISTENCY_TEMPLATE_TIGHTEN_MIN: '一致性模板放宽下限',
+  CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_MS: '一致性限速冷却（毫秒）',
+  CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_THRESHOLD: '一致性限速阈值次数',
+  CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_WINDOW_MS: '一致性限速统计窗口（毫秒）',
   CROSS_PLATFORM_QUALITY_PROFIT_MULT: '质量分收益门槛放大系数',
   CROSS_PLATFORM_QUALITY_PROFIT_MAX: '质量分收益门槛放大上限',
   CROSS_PLATFORM_MAX_VWAP_LEVELS: '跨平台 VWAP 档位数上限',
@@ -2533,6 +2541,10 @@ async function loadMetrics() {
       const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
       const until = Math.max(overrideUntil, templateUntil);
       metricConsistencyOverride.textContent = until && until > Date.now() ? `保守中：${formatTimestamp(until)}` : '未触发';
+    }
+    if (metricConsistencyRateLimit) {
+      const until = Number(data.consistencyRateLimitUntil || 0);
+      metricConsistencyRateLimit.textContent = until && until > Date.now() ? `限速中：${formatTimestamp(until)}` : '未触发';
     }
     if (consistencyBadge) {
       const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);

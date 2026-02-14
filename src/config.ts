@@ -319,6 +319,27 @@ export function loadConfig(): Config {
     crossPlatformConsistencyTemplateLimitOrders: process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_LIMIT_ORDERS === 'true',
     crossPlatformConsistencyTemplateDisableBatch:
       process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_DISABLE_BATCH === 'true',
+    crossPlatformConsistencyTemplateTightenUp: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_TIGHTEN_UP || '0.15'
+    ),
+    crossPlatformConsistencyTemplateTightenDown: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_TIGHTEN_DOWN || '0.08'
+    ),
+    crossPlatformConsistencyTemplateTightenMax: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_TIGHTEN_MAX || '2.5'
+    ),
+    crossPlatformConsistencyTemplateTightenMin: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_TEMPLATE_TIGHTEN_MIN || '0.5'
+    ),
+    crossPlatformConsistencyRateLimitMs: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_MS || '0'
+    ),
+    crossPlatformConsistencyRateLimitThreshold: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_THRESHOLD || '0'
+    ),
+    crossPlatformConsistencyRateLimitWindowMs: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_RATE_LIMIT_WINDOW_MS || '0'
+    ),
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),

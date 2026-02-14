@@ -667,6 +667,8 @@ export class CrossPlatformExecutionRouter {
   private lastConsistencyFailureReason = '';
   private consistencyOverrideUntil = 0;
   private consistencyTemplateActiveUntil = 0;
+  private consistencyTemplateTightenFactor = 1;
+  private consistencyRateLimitUntil = 0;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -740,6 +742,7 @@ export class CrossPlatformExecutionRouter {
         execMs = Date.now() - execStart;
         const postTrade = chunkResult.postTrade;
         this.onSuccess();
+        this.adjustConsistencyTemplateTighten(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.recordTokenFailure(postTrade.penalizedLegs);
         }
@@ -796,6 +799,9 @@ export class CrossPlatformExecutionRouter {
         const reason = this.classifyFailure(error);
         this.onFailure();
         this.recordConsistencyFailure(error);
+        if (this.isConsistencyFailure(error)) {
+          this.adjustConsistencyTemplateTighten(false);
+        }
         this.recordTokenFailure(preparedLegs.length ? preparedLegs : plannedLegs);
         this.recordPlatformFailure(preparedLegs.length ? preparedLegs : plannedLegs);
         this.adjustTokenScores(
@@ -1528,7 +1534,7 @@ export class CrossPlatformExecutionRouter {
       if (this.isConsistencyTemplateActive()) {
         const template = Math.max(0, this.config.crossPlatformConsistencyTemplateSlippageBps || 0);
         if (template > 0) {
-          return Math.min(base, template);
+          return Math.min(base, template / this.getConsistencyTemplateFactor());
         }
       }
       if (this.isDegraded()) {
@@ -1547,7 +1553,7 @@ export class CrossPlatformExecutionRouter {
       if (this.isConsistencyTemplateActive()) {
         const template = Math.max(0, this.config.crossPlatformConsistencyTemplateSlippageBps || 0);
         if (template > 0) {
-          return Math.min(base, template);
+          return Math.min(base, template / this.getConsistencyTemplateFactor());
         }
       }
       if (this.isDegraded()) {
@@ -1562,7 +1568,7 @@ export class CrossPlatformExecutionRouter {
     if (this.isConsistencyTemplateActive()) {
       const template = Math.max(0, this.config.crossPlatformConsistencyTemplateSlippageBps || 0);
       if (template > 0) {
-        return Math.min(base, template);
+        return Math.min(base, template / this.getConsistencyTemplateFactor());
       }
     }
     if (this.isDegraded()) {
@@ -1585,7 +1591,7 @@ export class CrossPlatformExecutionRouter {
     if (this.isConsistencyTemplateActive()) {
       const template = Math.max(0, this.config.crossPlatformConsistencyTemplateChunkFactor || 0);
       if (template > 0) {
-        factor *= template;
+        factor *= template / this.getConsistencyTemplateFactor();
       }
     }
     return Math.max(0.05, factor);
@@ -1599,7 +1605,7 @@ export class CrossPlatformExecutionRouter {
     }
     if (this.isConsistencyTemplateActive()) {
       const extra = Math.max(0, this.config.crossPlatformConsistencyTemplateChunkDelayMs || 0);
-      return base + extra;
+      return base + extra * this.getConsistencyTemplateFactor();
     }
     return base;
   }
@@ -2136,6 +2142,33 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private adjustConsistencyTemplateTighten(success: boolean): void {
+    if (this.config.crossPlatformConsistencyTemplateEnabled !== true) {
+      return;
+    }
+    const up = Math.max(0, this.config.crossPlatformConsistencyTemplateTightenUp || 0.15);
+    const down = Math.max(0, this.config.crossPlatformConsistencyTemplateTightenDown || 0.08);
+    const maxFactor = Math.max(1, this.config.crossPlatformConsistencyTemplateTightenMax || 2.5);
+    const minFactor = Math.max(0.2, this.config.crossPlatformConsistencyTemplateTightenMin || 0.5);
+    if (success) {
+      this.consistencyTemplateTightenFactor = Math.max(
+        minFactor,
+        this.consistencyTemplateTightenFactor - down
+      );
+    } else {
+      this.consistencyTemplateTightenFactor = Math.min(
+        maxFactor,
+        this.consistencyTemplateTightenFactor + up
+      );
+    }
+  }
+
+  private getConsistencyTemplateFactor(): number {
+    const minFactor = Math.max(0.2, this.config.crossPlatformConsistencyTemplateTightenMin || 0.5);
+    const maxFactor = Math.max(1, this.config.crossPlatformConsistencyTemplateTightenMax || 2.5);
+    return Math.max(minFactor, Math.min(maxFactor, this.consistencyTemplateTightenFactor));
+  }
+
   private getDepthRatioPenaltyFactor(): number {
     return 1 + Math.max(0, this.depthRatioPenalty);
   }
@@ -2197,8 +2230,10 @@ export class CrossPlatformExecutionRouter {
     }
     const now = Date.now();
     const windowMs = Math.max(0, this.config.crossPlatformConsistencyFailWindowMs || 0);
-    if (windowMs > 0) {
-      if (!this.consistencyFailures.windowStart || now - this.consistencyFailures.windowStart > windowMs) {
+    const rateWindowMs = Math.max(0, this.config.crossPlatformConsistencyRateLimitWindowMs || 0);
+    const effectiveWindow = windowMs > 0 ? windowMs : rateWindowMs;
+    if (effectiveWindow > 0) {
+      if (!this.consistencyFailures.windowStart || now - this.consistencyFailures.windowStart > effectiveWindow) {
         this.consistencyFailures.windowStart = now;
         this.consistencyFailures.count = 0;
       }
@@ -2227,6 +2262,14 @@ export class CrossPlatformExecutionRouter {
       const penalty = Math.max(0, this.config.crossPlatformConsistencyPenalty || 0);
       if (penalty > 0) {
         this.applyQualityPenalty(penalty);
+      }
+      const rateLimitThreshold = Math.max(0, this.config.crossPlatformConsistencyRateLimitThreshold || 0);
+      if (rateLimitThreshold > 0 && this.consistencyFailures.count >= rateLimitThreshold) {
+        const rateLimitMs = Math.max(0, this.config.crossPlatformConsistencyRateLimitMs || 0);
+        if (rateLimitMs > 0) {
+          this.consistencyRateLimitUntil = Math.max(this.consistencyRateLimitUntil, now + rateLimitMs);
+          this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + rateLimitMs);
+        }
       }
     }
   }
@@ -2393,6 +2436,8 @@ export class CrossPlatformExecutionRouter {
       lastConsistencyFailureReason: this.lastConsistencyFailureReason,
       consistencyOverrideUntil: this.consistencyOverrideUntil,
       consistencyTemplateActiveUntil: this.consistencyTemplateActiveUntil,
+      consistencyTemplateFactor: this.consistencyTemplateTightenFactor,
+      consistencyRateLimitUntil: this.consistencyRateLimitUntil,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2413,6 +2458,8 @@ export class CrossPlatformExecutionRouter {
       lastConsistencyFailureReason: this.lastConsistencyFailureReason,
       consistencyOverrideUntil: this.consistencyOverrideUntil,
       consistencyTemplateActiveUntil: this.consistencyTemplateActiveUntil,
+      consistencyTemplateFactor: this.consistencyTemplateTightenFactor,
+      consistencyRateLimitUntil: this.consistencyRateLimitUntil,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2510,6 +2557,12 @@ export class CrossPlatformExecutionRouter {
     }
     if (Number.isFinite(data?.consistencyTemplateActiveUntil)) {
       this.consistencyTemplateActiveUntil = Number(data.consistencyTemplateActiveUntil);
+    }
+    if (Number.isFinite(data?.consistencyTemplateFactor)) {
+      this.consistencyTemplateTightenFactor = Number(data.consistencyTemplateFactor);
+    }
+    if (Number.isFinite(data?.consistencyRateLimitUntil)) {
+      this.consistencyRateLimitUntil = Number(data.consistencyRateLimitUntil);
     }
 
     const platformSet = new Set<ExternalPlatform>(['Predict', 'Polymarket', 'Opinion']);
@@ -2705,7 +2758,8 @@ export class CrossPlatformExecutionRouter {
       if (this.isConsistencyTemplateActive()) {
         const templateLevels = Math.max(0, this.config.crossPlatformConsistencyTemplateMaxVwapLevels || 0);
         if (templateLevels > 0) {
-          maxLevels = maxLevels > 0 ? Math.min(maxLevels, templateLevels) : templateLevels;
+          const adjusted = Math.max(1, Math.floor(templateLevels / this.getConsistencyTemplateFactor()));
+          maxLevels = maxLevels > 0 ? Math.min(maxLevels, adjusted) : adjusted;
         }
       }
       if ((this.circuitFailures > 0 || this.isDegraded()) && maxLevels > 0) {
@@ -3084,7 +3138,7 @@ export class CrossPlatformExecutionRouter {
     if (this.isConsistencyTemplateActive()) {
       const templateUsage = Math.max(0, this.config.crossPlatformConsistencyTemplateDepthUsage || 0);
       if (templateUsage > 0) {
-        usage = Math.min(usage, templateUsage);
+        usage = Math.min(usage, templateUsage / this.getConsistencyTemplateFactor());
       }
     }
     const depths = await Promise.all(
@@ -3241,12 +3295,13 @@ export class CrossPlatformExecutionRouter {
     let baseProfit = Math.max(0, this.config.crossPlatformMinProfitUsd || 0);
     let baseBps = Math.max(0, this.config.crossPlatformMinProfitBps || 0);
     if (this.isConsistencyTemplateActive()) {
+      const factor = this.getConsistencyTemplateFactor();
       const templateNotional = Math.max(0, this.config.crossPlatformConsistencyTemplateMinNotionalUsd || 0);
       const templateProfit = Math.max(0, this.config.crossPlatformConsistencyTemplateMinProfitUsd || 0);
       const templateBps = Math.max(0, this.config.crossPlatformConsistencyTemplateMinProfitBps || 0);
-      minNotional = Math.max(minNotional, templateNotional);
-      baseProfit = Math.max(baseProfit, templateProfit);
-      baseBps = Math.max(baseBps, templateBps);
+      minNotional = Math.max(minNotional, templateNotional * factor);
+      baseProfit = Math.max(baseProfit, templateProfit * factor);
+      baseBps = Math.max(baseBps, Math.round(templateBps * factor));
     }
     if (!minNotional && !baseProfit) {
       return;

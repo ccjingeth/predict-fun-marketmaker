@@ -265,6 +265,13 @@ export interface Config {
   crossPlatformConsistencyTemplateUseFok?: boolean;
   crossPlatformConsistencyTemplateLimitOrders?: boolean;
   crossPlatformConsistencyTemplateDisableBatch?: boolean;
+  crossPlatformConsistencyTemplateTightenUp?: number;
+  crossPlatformConsistencyTemplateTightenDown?: number;
+  crossPlatformConsistencyTemplateTightenMax?: number;
+  crossPlatformConsistencyTemplateTightenMin?: number;
+  crossPlatformConsistencyRateLimitMs?: number;
+  crossPlatformConsistencyRateLimitThreshold?: number;
+  crossPlatformConsistencyRateLimitWindowMs?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
