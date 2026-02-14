@@ -88,6 +88,7 @@ export interface Config {
   mmAsymSpreadMaxFactor?: number;
   mmQuoteOffsetBps?: number;
   mmTouchBufferBps?: number;
+  mmFillRiskSpreadBps?: number;
   mmAggressiveMoveBps?: number;
   mmAggressiveMoveWindowMs?: number;
   mmVolatilityHighBps?: number;

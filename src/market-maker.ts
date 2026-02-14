@@ -957,6 +957,14 @@ export class MarketMaker {
         : baseSpread * (1 + volEma * volWeight + liquidityPenalty * liqWeight) +
           bookSpread * bookWeight;
 
+    const fillRiskBps = Math.max(0, this.config.mmFillRiskSpreadBps ?? 0);
+    if (fillRiskBps > 0) {
+      const fillRisk = this.getFillSlowdownMultiplier(market.token_id) - 1;
+      if (fillRisk > 0) {
+        adaptiveSpread += fillRisk * (fillRiskBps / 10000);
+      }
+    }
+
     const depthTarget = this.config.mmDepthTargetShares ?? 0;
     if (depthTarget > 0) {
       const depthRatio = this.clamp(depthMetrics.totalDepth / depthTarget, 0, 1);
