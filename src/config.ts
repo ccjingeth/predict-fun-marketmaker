@@ -422,6 +422,10 @@ export function loadConfig(): Config {
     crossPlatformWsHealthHardFactor: parseFloat(
       process.env.CROSS_PLATFORM_WS_HEALTH_HARD_FACTOR || '0.5'
     ),
+    crossPlatformHardGateDegradeMs: parseInt(process.env.CROSS_PLATFORM_HARD_GATE_DEGRADE_MS || '20000'),
+    crossPlatformHardGateUseDegradeProfile:
+      process.env.CROSS_PLATFORM_HARD_GATE_USE_DEGRADE_PROFILE !== 'false',
+    crossPlatformHardGateRateLimitMs: parseInt(process.env.CROSS_PLATFORM_HARD_GATE_RATE_LIMIT_MS || '4000'),
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),

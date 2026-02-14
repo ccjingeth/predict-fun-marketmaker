@@ -300,6 +300,9 @@ export interface Config {
   crossPlatformConsistencyPressureHardFactor?: number;
   crossPlatformWsHealthHardThreshold?: number;
   crossPlatformWsHealthHardFactor?: number;
+  crossPlatformHardGateDegradeMs?: number;
+  crossPlatformHardGateUseDegradeProfile?: boolean;
+  crossPlatformHardGateRateLimitMs?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];

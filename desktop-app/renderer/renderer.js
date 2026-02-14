@@ -39,6 +39,7 @@ const metricConsistencyTighten = document.getElementById('metricConsistencyTight
 const metricConsistencyPressure = document.getElementById('metricConsistencyPressure');
 const metricConsistencyPenalty = document.getElementById('metricConsistencyPenalty');
 const metricConsistencySize = document.getElementById('metricConsistencySize');
+const metricHardGate = document.getElementById('metricHardGate');
 const metricAvoidHours = document.getElementById('metricAvoidHours');
 const metricAvoidMode = document.getElementById('metricAvoidMode');
 const metricAvoidSeverity = document.getElementById('metricAvoidSeverity');
@@ -2855,6 +2856,15 @@ async function loadMetrics() {
         factor = Math.min(factor, Math.max(0.05, Math.min(1, hardFactor)));
       }
       metricConsistencySize.textContent = `x${formatNumber(factor, 2)}`;
+    }
+    if (metricHardGate) {
+      const until = Number(data.hardGateActiveUntil || 0);
+      const reason = typeof data.lastHardGateReason === 'string' ? data.lastHardGateReason : '';
+      if (until && until > Date.now()) {
+        metricHardGate.textContent = `触发中：${formatTimestamp(until)} ${reason ? `(${reason})` : ''}`;
+      } else {
+        metricHardGate.textContent = '未触发';
+      }
     }
     if (metricConsistencyPenalty) {
       const pressure = Number(data.consistencyPressure || 0);

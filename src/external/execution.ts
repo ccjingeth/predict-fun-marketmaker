@@ -674,6 +674,8 @@ export class CrossPlatformExecutionRouter {
   private lastAvoidAlertHour = -1;
   private consistencyPressure = 0;
   private lastConsistencyPressureAt = 0;
+  private hardGateActiveUntil = 0;
+  private lastHardGateReason = '';
   private wsHealthScore = 100;
   private wsHealthTightenFactor = 1;
   private wsHealthChunkDelayExtraMs = 0;
@@ -2334,6 +2336,7 @@ export class CrossPlatformExecutionRouter {
     const hardThreshold = Math.max(0, Math.min(1, this.config.crossPlatformConsistencyPressureHardThreshold || 0));
     if (hardThreshold > 0 && pressure >= hardThreshold) {
       const hardFactor = Math.max(0.05, Math.min(1, this.config.crossPlatformConsistencyPressureHardFactor || 1));
+      this.activateHardGate('consistency-pressure', now);
       return Math.min(baseFactor, hardFactor);
     }
     return baseFactor;
@@ -2390,6 +2393,32 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private activateHardGate(reason: string, now: number): void {
+    const duration = Math.max(0, this.config.crossPlatformHardGateDegradeMs || 0);
+    const rateLimitMs = Math.max(0, this.config.crossPlatformHardGateRateLimitMs || 0);
+    if (duration > 0) {
+      const useDegrade = this.config.crossPlatformHardGateUseDegradeProfile !== false;
+      if (useDegrade) {
+        this.degradedUntil = Math.max(this.degradedUntil, now + duration);
+        this.degradedReason = this.degradedReason || `hard-gate:${reason}`;
+        if (!this.degradedAt) {
+          this.degradedAt = now;
+        }
+      } else {
+        this.consistencyOverrideUntil = Math.max(this.consistencyOverrideUntil, now + duration);
+      }
+      if (this.config.crossPlatformConsistencyTemplateEnabled) {
+        this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, now + duration);
+      }
+      this.hardGateActiveUntil = Math.max(this.hardGateActiveUntil, now + duration);
+      this.lastHardGateReason = reason;
+    }
+    if (rateLimitMs > 0) {
+      this.consistencyRateLimitUntil = Math.max(this.consistencyRateLimitUntil, now + rateLimitMs);
+      this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + rateLimitMs);
+    }
+  }
+
   setWsHealthScore(score: number): void {
     if (!Number.isFinite(score)) {
       return;
@@ -2429,6 +2458,7 @@ export class CrossPlatformExecutionRouter {
     const hardThreshold = Math.max(0, Math.min(100, this.config.crossPlatformWsHealthHardThreshold || 0));
     if (hardThreshold > 0 && this.wsHealthScore <= hardThreshold) {
       const hardFactor = Math.max(0.05, Math.min(1, this.config.crossPlatformWsHealthHardFactor || 1));
+      this.activateHardGate('ws-health', Date.now());
       return Math.min(baseFactor, hardFactor);
     }
     return baseFactor;
@@ -2722,6 +2752,8 @@ export class CrossPlatformExecutionRouter {
       consistencyRateLimitUntil: this.consistencyRateLimitUntil,
       consistencyCooldownUntil: this.consistencyCooldownUntil,
       consistencyPressure: this.consistencyPressure,
+      hardGateActiveUntil: this.hardGateActiveUntil,
+      lastHardGateReason: this.lastHardGateReason,
       wsHealthScore: this.wsHealthScore,
       wsHealthTightenFactor: this.wsHealthTightenFactor,
       wsHealthChunkDelayExtraMs: this.wsHealthChunkDelayExtraMs,
@@ -2750,6 +2782,8 @@ export class CrossPlatformExecutionRouter {
       consistencyRateLimitUntil: this.consistencyRateLimitUntil,
       consistencyCooldownUntil: this.consistencyCooldownUntil,
       consistencyPressure: this.consistencyPressure,
+      hardGateActiveUntil: this.hardGateActiveUntil,
+      lastHardGateReason: this.lastHardGateReason,
       wsHealthScore: this.wsHealthScore,
       wsHealthTightenFactor: this.wsHealthTightenFactor,
       wsHealthChunkDelayExtraMs: this.wsHealthChunkDelayExtraMs,
@@ -2864,6 +2898,12 @@ export class CrossPlatformExecutionRouter {
     if (Number.isFinite(data?.consistencyPressure)) {
       this.consistencyPressure = Math.max(0, Math.min(1, Number(data.consistencyPressure)));
       this.lastConsistencyPressureAt = Date.now();
+    }
+    if (Number.isFinite(data?.hardGateActiveUntil)) {
+      this.hardGateActiveUntil = Number(data.hardGateActiveUntil);
+    }
+    if (typeof data?.lastHardGateReason === 'string') {
+      this.lastHardGateReason = data.lastHardGateReason;
     }
     if (Number.isFinite(data?.wsHealthScore)) {
       this.wsHealthScore = Math.max(0, Math.min(100, Number(data.wsHealthScore)));
