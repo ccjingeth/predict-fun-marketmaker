@@ -56,6 +56,8 @@ class ArbitrageBot {
     this.wallet = new Wallet(this.config.privateKey);
     this.api = new PredictAPI(this.config.apiBaseUrl, this.config.apiKey, this.config.jwtToken);
 
+    this.crossAggregator = this.config.crossPlatformEnabled ? new CrossPlatformAggregator(this.config) : undefined;
+
     this.monitor = new ArbitrageMonitor({
       scanInterval: this.config.arbScanIntervalMs || 10000,
       minProfitThreshold: this.config.crossPlatformMinProfit || 0.02,
@@ -99,7 +101,7 @@ class ArbitrageBot {
       arbMinNotionalUsd: this.config.arbMinNotionalUsd || 0,
       arbMinProfitUsd: this.config.arbMinProfitUsd || 0,
       arbMaxVwapLevels: this.config.arbMaxVwapLevels || 0,
-    }, this.config.crossPlatformEnabled ? new CrossPlatformAggregator(this.config) : undefined);
+    }, this.crossAggregator);
 
     this.executor = new ArbitrageExecutor({
       maxPositionSize: this.config.orderSize || 100,
