@@ -722,6 +722,14 @@ function bindLogFilterPresets() {
   }
 }
 
+function ensureLogPreset(name, preset) {
+  if (!logFilterPresets.has(name)) {
+    logFilterPresets.set(name, preset);
+    saveLogFilterPresets();
+    updateLogFilterPresetSelect();
+  }
+}
+
 function updateStatusDisplay(status) {
   const mmRunning = status.marketMaker;
   const arbRunning = status.arbitrage;
@@ -921,6 +929,11 @@ function updateFailureCounts(line) {
 function recordHardGateEvent(reason) {
   const message = String(reason || '硬门控触发');
   updateFailureCounts(`hard gate: ${message}`);
+  ensureLogPreset('硬门控追踪', {
+    type: 'all',
+    category: '硬门控',
+    keyword: 'hard gate',
+  });
 }
 
 function renderFailureTopN() {
@@ -2115,6 +2128,15 @@ function buildFixTemplate() {
         'CROSS_PLATFORM_POST_TRADE_DRIFT_BPS=60',
         'CROSS_PLATFORM_STABILITY_BPS=25',
         'CROSS_PLATFORM_CHUNK_FACTOR_MIN=0.6',
+      ]);
+    } else if (category === '硬门控') {
+      appendLines(category, [
+        'CROSS_PLATFORM_CONSISTENCY_PRESSURE_UP=0.2',
+        'CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_THRESHOLD=0.9',
+        'CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_FACTOR=0.4',
+        'CROSS_PLATFORM_WS_HEALTH_HARD_THRESHOLD=50',
+        'CROSS_PLATFORM_WS_HEALTH_HARD_FACTOR=0.6',
+        'CROSS_PLATFORM_HARD_GATE_RATE_LIMIT_MS=5000',
       ]);
     } else if (category === '执行失败') {
       appendLines(category, [
