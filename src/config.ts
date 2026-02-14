@@ -381,6 +381,24 @@ export function loadConfig(): Config {
     crossPlatformConsistencyCooldownWindowMs: parseInt(
       process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_WINDOW_MS || '0'
     ),
+    crossPlatformConsistencyPressureUp: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_UP || '0.25'
+    ),
+    crossPlatformConsistencyPressureDown: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_DOWN || '0.15'
+    ),
+    crossPlatformConsistencyPressureDecayMs: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_DECAY_MS || '90000'
+    ),
+    crossPlatformConsistencyPressureTightenMax: parseFloat(
+      process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_TIGHTEN_MAX || '1.8'
+    ),
+    crossPlatformConsistencyPressureRetryDelayMs: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_RETRY_DELAY_MS || '500'
+    ),
+    crossPlatformConsistencyPressureCooldownMaxMs: parseInt(
+      process.env.CROSS_PLATFORM_CONSISTENCY_PRESSURE_COOLDOWN_MAX_MS || '2000'
+    ),
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),

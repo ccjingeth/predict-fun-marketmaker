@@ -36,6 +36,8 @@ const metricConsistencyReason = document.getElementById('metricConsistencyReason
 const metricConsistencyOverride = document.getElementById('metricConsistencyOverride');
 const metricConsistencyRateLimit = document.getElementById('metricConsistencyRateLimit');
 const metricConsistencyTighten = document.getElementById('metricConsistencyTighten');
+const metricConsistencyPressure = document.getElementById('metricConsistencyPressure');
+const metricConsistencyPenalty = document.getElementById('metricConsistencyPenalty');
 const metricAvoidHours = document.getElementById('metricAvoidHours');
 const metricAvoidMode = document.getElementById('metricAvoidMode');
 const metricAvoidSeverity = document.getElementById('metricAvoidSeverity');
@@ -2552,6 +2554,7 @@ function updateAlerts({
   consistencyRateLimitActive,
   avoidActive,
   avoidMode,
+  consistencyPressure,
   cooldownUntil,
   metricsAgeMs,
 }) {
@@ -2590,6 +2593,9 @@ function updateAlerts({
   }
   if (consistencyFailureRate >= 25) {
     warnings.push('一致性失败率偏高，建议启用一致性模板或提升一致性阈值。');
+  }
+  if (consistencyPressure >= 0.6) {
+    warnings.push('一致性压力偏高，系统将自动收紧模板并降低频率。');
   }
   const { hours: avoidHours, hour, mode: stateAvoidMode } = getAvoidHourState();
   const mode = avoidMode || stateAvoidMode;
@@ -2642,6 +2648,7 @@ function computeRiskLevel({
   consistencyRateLimitActive,
   avoidActive,
   avoidMode,
+  consistencyPressure,
   metricsAgeMs,
 }) {
   let score = 0;
@@ -2724,6 +2731,15 @@ function computeRiskLevel({
     const weighted = 15 * riskWeights.consistency;
     score += weighted;
     breakdown.push({ label: `一致性限速 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
+  }
+  if (consistencyPressure >= 0.6) {
+    const weighted = 20 * riskWeights.consistency;
+    score += weighted;
+    breakdown.push({ label: `一致性压力 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
+  } else if (consistencyPressure >= 0.3) {
+    const weighted = 10 * riskWeights.consistency;
+    score += weighted;
+    breakdown.push({ label: `一致性压力上升 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
   }
   if (avoidActive) {
     const base = avoidMode === 'TEMPLATE' ? 15 : 35;
@@ -2813,6 +2829,18 @@ async function loadMetrics() {
     if (metricConsistencyTighten) {
       const factor = Number(data.consistencyTemplateFactor || 1);
       metricConsistencyTighten.textContent = formatNumber(factor, 2);
+    }
+    if (metricConsistencyPressure) {
+      const pressure = Number(data.consistencyPressure || 0);
+      metricConsistencyPressure.textContent = Number.isFinite(pressure)
+        ? `${formatNumber(pressure, 2)}`
+        : '未触发';
+    }
+    if (metricConsistencyPenalty) {
+      const pressure = Number(data.consistencyPressure || 0);
+      const maxDelay = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_CONSISTENCY_PRESSURE_RETRY_DELAY_MS') || 0);
+      const delay = maxDelay > 0 && Number.isFinite(pressure) ? Math.round(maxDelay * pressure) : 0;
+      metricConsistencyPenalty.textContent = delay > 0 ? `${delay}ms` : '未触发';
     }
     const avoidState = getAvoidHourState();
     if (metricAvoidHours) {
@@ -2928,6 +2956,7 @@ async function loadMetrics() {
       consistencyRateLimitActive,
       avoidActive,
       avoidMode: avoidState.mode,
+      consistencyPressure: Number(data.consistencyPressure || 0),
       consistencyFailureRate,
       consistencyHigh: consistencyFailureRate >= 25,
     };

@@ -672,6 +672,8 @@ export class CrossPlatformExecutionRouter {
   private consistencyRateLimitUntil = 0;
   private consistencyCooldownUntil = 0;
   private lastAvoidAlertHour = -1;
+  private consistencyPressure = 0;
+  private lastConsistencyPressureAt = 0;
   private wsHealthScore = 100;
   private wsHealthTightenFactor = 1;
   private wsHealthChunkDelayExtraMs = 0;
@@ -1441,7 +1443,8 @@ export class CrossPlatformExecutionRouter {
   }
 
   private getRetryDelayMs(): number {
-    return Math.max(0, this.retryDelayMsDynamic || this.resolveDynamicRetryDelay());
+    const base = Math.max(0, this.retryDelayMsDynamic || this.resolveDynamicRetryDelay());
+    return base + this.getConsistencyPressureRetryDelay();
   }
 
   private getMaxRetries(): number {
@@ -1652,6 +1655,7 @@ export class CrossPlatformExecutionRouter {
 
   private onSuccess(): void {
     this.lastSuccessAt = Date.now();
+    this.relaxConsistencyPressure(this.lastSuccessAt);
     this.circuitFailures = 0;
     this.circuitOpenedAt = 0;
     this.resetFailurePause();
@@ -2260,6 +2264,88 @@ export class CrossPlatformExecutionRouter {
     this.qualityScore = Math.max(minFactor, this.qualityScore - down * Math.max(0, multiplier));
   }
 
+  private updateConsistencyPressure(now: number): void {
+    if (!this.consistencyPressure) {
+      this.lastConsistencyPressureAt = now;
+      return;
+    }
+    const decayMs = Math.max(0, this.config.crossPlatformConsistencyPressureDecayMs || 0);
+    const down = Math.max(0, this.config.crossPlatformConsistencyPressureDown || 0);
+    if (!decayMs || !down) {
+      this.lastConsistencyPressureAt = now;
+      return;
+    }
+    if (!this.lastConsistencyPressureAt) {
+      this.lastConsistencyPressureAt = now;
+      return;
+    }
+    const elapsed = Math.max(0, now - this.lastConsistencyPressureAt);
+    if (!elapsed) {
+      return;
+    }
+    const decaySteps = elapsed / decayMs;
+    const delta = decaySteps * down;
+    this.consistencyPressure = Math.max(0, this.consistencyPressure - delta);
+    this.lastConsistencyPressureAt = now;
+  }
+
+  private addConsistencyPressure(now: number): void {
+    this.updateConsistencyPressure(now);
+    const up = Math.max(0, this.config.crossPlatformConsistencyPressureUp || 0);
+    if (up > 0) {
+      this.consistencyPressure = Math.min(1, this.consistencyPressure + up);
+    }
+    this.lastConsistencyPressureAt = now;
+    this.applyConsistencyPressureCooldown(now);
+  }
+
+  private relaxConsistencyPressure(now: number): void {
+    this.updateConsistencyPressure(now);
+    const down = Math.max(0, this.config.crossPlatformConsistencyPressureDown || 0);
+    if (down > 0) {
+      this.consistencyPressure = Math.max(0, this.consistencyPressure - down);
+    }
+    this.lastConsistencyPressureAt = now;
+  }
+
+  private getConsistencyPressure(now: number = Date.now()): number {
+    this.updateConsistencyPressure(now);
+    return Math.max(0, Math.min(1, this.consistencyPressure));
+  }
+
+  private getConsistencyPressureFactor(now: number = Date.now()): number {
+    const maxTighten = Math.max(1, this.config.crossPlatformConsistencyPressureTightenMax || 1);
+    if (maxTighten <= 1) {
+      return 1;
+    }
+    const pressure = this.getConsistencyPressure(now);
+    return 1 + pressure * (maxTighten - 1);
+  }
+
+  private getConsistencyPressureRetryDelay(now: number = Date.now()): number {
+    const maxExtra = Math.max(0, this.config.crossPlatformConsistencyPressureRetryDelayMs || 0);
+    if (!maxExtra) {
+      return 0;
+    }
+    const pressure = this.getConsistencyPressure(now);
+    return Math.round(maxExtra * pressure);
+  }
+
+  private applyConsistencyPressureCooldown(now: number): void {
+    const maxExtra = Math.max(0, this.config.crossPlatformConsistencyPressureCooldownMaxMs || 0);
+    if (!maxExtra) {
+      return;
+    }
+    const pressure = this.getConsistencyPressure(now);
+    if (!pressure) {
+      return;
+    }
+    const extra = Math.round(maxExtra * pressure);
+    if (extra > 0) {
+      this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + extra);
+    }
+  }
+
   setWsHealthScore(score: number): void {
     if (!Number.isFinite(score)) {
       return;
@@ -2345,6 +2431,7 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     const now = Date.now();
+    this.addConsistencyPressure(now);
     const wasRateLimited = this.consistencyRateLimitUntil > now;
     const wasCooldown = this.consistencyCooldownUntil > now;
     const windowMs = Math.max(0, this.config.crossPlatformConsistencyFailWindowMs || 0);
@@ -2584,6 +2671,7 @@ export class CrossPlatformExecutionRouter {
       consistencyTemplateFactor: this.consistencyTemplateTightenFactor,
       consistencyRateLimitUntil: this.consistencyRateLimitUntil,
       consistencyCooldownUntil: this.consistencyCooldownUntil,
+      consistencyPressure: this.consistencyPressure,
       wsHealthScore: this.wsHealthScore,
       wsHealthTightenFactor: this.wsHealthTightenFactor,
       wsHealthChunkDelayExtraMs: this.wsHealthChunkDelayExtraMs,
@@ -2611,6 +2699,7 @@ export class CrossPlatformExecutionRouter {
       consistencyTemplateFactor: this.consistencyTemplateTightenFactor,
       consistencyRateLimitUntil: this.consistencyRateLimitUntil,
       consistencyCooldownUntil: this.consistencyCooldownUntil,
+      consistencyPressure: this.consistencyPressure,
       wsHealthScore: this.wsHealthScore,
       wsHealthTightenFactor: this.wsHealthTightenFactor,
       wsHealthChunkDelayExtraMs: this.wsHealthChunkDelayExtraMs,
@@ -2721,6 +2810,10 @@ export class CrossPlatformExecutionRouter {
     }
     if (Number.isFinite(data?.consistencyCooldownUntil)) {
       this.consistencyCooldownUntil = Number(data.consistencyCooldownUntil);
+    }
+    if (Number.isFinite(data?.consistencyPressure)) {
+      this.consistencyPressure = Math.max(0, Math.min(1, Number(data.consistencyPressure)));
+      this.lastConsistencyPressureAt = Date.now();
     }
     if (Number.isFinite(data?.wsHealthScore)) {
       this.wsHealthScore = Math.max(0, Math.min(100, Number(data.wsHealthScore)));

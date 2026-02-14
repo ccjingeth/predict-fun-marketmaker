@@ -286,6 +286,12 @@ export interface Config {
   crossPlatformConsistencyCooldownMs?: number;
   crossPlatformConsistencyCooldownThreshold?: number;
   crossPlatformConsistencyCooldownWindowMs?: number;
+  crossPlatformConsistencyPressureUp?: number;
+  crossPlatformConsistencyPressureDown?: number;
+  crossPlatformConsistencyPressureDecayMs?: number;
+  crossPlatformConsistencyPressureTightenMax?: number;
+  crossPlatformConsistencyPressureRetryDelayMs?: number;
+  crossPlatformConsistencyPressureCooldownMaxMs?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
