@@ -851,7 +851,7 @@ export class CrossPlatformExecutionRouter {
     let execOptions = this.resolveExecutionOptions(attempt);
     const fallbackMode = this.resolveFallbackMode(attempt);
 
-    const tasks: Promise<ExecutionResult>[] = [];
+    const taskDefs: Array<{ platform: ExternalPlatform; legs: PlatformLeg[]; options: PlatformExecuteOptions }> = [];
     const prepared = attempt > 0 ? this.shrinkFallbackLegs(legs, attempt) : legs;
     if (fallbackMode === 'SINGLE_LEG' && attempt > 0) {
       const bestLegs = this.selectBestLegs(
@@ -866,7 +866,7 @@ export class CrossPlatformExecutionRouter {
         bestGrouped.get(leg.platform)!.push(leg);
       }
       for (const [platform, legsForPlatform] of bestGrouped.entries()) {
-        tasks.push(runExecution(platform, legsForPlatform, execOptions));
+        taskDefs.push({ platform, legs: legsForPlatform, options: execOptions });
       }
     } else {
       const groupedPrepared = new Map<ExternalPlatform, PlatformLeg[]>();
@@ -877,12 +877,13 @@ export class CrossPlatformExecutionRouter {
         groupedPrepared.get(leg.platform)!.push(leg);
       }
       for (const [platform, legsForPlatform] of groupedPrepared.entries()) {
-        tasks.push(runExecution(platform, legsForPlatform, execOptions));
+        taskDefs.push({ platform, legs: legsForPlatform, options: execOptions });
       }
     }
 
     const shouldParallel = fallbackMode === 'SEQUENTIAL' && attempt > 0 ? false : this.shouldParallelSubmit();
     if (shouldParallel) {
+      const tasks = taskDefs.map((def) => runExecution(def.platform, def.legs, def.options));
       const results = await Promise.allSettled(tasks);
       const failed = results.find((result) => result.status === 'rejected');
       if (failed) {
@@ -897,9 +898,10 @@ export class CrossPlatformExecutionRouter {
     }
 
     const results: ExecutionResult[] = [];
-    for (const task of tasks) {
+    const ordered = [...taskDefs].sort((a, b) => this.groupQualityScore(b.legs) - this.groupQualityScore(a.legs));
+    for (const def of ordered) {
       try {
-        results.push(await task);
+        results.push(await runExecution(def.platform, def.legs, def.options));
       } catch (error: any) {
         await this.cancelSubmitted(results.map((r) => ({ status: 'fulfilled', value: r } as const)));
         await this.hedgeOnFailure(results.map((r) => ({ status: 'fulfilled', value: r } as const)));
@@ -957,6 +959,15 @@ export class CrossPlatformExecutionRouter {
     const size = Number.isFinite(leg.shares) ? leg.shares : 0;
     const liquidityScore = Math.min(1, (price * size) / 50);
     return tokenScore * 0.6 + platformScore * 0.3 + liquidityScore * 10;
+  }
+
+  private groupQualityScore(legs: PlatformLeg[]): number {
+    if (!legs.length) {
+      return 0;
+    }
+    const scores = legs.map((leg) => this.legQualityScore(leg));
+    const total = scores.reduce((sum, score) => sum + score, 0);
+    return total / scores.length;
   }
 
   private async executeChunks(legs: PlatformLeg[], attempt: number): Promise<{ postTrade: { maxDriftBps: number; penalizedLegs: PlatformLeg[]; penalizedTokenIds: Set<string>; spreadPenalizedLegs: PlatformLeg[] } }> {
@@ -2480,7 +2491,7 @@ export class CrossPlatformExecutionRouter {
 
       const feeBps = this.getFeeBps(leg.platform);
       const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
-      const slippageBps = this.config.crossPlatformSlippageBps || 0;
+      const slippageBps = this.getSlippageBps();
 
       const vwap =
         leg.side === 'BUY'
@@ -2532,10 +2543,11 @@ export class CrossPlatformExecutionRouter {
         }
       }
 
+      const vwapAllIn = Number.isFinite(vwap.avgAllIn) ? vwap.avgAllIn : vwap.avgPrice;
       const deviationBps =
         leg.side === 'BUY'
-          ? ((vwap.avgPrice - limit) / limit) * 10000
-          : ((limit - vwap.avgPrice) / limit) * 10000;
+          ? ((vwapAllIn - limit) / limit) * 10000
+          : ((limit - vwapAllIn) / limit) * 10000;
 
       const softThreshold = Math.max(0, (this.config.crossPlatformLegDeviationSoftBps || 0) * this.getAutoTuneFactor());
       if (softThreshold > 0 && deviationBps > softThreshold) {
