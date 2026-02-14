@@ -132,6 +132,26 @@ const FIX_HINTS = {
   ARB_WS_HEALTH_LOG_MS: 'WS 健康采样周期',
   PREDICT_WS_STALE_MS: '行情源过期阈值',
 };
+const FIX_CATEGORY_KEYS = {
+  深度不足: ['CROSS_PLATFORM_ADAPTIVE_SIZE', 'CROSS_PLATFORM_DEPTH_USAGE', 'CROSS_PLATFORM_CHUNK_MAX_SHARES'],
+  预检失败: [
+    'CROSS_PLATFORM_STABILITY_SAMPLES',
+    'CROSS_PLATFORM_STABILITY_INTERVAL_MS',
+    'CROSS_PLATFORM_MIN_PROFIT_USD',
+    'CROSS_PLATFORM_MIN_NOTIONAL_USD',
+  ],
+  VWAP 偏离: ['CROSS_PLATFORM_SLIPPAGE_BPS', 'CROSS_PLATFORM_EXECUTION_VWAP_CHECK', 'CROSS_PLATFORM_RECHECK_MS'],
+  价格漂移: ['CROSS_PLATFORM_PRICE_DRIFT_BPS', 'CROSS_PLATFORM_RECHECK_MS', 'CROSS_PLATFORM_STABILITY_SAMPLES'],
+  成交后漂移: ['CROSS_PLATFORM_POST_TRADE_DRIFT_BPS', 'CROSS_PLATFORM_STABILITY_BPS', 'CROSS_PLATFORM_CHUNK_FACTOR_MIN'],
+  高波动: ['CROSS_PLATFORM_VOLATILITY_BPS', 'CROSS_PLATFORM_STABILITY_SAMPLES'],
+  执行失败: ['CROSS_PLATFORM_MAX_RETRIES', 'CROSS_PLATFORM_RETRY_DELAY_MS', 'CROSS_PLATFORM_ABORT_COOLDOWN_MS'],
+  对冲失败: ['CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD', 'CROSS_PLATFORM_HEDGE_MIN_EDGE', 'CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS'],
+  未成交订单: ['CROSS_PLATFORM_POST_FILL_CHECK', 'CROSS_PLATFORM_USE_FOK'],
+  熔断触发: ['CROSS_PLATFORM_CIRCUIT_MAX_FAILURES', 'CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS'],
+  冷却触发: ['CROSS_PLATFORM_GLOBAL_MIN_QUALITY', 'CROSS_PLATFORM_GLOBAL_COOLDOWN_MS'],
+  映射/依赖: ['CROSS_PLATFORM_USE_MAPPING'],
+  网络/请求: ['ARB_WS_HEALTH_LOG_MS', 'PREDICT_WS_STALE_MS', 'CROSS_PLATFORM_RETRY_DELAY_MS'],
+};
 const weightPresets = new Map();
 const logFilterPresets = new Map();
 
@@ -1120,6 +1140,18 @@ function updateFixPreview() {
   renderFixSelect(entries, env);
 }
 
+function getTopFailureCategories(limit = 2) {
+  const categories = new Map();
+  for (const [line, count] of failureCounts.entries()) {
+    const category = classifyFailure(line);
+    categories.set(category, (categories.get(category) || 0) + count);
+  }
+  return Array.from(categories.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([category]) => category);
+}
+
 function renderFixSelect(entries, env) {
   if (!fixSelectList) return;
   fixSelectList.innerHTML = '';
@@ -1130,6 +1162,12 @@ function renderFixSelect(entries, env) {
     fixSelectList.appendChild(item);
     return;
   }
+  const topCategories = getTopFailureCategories();
+  const recommendedKeys = new Set();
+  topCategories.forEach((category) => {
+    const keys = FIX_CATEGORY_KEYS[category] || [];
+    keys.forEach((key) => recommendedKeys.add(key));
+  });
   const toolRow = document.createElement('div');
   toolRow.className = 'health-item';
   const selectAllBtn = document.createElement('button');
@@ -1141,9 +1179,13 @@ function renderFixSelect(entries, env) {
   const selectMismatchBtn = document.createElement('button');
   selectMismatchBtn.className = 'btn ghost';
   selectMismatchBtn.textContent = '仅选未匹配';
+  const selectRecommendedBtn = document.createElement('button');
+  selectRecommendedBtn.className = 'btn ghost';
+  selectRecommendedBtn.textContent = '按建议勾选';
   toolRow.appendChild(selectAllBtn);
   toolRow.appendChild(selectNoneBtn);
   toolRow.appendChild(selectMismatchBtn);
+  toolRow.appendChild(selectRecommendedBtn);
   fixSelectList.appendChild(toolRow);
   entries.forEach((entry) => {
     const row = document.createElement('div');
@@ -1209,6 +1251,19 @@ function renderFixSelect(entries, env) {
       const normalizedCurrent = current === undefined ? '' : String(current).trim();
       const normalizedValue = String(value || '').trim();
       cb.checked = normalizedCurrent !== normalizedValue;
+    });
+  });
+  selectRecommendedBtn.addEventListener('click', () => {
+    const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
+    checkboxes.forEach((cb) => {
+      const key = cb.dataset.key;
+      const value = cb.dataset.value;
+      if (!key || value === undefined) return;
+      const current = env.get(key);
+      const normalizedCurrent = current === undefined ? '' : String(current).trim();
+      const normalizedValue = String(value || '').trim();
+      const isMismatch = normalizedCurrent !== normalizedValue;
+      cb.checked = recommendedKeys.has(key) && isMismatch;
     });
   });
 }
