@@ -72,6 +72,7 @@ const metricFixSummaryList = document.getElementById('metricFixSummaryList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
 const saveEnvButton = document.getElementById('saveEnv');
 const metricFlowList = document.getElementById('metricFlowList');
+const metricSaveHint = document.getElementById('metricSaveHint');
 const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
 const healthAdviceList = document.getElementById('healthAdviceList');
@@ -883,6 +884,17 @@ function renderFlowStatus({ appliedFixes = false, saved = false, hasAdvice = nul
   rows[2].textContent = `${base[2]}（待保存）`;
 }
 
+function renderSaveHint({ hasPendingSave }) {
+  if (!metricSaveHint) return;
+  metricSaveHint.innerHTML = '';
+  const item = document.createElement('div');
+  item.className = `alert-item ${hasPendingSave ? 'warn' : 'ok'}`;
+  item.textContent = hasPendingSave
+    ? '配置已修改但尚未保存，请点击“保存配置”生效。'
+    : '暂无未保存的变更。';
+  metricSaveHint.appendChild(item);
+}
+
 function renderMetricFailureReasons(reasons) {
   if (!metricFailureReasons) return;
   metricFailureReasons.innerHTML = '';
@@ -1076,6 +1088,7 @@ async function saveEnv() {
     saveEnvButton.classList.remove('attention');
   }
   renderFlowStatus({ appliedFixes: false, saved: true });
+  renderSaveHint({ hasPendingSave: false });
   pushLog({ type: 'system', level: 'system', message: '配置已保存' });
 }
 
@@ -2070,6 +2083,7 @@ async function loadMetrics() {
     } else {
       renderFlowStatus({ appliedFixes: false, saved: false, hasAdvice });
     }
+    renderSaveHint({ hasPendingSave });
 
     const flushMs = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_METRICS_FLUSH_MS') || 30000);
     if (metricsAgeMs > flushMs * 2) {
