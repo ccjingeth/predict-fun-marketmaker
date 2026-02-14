@@ -1037,8 +1037,12 @@ export class CrossPlatformExecutionRouter {
     const perTokenBudget = perTokenRaw > 0 ? perTokenRaw * factor : 0;
     const totals = new Map<string, number>();
     let global = 0;
+    const vwapByLeg = this.lastPreflight?.vwapByLeg || this.lastBatchPreflight?.vwapByLeg;
     for (const leg of legs) {
-      const notional = Math.abs(leg.price * leg.shares);
+      const legKey = `${leg.platform}:${leg.tokenId}:${leg.side}`;
+      const vwap = vwapByLeg?.get(legKey);
+      const unit = vwap && Number.isFinite(vwap.avgAllIn) && vwap.avgAllIn > 0 ? vwap.avgAllIn : leg.price;
+      const notional = Math.abs(unit * leg.shares);
       const key = leg.tokenId ? `${leg.platform}:${leg.tokenId}` : leg.platform;
       if (key) {
         totals.set(key, (totals.get(key) || 0) + notional);
