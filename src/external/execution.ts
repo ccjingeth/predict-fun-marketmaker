@@ -2456,6 +2456,7 @@ export class CrossPlatformExecutionRouter {
     let maxDriftBps = 0;
     const vwapByLeg = new Map<string, { avgAllIn: number; totalAllIn: number; filledShares: number }>();
     const deviationByLeg = new Map<string, number>();
+    const driftByLeg = new Map<string, number>();
     const extraDeviation =
       this.circuitFailures > 0 || this.isDegraded()
         ? Math.max(0, this.config.crossPlatformFailureVwapDeviationBps || 0)
@@ -2548,6 +2549,7 @@ export class CrossPlatformExecutionRouter {
         if (drift > maxDriftBps) {
           maxDriftBps = drift;
         }
+        driftByLeg.set(legKey, drift);
       }
 
       const vwapAllIn = Number.isFinite(vwap.avgAllIn) ? vwap.avgAllIn : vwap.avgPrice;
@@ -2576,6 +2578,19 @@ export class CrossPlatformExecutionRouter {
     });
 
     await Promise.all(checks);
+    const driftSpreadThreshold = Math.max(
+      0,
+      (this.config.crossPlatformLegDriftSpreadBps || 0) * this.getAutoTuneFactor()
+    );
+    if (driftSpreadThreshold > 0 && driftByLeg.size >= 2) {
+      const values = Array.from(driftByLeg.values());
+      const minDrift = Math.min(...values);
+      const maxDrift = Math.max(...values);
+      const spread = maxDrift - minDrift;
+      if (spread > driftSpreadThreshold) {
+        throw new Error(`Preflight failed: leg drift spread ${spread.toFixed(1)} bps (max ${driftSpreadThreshold})`);
+      }
+    }
     const spreadThreshold = Math.max(
       0,
       (this.config.crossPlatformLegDeviationSpreadBps || 0) * this.getAutoTuneFactor()
