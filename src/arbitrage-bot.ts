@@ -817,7 +817,8 @@ class ArbitrageBot {
 
   private getEffectiveTopN(base: number): number {
     const factor = this.getArbDegradeFactor();
-    return Math.max(1, Math.floor(base * factor));
+    const minTop = Math.max(1, this.config.arbDegradeTopNMin || 1);
+    return Math.max(minTop, Math.floor(base * factor));
   }
 
   private getDegradeProfitMultiplier(): number {

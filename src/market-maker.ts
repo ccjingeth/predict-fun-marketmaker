@@ -194,7 +194,8 @@ export class MarketMaker {
     const base = this.config.cancelThreshold;
     const mult = this.getVolatilityMultiplier(tokenId, this.config.mmCancelVolMultiplier ?? 2);
     const boost = this.getCancelBoost(tokenId);
-    const threshold = base / mult / boost;
+    const noFill = this.getNoFillPenalty(tokenId);
+    const threshold = (base + (noFill.cancelBps || 0) / 10000) / mult / boost;
     const buffer = Math.max(0, this.config.mmCancelBufferBps ?? 0);
     const hard = threshold * (1 + buffer);
     if (priceChange > hard) {
@@ -789,18 +790,18 @@ export class MarketMaker {
     return value;
   }
 
-  private getNoFillPenalty(tokenId: string): { spreadBps: number; sizeFactor: number; touchBps: number } {
+  private getNoFillPenalty(tokenId: string): { spreadBps: number; sizeFactor: number; touchBps: number; repriceBps: number; cancelBps: number } {
     const threshold = Math.max(0, this.config.mmNoFillPassiveMs ?? 0);
     if (threshold <= 0) {
-      return { spreadBps: 0, sizeFactor: 1, touchBps: 0 };
+      return { spreadBps: 0, sizeFactor: 1, touchBps: 0, repriceBps: 0, cancelBps: 0 };
     }
     const last = this.lastFillAt.get(tokenId);
     if (!last) {
-      return { spreadBps: 0, sizeFactor: 1, touchBps: 0 };
+      return { spreadBps: 0, sizeFactor: 1, touchBps: 0, repriceBps: 0, cancelBps: 0 };
     }
     const elapsed = Date.now() - last;
     if (elapsed <= threshold) {
-      return { spreadBps: 0, sizeFactor: 1, touchBps: 0 };
+      return { spreadBps: 0, sizeFactor: 1, touchBps: 0, repriceBps: 0, cancelBps: 0 };
     }
     const rampMs = Math.max(1, this.config.mmNoFillRampMs ?? 30000);
     const intensity = this.clamp((elapsed - threshold) / rampMs, 0, 1);
@@ -812,7 +813,14 @@ export class MarketMaker {
     const touchBase = Math.max(0, this.config.mmNoFillTouchBps ?? 0);
     const touchMax = Math.max(touchBase, this.config.mmNoFillTouchMaxBps ?? touchBase * 2);
     const touchBps = touchBase > 0 ? touchBase + (touchMax - touchBase) * intensity : 0;
-    return { spreadBps, sizeFactor, touchBps };
+    const repriceBase = Math.max(0, this.config.mmNoFillRepriceBps ?? 0);
+    const repriceMax = Math.max(repriceBase, this.config.mmNoFillRepriceMaxBps ?? repriceBase * 2);
+    const repriceBps = repriceBase > 0 ? repriceBase + (repriceMax - repriceBase) * intensity : 0;
+
+    const cancelBase = Math.max(0, this.config.mmNoFillCancelBps ?? 0);
+    const cancelMax = Math.max(cancelBase, this.config.mmNoFillCancelMaxBps ?? cancelBase * 2);
+    const cancelBps = cancelBase > 0 ? cancelBase + (cancelMax - cancelBase) * intensity : 0;
+    return { spreadBps, sizeFactor, touchBps, repriceBps, cancelBps };
   }
 
   private canRecheck(tokenId: string): boolean {
@@ -1350,7 +1358,8 @@ export class MarketMaker {
     const diff = Math.abs(targetPrice - current) / current;
     const base = this.config.repriceThreshold ?? 0.003;
     const mult = this.getVolatilityMultiplier(order.token_id, this.config.mmRepriceVolMultiplier ?? 1.5);
-    const threshold = base / mult;
+    const noFill = this.getNoFillPenalty(order.token_id);
+    const threshold = (base + (noFill.repriceBps || 0) / 10000) / mult;
     const buffer = Math.max(0, this.config.mmRepriceBufferBps ?? 0);
     const hard = threshold * (1 + buffer);
     if (diff >= hard) {

@@ -136,6 +136,10 @@ export function loadConfig(): Config {
     mmNoFillSizePenalty: parseFloat(process.env.MM_NO_FILL_SIZE_PENALTY || '1'),
     mmNoFillTouchBps: parseFloat(process.env.MM_NO_FILL_TOUCH_BPS || '0'),
     mmNoFillTouchMaxBps: parseFloat(process.env.MM_NO_FILL_TOUCH_MAX_BPS || '0'),
+    mmNoFillRepriceBps: parseFloat(process.env.MM_NO_FILL_REPRICE_BPS || '0'),
+    mmNoFillRepriceMaxBps: parseFloat(process.env.MM_NO_FILL_REPRICE_MAX_BPS || '0'),
+    mmNoFillCancelBps: parseFloat(process.env.MM_NO_FILL_CANCEL_BPS || '0'),
+    mmNoFillCancelMaxBps: parseFloat(process.env.MM_NO_FILL_CANCEL_MAX_BPS || '0'),
     mmAggressiveMoveBps: parseFloat(process.env.MM_AGGRESSIVE_MOVE_BPS || '0.002'),
     mmAggressiveMoveWindowMs: parseInt(process.env.MM_AGGRESSIVE_MOVE_WINDOW_MS || '1500'),
     mmVolatilityHighBps: parseFloat(process.env.MM_VOLATILITY_HIGH_BPS || '0.006'),
@@ -419,6 +423,7 @@ export function loadConfig(): Config {
     arbDegradeMaxLevel: parseInt(process.env.ARB_DEGRADE_MAX_LEVEL || '3'),
     arbDegradeFactor: parseFloat(process.env.ARB_DEGRADE_FACTOR || '0.7'),
     arbDegradeStabilityAdd: parseInt(process.env.ARB_DEGRADE_STABILITY_ADD || '1'),
+    arbDegradeTopNMin: parseInt(process.env.ARB_DEGRADE_TOP_N_MIN || '1'),
     arbWsHealthLogMs: parseInt(process.env.ARB_WS_HEALTH_LOG_MS || '0'),
     arbPreflightEnabled: process.env.ARB_PREFLIGHT_ENABLED !== 'false',
     arbPreflightMaxAgeMs: parseInt(process.env.ARB_PREFLIGHT_MAX_AGE_MS || '3000'),
@@ -560,6 +565,9 @@ export function loadConfig(): Config {
   }
   if ((config.arbDegradeStabilityAdd ?? 0) < 0) {
     config.arbDegradeStabilityAdd = 0;
+  }
+  if ((config.arbDegradeTopNMin ?? 0) < 1) {
+    config.arbDegradeTopNMin = 1;
   }
 
   if (
@@ -794,6 +802,33 @@ export function loadConfig(): Config {
   }
   if ((config.mmNoFillSizePenalty ?? 0) <= 0 || (config.mmNoFillSizePenalty ?? 0) > 1) {
     config.mmNoFillSizePenalty = 1;
+  }
+  if ((config.mmNoFillTouchBps ?? 0) < 0) {
+    config.mmNoFillTouchBps = 0;
+  }
+  if ((config.mmNoFillTouchMaxBps ?? 0) < 0) {
+    config.mmNoFillTouchMaxBps = 0;
+  }
+  if ((config.mmNoFillTouchMaxBps ?? 0) > 0 && (config.mmNoFillTouchMaxBps ?? 0) < (config.mmNoFillTouchBps ?? 0)) {
+    config.mmNoFillTouchMaxBps = config.mmNoFillTouchBps;
+  }
+  if ((config.mmNoFillRepriceBps ?? 0) < 0) {
+    config.mmNoFillRepriceBps = 0;
+  }
+  if ((config.mmNoFillRepriceMaxBps ?? 0) < 0) {
+    config.mmNoFillRepriceMaxBps = 0;
+  }
+  if ((config.mmNoFillRepriceMaxBps ?? 0) > 0 && (config.mmNoFillRepriceMaxBps ?? 0) < (config.mmNoFillRepriceBps ?? 0)) {
+    config.mmNoFillRepriceMaxBps = config.mmNoFillRepriceBps;
+  }
+  if ((config.mmNoFillCancelBps ?? 0) < 0) {
+    config.mmNoFillCancelBps = 0;
+  }
+  if ((config.mmNoFillCancelMaxBps ?? 0) < 0) {
+    config.mmNoFillCancelMaxBps = 0;
+  }
+  if ((config.mmNoFillCancelMaxBps ?? 0) > 0 && (config.mmNoFillCancelMaxBps ?? 0) < (config.mmNoFillCancelBps ?? 0)) {
+    config.mmNoFillCancelMaxBps = config.mmNoFillCancelBps;
   }
 
   return config;
