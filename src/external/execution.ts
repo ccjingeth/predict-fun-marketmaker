@@ -2396,6 +2396,7 @@ export class CrossPlatformExecutionRouter {
   private activateHardGate(reason: string, now: number): void {
     const duration = Math.max(0, this.config.crossPlatformHardGateDegradeMs || 0);
     const rateLimitMs = Math.max(0, this.config.crossPlatformHardGateRateLimitMs || 0);
+    const wasActive = this.hardGateActiveUntil > now;
     if (duration > 0) {
       const useDegrade = this.config.crossPlatformHardGateUseDegradeProfile !== false;
       if (useDegrade) {
@@ -2416,6 +2417,13 @@ export class CrossPlatformExecutionRouter {
     if (rateLimitMs > 0) {
       this.consistencyRateLimitUntil = Math.max(this.consistencyRateLimitUntil, now + rateLimitMs);
       this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + rateLimitMs);
+    }
+    if (!wasActive && this.hardGateActiveUntil > now && this.config.alertWebhookUrl) {
+      void sendAlert(
+        this.config.alertWebhookUrl,
+        `🚨 硬门控触发（${reason}），已降级并限速 ${Math.round(rateLimitMs / 1000)}s。`,
+        this.config.alertMinIntervalMs
+      );
     }
   }
 

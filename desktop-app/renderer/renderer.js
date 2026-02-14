@@ -2557,6 +2557,8 @@ function updateAlerts({
   avoidActive,
   avoidMode,
   consistencyPressure,
+  hardGateActiveUntil,
+  hardGateReason,
   cooldownUntil,
   metricsAgeMs,
 }) {
@@ -2598,6 +2600,9 @@ function updateAlerts({
   }
   if (consistencyPressure >= 0.6) {
     warnings.push('一致性压力偏高，系统将自动收紧模板并降低频率。');
+  }
+  if (hardGateActiveUntil && hardGateActiveUntil > Date.now()) {
+    warnings.push(`硬门控触发中，原因：${hardGateReason || '未知'}。`);
   }
   const { hours: avoidHours, hour, mode: stateAvoidMode } = getAvoidHourState();
   const mode = avoidMode || stateAvoidMode;
@@ -2999,6 +3004,8 @@ async function loadMetrics() {
       avoidActive,
       avoidMode: avoidState.mode,
       consistencyPressure: Number(data.consistencyPressure || 0),
+      hardGateActiveUntil: Number(data.hardGateActiveUntil || 0),
+      hardGateReason: typeof data.lastHardGateReason === 'string' ? data.lastHardGateReason : '',
       consistencyFailureRate,
       consistencyHigh: consistencyFailureRate >= 25,
     };
