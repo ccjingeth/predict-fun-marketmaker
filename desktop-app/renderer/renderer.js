@@ -987,6 +987,14 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
     if (metricsSnapshot.postFailRate > 10) {
       hints.push('建议应用修复模板：降低分块系数、提高漂移阈值');
     }
+    if (metricsSnapshot.hardGateActiveUntil && metricsSnapshot.hardGateActiveUntil > Date.now()) {
+      hints.push(
+        `硬门控触发：建议检查 ${metricsSnapshot.hardGateReason || '一致性/WS'}，提高稳定窗口或降低执行量`
+      );
+    }
+    if (metricsSnapshot.consistencyPressure >= 0.6) {
+      hints.push('一致性压力偏高：建议提高一致性阈值或开启模板保守模式');
+    }
   }
   const lines = Array.from(new Set(hints)).slice(0, 5);
   if (!lines.length) {
