@@ -196,6 +196,12 @@ body::after {
   border: 1px solid rgba(106, 163, 255, 0.3);
 }
 
+.btn.attention {
+  background: linear-gradient(120deg, #f7c46c, #ff9f5a);
+  color: #1a0f0a;
+  box-shadow: 0 12px 24px rgba(247, 196, 108, 0.35);
+}
+
 .status-row {
   margin-top: 8px;
   display: flex;

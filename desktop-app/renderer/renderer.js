@@ -70,6 +70,7 @@ const metricAlertsList = document.getElementById('metricAlertsList');
 const metricFailureAdviceList = document.getElementById('metricFailureAdviceList');
 const metricFixSummaryList = document.getElementById('metricFixSummaryList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
+const saveEnvButton = document.getElementById('saveEnv');
 const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
 const healthAdviceList = document.getElementById('healthAdviceList');
@@ -1036,6 +1037,9 @@ async function saveEnv() {
   await window.predictBot.writeEnv(envEditor.value);
   detectTradingMode(envEditor.value);
   syncTogglesFromEnv(envEditor.value);
+  if (saveEnvButton) {
+    saveEnvButton.classList.remove('attention');
+  }
   pushLog({ type: 'system', level: 'system', message: '配置已保存' });
 }
 
@@ -1403,6 +1407,9 @@ function applySelectedFixes(quiet = false) {
   updateMetricsPaths();
   if (healthExportHint) {
     healthExportHint.textContent = '修复参数已写入配置编辑器，请点击“保存配置”生效。';
+  }
+  if (saveEnvButton) {
+    saveEnvButton.classList.add('attention');
   }
   if (!quiet) {
     pushLog({ type: 'system', level: 'system', message: `已应用 ${applied} 条修复建议（请保存生效）` });
