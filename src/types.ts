@@ -320,6 +320,11 @@ export interface Config {
   crossPlatformSuccessRetryDelayTightenMs?: number;
   crossPlatformRetryDelayFloorMs?: number;
   crossPlatformRetryDelayCeilMs?: number;
+  crossPlatformFailureProfitBpsBump?: number;
+  crossPlatformFailureProfitBpsBumpMax?: number;
+  crossPlatformFailureProfitBpsBumpRecover?: number;
+  crossPlatformFailureStabilitySamplesMax?: number;
+  crossPlatformFailureStabilityIntervalMaxMs?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;

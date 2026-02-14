@@ -619,6 +619,7 @@ export class CrossPlatformExecutionRouter {
   private slippageBpsDynamic = 0;
   private stabilityBpsDynamic = 0;
   private retryDelayMsDynamic = 0;
+  private failureProfitBpsBump = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -664,6 +665,7 @@ export class CrossPlatformExecutionRouter {
     this.slippageBpsDynamic = this.resolveDynamicSlippage();
     this.stabilityBpsDynamic = this.resolveDynamicStability();
     this.retryDelayMsDynamic = this.resolveDynamicRetryDelay();
+    this.failureProfitBpsBump = 0;
     this.restoreState().catch((error) => {
       console.warn('Cross-platform state restore failed:', error);
     });
@@ -729,6 +731,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustDynamicSlippage(true);
         this.adjustDynamicStability(true);
         this.adjustDynamicRetryDelay(true);
+        this.adjustFailureProfitBps(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -786,6 +789,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustDynamicSlippage(false);
         this.adjustDynamicStability(false);
         this.adjustDynamicRetryDelay(false);
+        this.adjustFailureProfitBps(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -1379,6 +1383,22 @@ export class CrossPlatformExecutionRouter {
 
   private getRetryDelayMs(): number {
     return Math.max(0, this.retryDelayMsDynamic || this.resolveDynamicRetryDelay());
+  }
+
+  private adjustFailureProfitBps(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureProfitBpsBump || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureProfitBpsBumpMax || bump * 5);
+    const recover = this.config.crossPlatformFailureProfitBpsBumpRecover ?? 0.8;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureProfitBpsBump = Math.max(0, Math.round(this.failureProfitBpsBump * recover));
+      }
+    } else {
+      this.failureProfitBpsBump = Math.min(maxBump, this.failureProfitBpsBump + bump);
+    }
   }
 
   private getStabilityBps(): number {
@@ -2497,6 +2517,14 @@ export class CrossPlatformExecutionRouter {
       samples += Math.max(0, this.config.crossPlatformFailureStabilitySamplesAdd || 0);
       intervalMs += Math.max(0, this.config.crossPlatformFailureStabilityIntervalAddMs || 0);
     }
+    const maxSamples = Math.max(0, this.config.crossPlatformFailureStabilitySamplesMax || 0);
+    if (maxSamples > 0) {
+      samples = Math.min(samples, maxSamples);
+    }
+    const maxInterval = Math.max(0, this.config.crossPlatformFailureStabilityIntervalMaxMs || 0);
+    if (maxInterval > 0) {
+      intervalMs = Math.min(intervalMs, maxInterval);
+    }
     const threshold = Math.max(0, this.getStabilityBps() * this.getAutoTuneFactor());
     if (samples <= 1 || threshold <= 0) {
       return;
@@ -2672,7 +2700,7 @@ export class CrossPlatformExecutionRouter {
     const required =
       baseProfit +
       failureUsd * failureMult +
-      notional * ((baseBps + failureBps * failureMult) / 10000) +
+      notional * ((baseBps + failureBps * failureMult + this.failureProfitBpsBump) / 10000) +
       notional * (impactBps / 10000) * impactMult;
     if (required > 0 && profit < required) {
       throw new Error(

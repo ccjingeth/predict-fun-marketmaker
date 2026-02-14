@@ -369,6 +369,11 @@ export function loadConfig(): Config {
     crossPlatformSuccessRetryDelayTightenMs: parseInt(process.env.CROSS_PLATFORM_SUCCESS_RETRY_DELAY_TIGHTEN_MS || '0'),
     crossPlatformRetryDelayFloorMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_FLOOR_MS || '0'),
     crossPlatformRetryDelayCeilMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_CEIL_MS || '0'),
+    crossPlatformFailureProfitBpsBump: parseInt(process.env.CROSS_PLATFORM_FAILURE_PROFIT_BPS_BUMP || '0'),
+    crossPlatformFailureProfitBpsBumpMax: parseInt(process.env.CROSS_PLATFORM_FAILURE_PROFIT_BPS_BUMP_MAX || '0'),
+    crossPlatformFailureProfitBpsBumpRecover: parseFloat(process.env.CROSS_PLATFORM_FAILURE_PROFIT_BPS_BUMP_RECOVER || '0.8'),
+    crossPlatformFailureStabilitySamplesMax: parseInt(process.env.CROSS_PLATFORM_FAILURE_STABILITY_SAMPLES_MAX || '0'),
+    crossPlatformFailureStabilityIntervalMaxMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_STABILITY_INTERVAL_MAX_MS || '0'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -766,6 +771,27 @@ export function loadConfig(): Config {
       config.crossPlatformRetryDelayCeilMs = floor;
       config.crossPlatformRetryDelayFloorMs = ceil;
     }
+  }
+  if ((config.crossPlatformFailureProfitBpsBump ?? 0) < 0) {
+    config.crossPlatformFailureProfitBpsBump = 0;
+  }
+  if ((config.crossPlatformFailureProfitBpsBumpMax ?? 0) < 0) {
+    config.crossPlatformFailureProfitBpsBumpMax = 0;
+  }
+  const bumpMax = config.crossPlatformFailureProfitBpsBumpMax ?? 0;
+  if (bumpMax > 0) {
+    if ((config.crossPlatformFailureProfitBpsBump ?? 0) > bumpMax) {
+      config.crossPlatformFailureProfitBpsBump = bumpMax;
+    }
+  }
+  if ((config.crossPlatformFailureProfitBpsBumpRecover ?? 0) <= 0 || (config.crossPlatformFailureProfitBpsBumpRecover ?? 0) >= 1) {
+    config.crossPlatformFailureProfitBpsBumpRecover = 0.8;
+  }
+  if ((config.crossPlatformFailureStabilitySamplesMax ?? 0) < 0) {
+    config.crossPlatformFailureStabilitySamplesMax = 0;
+  }
+  if ((config.crossPlatformFailureStabilityIntervalMaxMs ?? 0) < 0) {
+    config.crossPlatformFailureStabilityIntervalMaxMs = 0;
   }
   if ((config.crossPlatformFailureChunkDelayBumpMs ?? 0) < 0) {
     config.crossPlatformFailureChunkDelayBumpMs = 0;
