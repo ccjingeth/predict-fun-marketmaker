@@ -2156,6 +2156,7 @@ export class CrossPlatformExecutionRouter {
     const penalizedLegs: PlatformLeg[] = [];
     const penalizedTokenIds = new Set<string>();
     const drifts: Array<{ leg: PlatformLeg; drift: number }> = [];
+    const depthUsdThreshold = Math.max(0, this.config.crossPlatformLegMinDepthUsd || 0);
 
     for (const leg of legs) {
       const book = await this.fetchOrderbookInternal(leg);
@@ -2180,6 +2181,17 @@ export class CrossPlatformExecutionRouter {
           leg.platform,
           -Math.abs(this.config.crossPlatformPlatformScoreOnPostTrade || 8)
         );
+      }
+      if (depthUsdThreshold > 0) {
+        const depthShares = Number(book.bids?.[0]?.shares ?? 0) + Number(book.asks?.[0]?.shares ?? 0);
+        const mid = (book.bestBid && book.bestAsk) ? (book.bestBid + book.bestAsk) / 2 : ref;
+        const depthUsd = depthShares * (Number.isFinite(mid) ? mid : 0);
+        if (depthUsd < depthUsdThreshold) {
+          penalizedLegs.push(leg);
+          if (leg.tokenId) {
+            penalizedTokenIds.add(leg.tokenId);
+          }
+        }
       }
     }
 

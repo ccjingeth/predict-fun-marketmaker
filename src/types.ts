@@ -197,6 +197,7 @@ export interface Config {
   crossPlatformPlatformScoreOnSpread?: number;
   crossPlatformLegDriftSpreadBps?: number;
   crossPlatformLegVwapDeviationBps?: number;
+  crossPlatformLegMinDepthUsd?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
