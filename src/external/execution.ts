@@ -622,6 +622,7 @@ export class CrossPlatformExecutionRouter {
   private failureProfitBpsBump = 0;
   private failureProfitUsdBump = 0;
   private failureDepthUsdBump = 0;
+  private failureMinNotionalUsdBump = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -670,6 +671,7 @@ export class CrossPlatformExecutionRouter {
     this.failureProfitBpsBump = 0;
     this.failureProfitUsdBump = 0;
     this.failureDepthUsdBump = 0;
+    this.failureMinNotionalUsdBump = 0;
     this.restoreState().catch((error) => {
       console.warn('Cross-platform state restore failed:', error);
     });
@@ -738,6 +740,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureProfitBps(true);
         this.adjustFailureProfitUsd(true);
         this.adjustFailureDepthUsd(true);
+        this.adjustFailureMinNotionalUsd(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -798,6 +801,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureProfitBps(false);
         this.adjustFailureProfitUsd(false);
         this.adjustFailureDepthUsd(false);
+        this.adjustFailureMinNotionalUsd(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -1438,6 +1442,22 @@ export class CrossPlatformExecutionRouter {
       }
     } else {
       this.failureDepthUsdBump = Math.min(maxBump, this.failureDepthUsdBump + bump);
+    }
+  }
+
+  private adjustFailureMinNotionalUsd(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureMinNotionalUsdBump || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureMinNotionalUsdBumpMax || bump * 5);
+    const recover = this.config.crossPlatformFailureMinNotionalUsdBumpRecover ?? 0.8;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureMinNotionalUsdBump = Math.max(0, this.failureMinNotionalUsdBump * recover);
+      }
+    } else {
+      this.failureMinNotionalUsdBump = Math.min(maxBump, this.failureMinNotionalUsdBump + bump);
     }
   }
 
@@ -2731,7 +2751,7 @@ export class CrossPlatformExecutionRouter {
 
     const failureMult = this.circuitFailures > 0 || this.isDegraded() ? 1 : 0;
     const failureNotional = Math.max(0, this.config.crossPlatformFailureMinNotionalUsdAdd || 0) * failureMult;
-    const requiredNotional = minNotional + failureNotional;
+    const requiredNotional = minNotional + failureNotional + this.failureMinNotionalUsdBump;
     if (requiredNotional > 0 && notional < requiredNotional) {
       throw new Error(`Preflight failed: notional $${notional.toFixed(2)} < min ${requiredNotional}`);
     }

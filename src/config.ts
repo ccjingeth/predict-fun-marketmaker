@@ -380,6 +380,9 @@ export function loadConfig(): Config {
     crossPlatformFailureLegMinDepthUsdBump: parseFloat(process.env.CROSS_PLATFORM_FAILURE_LEG_MIN_DEPTH_USD_BUMP || '0'),
     crossPlatformFailureLegMinDepthUsdBumpMax: parseFloat(process.env.CROSS_PLATFORM_FAILURE_LEG_MIN_DEPTH_USD_BUMP_MAX || '0'),
     crossPlatformFailureLegMinDepthUsdBumpRecover: parseFloat(process.env.CROSS_PLATFORM_FAILURE_LEG_MIN_DEPTH_USD_BUMP_RECOVER || '0.8'),
+    crossPlatformFailureMinNotionalUsdBump: parseFloat(process.env.CROSS_PLATFORM_FAILURE_MIN_NOTIONAL_USD_BUMP || '0'),
+    crossPlatformFailureMinNotionalUsdBumpMax: parseFloat(process.env.CROSS_PLATFORM_FAILURE_MIN_NOTIONAL_USD_BUMP_MAX || '0'),
+    crossPlatformFailureMinNotionalUsdBumpRecover: parseFloat(process.env.CROSS_PLATFORM_FAILURE_MIN_NOTIONAL_USD_BUMP_RECOVER || '0.8'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -828,6 +831,21 @@ export function loadConfig(): Config {
   }
   if ((config.crossPlatformFailureLegMinDepthUsdBumpRecover ?? 0) <= 0 || (config.crossPlatformFailureLegMinDepthUsdBumpRecover ?? 0) >= 1) {
     config.crossPlatformFailureLegMinDepthUsdBumpRecover = 0.8;
+  }
+  if ((config.crossPlatformFailureMinNotionalUsdBump ?? 0) < 0) {
+    config.crossPlatformFailureMinNotionalUsdBump = 0;
+  }
+  if ((config.crossPlatformFailureMinNotionalUsdBumpMax ?? 0) < 0) {
+    config.crossPlatformFailureMinNotionalUsdBumpMax = 0;
+  }
+  const minNotionalBumpMax = config.crossPlatformFailureMinNotionalUsdBumpMax ?? 0;
+  if (minNotionalBumpMax > 0) {
+    if ((config.crossPlatformFailureMinNotionalUsdBump ?? 0) > minNotionalBumpMax) {
+      config.crossPlatformFailureMinNotionalUsdBump = minNotionalBumpMax;
+    }
+  }
+  if ((config.crossPlatformFailureMinNotionalUsdBumpRecover ?? 0) <= 0 || (config.crossPlatformFailureMinNotionalUsdBumpRecover ?? 0) >= 1) {
+    config.crossPlatformFailureMinNotionalUsdBumpRecover = 0.8;
   }
   if ((config.crossPlatformFailureChunkDelayBumpMs ?? 0) < 0) {
     config.crossPlatformFailureChunkDelayBumpMs = 0;
