@@ -80,6 +80,7 @@ const chartConsistency = document.getElementById('chartConsistency');
 const metricFailureReasons = document.getElementById('metricFailureReasons');
 const metricAlertsList = document.getElementById('metricAlertsList');
 const metricFailureAdviceList = document.getElementById('metricFailureAdviceList');
+const metricConsistencyList = document.getElementById('metricConsistencyList');
 const metricFixSummaryList = document.getElementById('metricFixSummaryList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
 const saveEnvButton = document.getElementById('saveEnv');
@@ -865,7 +866,19 @@ function updateFailureCounts(line) {
   failureCounts.set(normalized, count + 1);
   const category = classifyFailure(normalized);
   const isConsistency = normalized.toLowerCase().includes('consistency');
-  failureEvents.push({ ts: Date.now(), category, isConsistency });
+  let reason = '';
+  if (isConsistency) {
+    if (normalized.includes('vwap drift')) reason = 'VWAP 漂移';
+    else if (normalized.includes('vwap deviates')) reason = 'VWAP 偏离';
+    else if (normalized.includes('depth ratio drift')) reason = '深度比漂移';
+    else if (normalized.includes('depth ratio')) reason = '深度比不足';
+    else if (normalized.includes('missing orderbook')) reason = '订单簿缺失';
+    else if (normalized.includes('insufficient vwap depth')) reason = 'VWAP 深度不足';
+    else if (normalized.includes('invalid depth')) reason = '深度异常';
+    else if (normalized.includes('invalid price')) reason = '价格异常';
+    else reason = '一致性异常';
+  }
+  failureEvents.push({ ts: Date.now(), category, isConsistency, reason });
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   while (failureEvents.length > 0 && failureEvents[0].ts < cutoff) {
     failureEvents.shift();
@@ -1948,6 +1961,38 @@ function renderRiskBreakdown(breakdown) {
   });
 }
 
+function renderConsistencyFailures() {
+  if (!metricConsistencyList) return;
+  const counts = new Map();
+  for (const event of failureEvents) {
+    if (!event?.isConsistency) continue;
+    const reason = event.reason || '一致性异常';
+    counts.set(reason, (counts.get(reason) || 0) + 1);
+  }
+  metricConsistencyList.innerHTML = '';
+  if (!counts.size) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '暂无一致性失败记录。';
+    metricConsistencyList.appendChild(item);
+    return;
+  }
+  const entries = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  entries.forEach(([reason, count]) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = reason;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.textContent = `${count} 次`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    metricConsistencyList.appendChild(row);
+  });
+}
+
 function formatNumber(value, digits = 0) {
   if (!Number.isFinite(value)) return '--';
   return Number(value).toFixed(digits);
@@ -2513,6 +2558,7 @@ async function loadMetrics() {
     }
     updateCharts();
     renderMetricFailureAdvice(metrics.failureReasons, metricsSnapshot);
+    renderConsistencyFailures();
     const changedCount = renderFixSummary();
     const hasPendingSave = !!(saveEnvButton && saveEnvButton.classList.contains('attention'));
     if (changedCount === 0) {
