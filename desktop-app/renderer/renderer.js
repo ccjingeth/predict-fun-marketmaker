@@ -793,6 +793,12 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
     }
     metricFailureAdviceList.appendChild(row);
   });
+  if (recommendedCategories.length) {
+    const mapRow = document.createElement('div');
+    mapRow.className = 'alert-item warn';
+    mapRow.textContent = `关联分类: ${recommendedCategories.join(' / ')}`;
+    metricFailureAdviceList.appendChild(mapRow);
+  }
 }
 
 function renderFixSummary() {
