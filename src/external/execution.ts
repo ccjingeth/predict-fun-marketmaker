@@ -7,6 +7,7 @@ import { Wallet } from 'ethers';
 import { ClobClient } from '@polymarket/clob-client';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { sendAlert } from '../utils/alert.js';
 import {
   estimateBuy,
   estimateSell,
@@ -669,6 +670,8 @@ export class CrossPlatformExecutionRouter {
   private consistencyTemplateActiveUntil = 0;
   private consistencyTemplateTightenFactor = 1;
   private consistencyRateLimitUntil = 0;
+  private consistencyCooldownUntil = 0;
+  private lastAvoidAlertHour = -1;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -2028,6 +2031,21 @@ export class CrossPlatformExecutionRouter {
     const now = new Date();
     const hour = now.getHours();
     if (hours.includes(hour)) {
+      const nextHour = new Date(now);
+      nextHour.setMinutes(0, 0, 0);
+      nextHour.setHours(hour + 1);
+      this.globalCooldownUntil = Math.max(this.globalCooldownUntil, nextHour.getTime());
+      if (this.lastAvoidAlertHour !== hour) {
+        this.lastAvoidAlertHour = hour;
+        if (this.config.alertWebhookUrl) {
+          const label = String(hour).padStart(2, '0');
+          void sendAlert(
+            this.config.alertWebhookUrl,
+            `⚠️ 避开时段 ${label}:00 生效，跨平台执行已进入冷却。`,
+            this.config.alertMinIntervalMs
+          );
+        }
+      }
       throw new Error(`Preflight failed: avoid hour ${hour}`);
     }
   }
@@ -2247,7 +2265,8 @@ export class CrossPlatformExecutionRouter {
     const now = Date.now();
     const windowMs = Math.max(0, this.config.crossPlatformConsistencyFailWindowMs || 0);
     const rateWindowMs = Math.max(0, this.config.crossPlatformConsistencyRateLimitWindowMs || 0);
-    const effectiveWindow = windowMs > 0 ? windowMs : rateWindowMs;
+    const cooldownWindowMs = Math.max(0, this.config.crossPlatformConsistencyCooldownWindowMs || 0);
+    const effectiveWindow = Math.max(windowMs, rateWindowMs, cooldownWindowMs);
     if (effectiveWindow > 0) {
       if (!this.consistencyFailures.windowStart || now - this.consistencyFailures.windowStart > effectiveWindow) {
         this.consistencyFailures.windowStart = now;
@@ -2285,6 +2304,14 @@ export class CrossPlatformExecutionRouter {
         if (rateLimitMs > 0) {
           this.consistencyRateLimitUntil = Math.max(this.consistencyRateLimitUntil, now + rateLimitMs);
           this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + rateLimitMs);
+        }
+      }
+      const cooldownThreshold = Math.max(0, this.config.crossPlatformConsistencyCooldownThreshold || 0);
+      if (cooldownThreshold > 0 && this.consistencyFailures.count >= cooldownThreshold) {
+        const cooldownMs = Math.max(0, this.config.crossPlatformConsistencyCooldownMs || 0);
+        if (cooldownMs > 0) {
+          this.consistencyCooldownUntil = Math.max(this.consistencyCooldownUntil, now + cooldownMs);
+          this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + cooldownMs);
         }
       }
     }
@@ -2454,6 +2481,7 @@ export class CrossPlatformExecutionRouter {
       consistencyTemplateActiveUntil: this.consistencyTemplateActiveUntil,
       consistencyTemplateFactor: this.consistencyTemplateTightenFactor,
       consistencyRateLimitUntil: this.consistencyRateLimitUntil,
+      consistencyCooldownUntil: this.consistencyCooldownUntil,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2476,6 +2504,7 @@ export class CrossPlatformExecutionRouter {
       consistencyTemplateActiveUntil: this.consistencyTemplateActiveUntil,
       consistencyTemplateFactor: this.consistencyTemplateTightenFactor,
       consistencyRateLimitUntil: this.consistencyRateLimitUntil,
+      consistencyCooldownUntil: this.consistencyCooldownUntil,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2579,6 +2608,9 @@ export class CrossPlatformExecutionRouter {
     }
     if (Number.isFinite(data?.consistencyRateLimitUntil)) {
       this.consistencyRateLimitUntil = Number(data.consistencyRateLimitUntil);
+    }
+    if (Number.isFinite(data?.consistencyCooldownUntil)) {
+      this.consistencyCooldownUntil = Number(data.consistencyCooldownUntil);
     }
 
     const platformSet = new Set<ExternalPlatform>(['Predict', 'Polymarket', 'Opinion']);

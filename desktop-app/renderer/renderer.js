@@ -38,8 +38,11 @@ const metricConsistencyRateLimit = document.getElementById('metricConsistencyRat
 const metricConsistencyTighten = document.getElementById('metricConsistencyTighten');
 const metricAvoidHours = document.getElementById('metricAvoidHours');
 const metricAvoidDecay = document.getElementById('metricAvoidDecay');
+const metricConsistencyCooldown = document.getElementById('metricConsistencyCooldown');
 let lastAutoAvoidHours = '';
 let autoDisabledCrossPlatform = false;
+let lastAvoidNoticeHour = -1;
+let lastAvoidNoticeActive = false;
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -246,6 +249,9 @@ const FIX_HINTS = {
   CROSS_PLATFORM_AVOID_HOURS: '跨平台避开小时（0-23）',
   CROSS_PLATFORM_AVOID_HOURS_AUTO: '自动避开一致性热区',
   CROSS_PLATFORM_AVOID_HOURS_DECAY_DAYS: '避开时段衰减天数',
+  CROSS_PLATFORM_CONSISTENCY_COOLDOWN_MS: '一致性冷却时长（毫秒）',
+  CROSS_PLATFORM_CONSISTENCY_COOLDOWN_THRESHOLD: '一致性冷却阈值次数',
+  CROSS_PLATFORM_CONSISTENCY_COOLDOWN_WINDOW_MS: '一致性冷却统计窗口（毫秒）',
   CROSS_PLATFORM_QUALITY_PROFIT_MULT: '质量分收益门槛放大系数',
   CROSS_PLATFORM_QUALITY_PROFIT_MAX: '质量分收益门槛放大上限',
   CROSS_PLATFORM_MAX_VWAP_LEVELS: '跨平台 VWAP 档位数上限',
@@ -1828,6 +1834,16 @@ function applyConsistencyTemplate() {
   );
 }
 
+function getAvoidHourState() {
+  const env = parseEnv(envEditor.value || '');
+  const hours = String(env.get('CROSS_PLATFORM_AVOID_HOURS') || '')
+    .split(',')
+    .map((val) => Number(val))
+    .filter((val) => Number.isFinite(val));
+  const hour = new Date().getHours();
+  return { hours, hour, active: hours.includes(hour) };
+}
+
 function getConsistencyHotspotHours() {
   const buckets = buildConsistencyHeatmapSeries();
   return buckets
@@ -1873,10 +1889,7 @@ function maybeAutoApplyAvoidHours() {
 
 function maybeToggleCrossPlatformAutoExecute() {
   const env = parseEnv(envEditor.value || '');
-  const avoidHours = String(env.get('CROSS_PLATFORM_AVOID_HOURS') || '')
-    .split(',')
-    .map((val) => Number(val))
-    .filter((val) => Number.isFinite(val));
+  const { hours: avoidHours, hour, active } = getAvoidHourState();
   if (!avoidHours.length) {
     if (autoDisabledCrossPlatform) {
       let text = envEditor.value || '';
@@ -1893,8 +1906,7 @@ function maybeToggleCrossPlatformAutoExecute() {
     }
     return;
   }
-  const hour = new Date().getHours();
-  if (avoidHours.includes(hour)) {
+  if (active) {
     const enabled = String(env.get('CROSS_PLATFORM_AUTO_EXECUTE') || '').toLowerCase() === 'true';
     if (enabled) {
       let text = envEditor.value || '';
@@ -1921,6 +1933,30 @@ function maybeToggleCrossPlatformAutoExecute() {
     }
     pushLog({ type: 'system', level: 'system', message: '避开时段结束，已恢复跨平台自动执行（请保存生效）。' });
     autoDisabledCrossPlatform = false;
+  }
+}
+
+function notifyAvoidHourStatus() {
+  const { hours, hour, active } = getAvoidHourState();
+  if (!hours.length) {
+    lastAvoidNoticeActive = false;
+    lastAvoidNoticeHour = -1;
+    return;
+  }
+  if (active && (!lastAvoidNoticeActive || lastAvoidNoticeHour !== hour)) {
+    pushLog({
+      type: 'system',
+      level: 'system',
+      message: `避开时段 ${String(hour).padStart(2, '0')}:00 生效，跨平台将暂停。`,
+    });
+    lastAvoidNoticeActive = true;
+    lastAvoidNoticeHour = hour;
+    return;
+  }
+  if (!active && lastAvoidNoticeActive) {
+    pushLog({ type: 'system', level: 'system', message: '避开时段结束，跨平台可恢复执行。' });
+    lastAvoidNoticeActive = false;
+    lastAvoidNoticeHour = -1;
   }
 }
 
@@ -2476,24 +2512,14 @@ function updateAlerts({
   if (consistencyFailureRate >= 25) {
     warnings.push('一致性失败率偏高，建议启用一致性模板或提升一致性阈值。');
   }
-  const avoidHours = String(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_AVOID_HOURS') || '')
-    .split(',')
-    .map((val) => Number(val))
-    .filter((val) => Number.isFinite(val));
-  if (avoidHours.length > 0) {
-    const hour = new Date().getHours();
-    if (avoidHours.includes(hour)) {
-      warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
-    }
+  const { hours: avoidHours, hour, active: avoidActive } = getAvoidHourState();
+  if (avoidHours.length > 0 && avoidActive) {
+    warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
   }
   const autoEnabled = String(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_AVOID_HOURS_AUTO') || '').toLowerCase() === 'true';
   if (autoEnabled) {
-    warnings.push('避开时段自动联动跨平台自动执行。');
+    warnings.push('已启用自动避开热区时段，并联动跨平台自动执行。');
   }
-    const autoAvoid = String(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_AVOID_HOURS_AUTO') || '').toLowerCase() === 'true';
-    if (autoAvoid) {
-      warnings.push('已启用自动避开热区时段，将自动更新避开小时。');
-    }
   if (cooldownUntil && cooldownUntil > Date.now()) {
     warnings.push('全局冷却中，执行将自动暂停。');
   }
@@ -2672,6 +2698,10 @@ async function loadMetrics() {
       const until = Number(data.consistencyRateLimitUntil || 0);
       metricConsistencyRateLimit.textContent = until && until > Date.now() ? `限速中：${formatTimestamp(until)}` : '未触发';
     }
+    if (metricConsistencyCooldown) {
+      const until = Number(data.consistencyCooldownUntil || 0);
+      metricConsistencyCooldown.textContent = until && until > Date.now() ? `冷却中：${formatTimestamp(until)}` : '未触发';
+    }
     if (metricConsistencyTighten) {
       const factor = Number(data.consistencyTemplateFactor || 1);
       metricConsistencyTighten.textContent = formatNumber(factor, 2);
@@ -2689,7 +2719,13 @@ async function loadMetrics() {
     if (consistencyBadge) {
       const templateUntil = Number(data.consistencyTemplateActiveUntil || 0);
       const overrideUntil = Number(data.consistencyOverrideUntil || 0);
-      if (templateUntil > Date.now()) {
+      const cooldownUntil = Number(data.consistencyCooldownUntil || 0);
+      const { hour, active: avoidActive } = getAvoidHourState();
+      if (avoidActive) {
+        setConsistencyBadge(`避开时段 ${String(hour).padStart(2, '0')}:00`, 'error');
+      } else if (cooldownUntil > Date.now()) {
+        setConsistencyBadge('一致性冷却', 'error');
+      } else if (templateUntil > Date.now()) {
         setConsistencyBadge('一致性模板中', 'warn');
       } else if (overrideUntil > Date.now()) {
         setConsistencyBadge('一致性保守中', 'warn');
@@ -2783,6 +2819,7 @@ async function loadMetrics() {
     renderConsistencyHotspots();
     maybeAutoApplyAvoidHours();
     maybeToggleCrossPlatformAutoExecute();
+    notifyAvoidHourStatus();
     const changedCount = renderFixSummary();
     const hasPendingSave = !!(saveEnvButton && saveEnvButton.classList.contains('attention'));
     if (changedCount === 0) {

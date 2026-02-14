@@ -275,6 +275,9 @@ export interface Config {
   crossPlatformAvoidHours?: number[];
   crossPlatformAvoidHoursAuto?: boolean;
   crossPlatformAvoidHoursDecayDays?: number;
+  crossPlatformConsistencyCooldownMs?: number;
+  crossPlatformConsistencyCooldownThreshold?: number;
+  crossPlatformConsistencyCooldownWindowMs?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
