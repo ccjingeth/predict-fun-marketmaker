@@ -285,6 +285,13 @@ export function loadConfig(): Config {
     crossPlatformConsistencyFailWindowMs: parseInt(process.env.CROSS_PLATFORM_CONSISTENCY_FAIL_WINDOW_MS || '0'),
     crossPlatformConsistencyDegradeMs: parseInt(process.env.CROSS_PLATFORM_CONSISTENCY_DEGRADE_MS || '0'),
     crossPlatformConsistencyPenalty: parseFloat(process.env.CROSS_PLATFORM_CONSISTENCY_PENALTY || '0'),
+    crossPlatformConsistencyUseDegradeProfile: process.env.CROSS_PLATFORM_CONSISTENCY_USE_DEGRADE_PROFILE !== 'false',
+    crossPlatformConsistencyOrderType: (process.env.CROSS_PLATFORM_CONSISTENCY_ORDER_TYPE || '').toUpperCase() as
+      | 'FOK'
+      | 'FAK'
+      | 'GTC'
+      | 'GTD'
+      | '',
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),

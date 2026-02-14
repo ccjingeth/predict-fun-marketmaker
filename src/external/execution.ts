@@ -665,6 +665,7 @@ export class CrossPlatformExecutionRouter {
   private consistencyFailures = { count: 0, windowStart: 0 };
   private lastConsistencyFailureAt = 0;
   private lastConsistencyFailureReason = '';
+  private consistencyOverrideUntil = 0;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -1652,7 +1653,7 @@ export class CrossPlatformExecutionRouter {
   }
 
   private isDegraded(): boolean {
-    return this.degradedUntil > Date.now();
+    return this.degradedUntil > Date.now() || this.consistencyOverrideUntil > Date.now();
   }
 
   private updateDegradeOnSuccess(): void {
@@ -1688,7 +1689,9 @@ export class CrossPlatformExecutionRouter {
   private resolveExecutionOptions(attempt: number): PlatformExecuteOptions {
     const fallback = this.getOrderTypeFallback(attempt);
     const degradeOrderType = this.isDegraded() ? this.config.crossPlatformDegradeOrderType : undefined;
-    const orderType = degradeOrderType || fallback || this.config.crossPlatformOrderType;
+    const consistencyOrderType =
+      this.consistencyOverrideUntil > Date.now() ? this.config.crossPlatformConsistencyOrderType : undefined;
+    const orderType = consistencyOrderType || degradeOrderType || fallback || this.config.crossPlatformOrderType;
 
     let useFok = this.config.crossPlatformUseFok;
     if (this.isDegraded() && this.config.crossPlatformDegradeUseFok !== undefined) {
@@ -2162,10 +2165,15 @@ export class CrossPlatformExecutionRouter {
     if (limit > 0 && this.consistencyFailures.count >= limit) {
       const extraMs = Math.max(0, this.config.crossPlatformConsistencyDegradeMs || 0);
       if (extraMs > 0) {
-        this.degradedUntil = Math.max(this.degradedUntil, now + extraMs);
-        this.degradedReason = 'consistency';
-        if (!this.degradedAt) {
-          this.degradedAt = now;
+        const useDegradeProfile = this.config.crossPlatformConsistencyUseDegradeProfile !== false;
+        if (useDegradeProfile) {
+          this.degradedUntil = Math.max(this.degradedUntil, now + extraMs);
+          this.degradedReason = 'consistency';
+          if (!this.degradedAt) {
+            this.degradedAt = now;
+          }
+        } else {
+          this.consistencyOverrideUntil = Math.max(this.consistencyOverrideUntil, now + extraMs);
         }
       }
       const penalty = Math.max(0, this.config.crossPlatformConsistencyPenalty || 0);
@@ -2328,6 +2336,7 @@ export class CrossPlatformExecutionRouter {
       globalCooldownUntil: this.globalCooldownUntil,
       lastConsistencyFailureAt: this.lastConsistencyFailureAt,
       lastConsistencyFailureReason: this.lastConsistencyFailureReason,
+      consistencyOverrideUntil: this.consistencyOverrideUntil,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2346,6 +2355,7 @@ export class CrossPlatformExecutionRouter {
       globalCooldownUntil: this.globalCooldownUntil,
       lastConsistencyFailureAt: this.lastConsistencyFailureAt,
       lastConsistencyFailureReason: this.lastConsistencyFailureReason,
+      consistencyOverrideUntil: this.consistencyOverrideUntil,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2437,6 +2447,9 @@ export class CrossPlatformExecutionRouter {
     }
     if (typeof data?.lastConsistencyFailureReason === 'string') {
       this.lastConsistencyFailureReason = data.lastConsistencyFailureReason;
+    }
+    if (Number.isFinite(data?.consistencyOverrideUntil)) {
+      this.consistencyOverrideUntil = Number(data.consistencyOverrideUntil);
     }
 
     const platformSet = new Set<ExternalPlatform>(['Predict', 'Polymarket', 'Opinion']);

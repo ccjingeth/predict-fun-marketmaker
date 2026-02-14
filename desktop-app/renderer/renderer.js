@@ -32,6 +32,7 @@ const metricQuality = document.getElementById('metricQuality');
 const metricDepthPenalty = document.getElementById('metricDepthPenalty');
 const metricConsistencyFail = document.getElementById('metricConsistencyFail');
 const metricConsistencyReason = document.getElementById('metricConsistencyReason');
+const metricConsistencyOverride = document.getElementById('metricConsistencyOverride');
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -205,6 +206,8 @@ const FIX_HINTS = {
   CROSS_PLATFORM_CONSISTENCY_FAIL_WINDOW_MS: '一致性失败统计窗口（毫秒）',
   CROSS_PLATFORM_CONSISTENCY_DEGRADE_MS: '一致性失败降级时长（毫秒）',
   CROSS_PLATFORM_CONSISTENCY_PENALTY: '一致性失败惩罚系数',
+  CROSS_PLATFORM_CONSISTENCY_USE_DEGRADE_PROFILE: '一致性失败强制降级配置',
+  CROSS_PLATFORM_CONSISTENCY_ORDER_TYPE: '一致性失败强制订单类型',
   CROSS_PLATFORM_QUALITY_PROFIT_MULT: '质量分收益门槛放大系数',
   CROSS_PLATFORM_QUALITY_PROFIT_MAX: '质量分收益门槛放大上限',
   CROSS_PLATFORM_MAX_VWAP_LEVELS: '跨平台 VWAP 档位数上限',
@@ -1988,6 +1991,9 @@ function renderAdvice(items, metricsSnapshot) {
     if (metricsSnapshot.depthPenalty > 0.2) {
       advice.push('腿间深度不对称加重：建议提高深度比软阈值或缩小下单量。');
     }
+    if (metricsSnapshot.consistencyOverrideActive) {
+      advice.push('一致性降级已触发：建议降低并发或提升稳定性阈值。');
+    }
   }
   if (failureCounts.size > 0) {
     const categories = new Map();
@@ -2300,6 +2306,10 @@ async function loadMetrics() {
       const reason = typeof data.lastConsistencyFailureReason === 'string' ? data.lastConsistencyFailureReason : '';
       metricConsistencyReason.textContent = reason || '暂无记录';
     }
+    if (metricConsistencyOverride) {
+      const until = Number(data.consistencyOverrideUntil || 0);
+      metricConsistencyOverride.textContent = until && until > Date.now() ? `保守中：${formatTimestamp(until)}` : '未触发';
+    }
     setMetricText(metricChunkFactor, formatNumber(data.chunkFactor, 2));
     setMetricText(metricChunkDelay, formatMs(data.chunkDelayMs));
     setMetricText(metricAlerts, `${metrics.postTradeAlerts || 0}`);
@@ -2346,6 +2356,9 @@ async function loadMetrics() {
       postFailRate,
       driftLimit: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS') || 80),
       minQuality: Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_GLOBAL_MIN_QUALITY') || 0.7),
+      consistencyOverrideActive:
+        Number(data.consistencyOverrideUntil || 0) > Date.now() ||
+        Number(data.consistencyOverrideUntil || 0) > Number(data.globalCooldownUntil || 0),
     };
     updateAlerts(metricsSnapshot);
     renderAdvice(null, metricsSnapshot);

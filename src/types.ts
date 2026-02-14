@@ -250,6 +250,8 @@ export interface Config {
   crossPlatformConsistencyFailWindowMs?: number;
   crossPlatformConsistencyDegradeMs?: number;
   crossPlatformConsistencyPenalty?: number;
+  crossPlatformConsistencyUseDegradeProfile?: boolean;
+  crossPlatformConsistencyOrderType?: 'FOK' | 'FAK' | 'GTC' | 'GTD' | '';
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
