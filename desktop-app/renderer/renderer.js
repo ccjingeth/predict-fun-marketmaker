@@ -777,6 +777,15 @@ function renderMetricFailureAdvice(reasons, metricsSnapshot) {
       action.textContent = '一键勾选';
       action.addEventListener('click', () => autoSelectFixes(recommendedCategories));
       row.appendChild(action);
+      const apply = document.createElement('button');
+      apply.className = 'btn ghost';
+      apply.textContent = '一键应用';
+      apply.addEventListener('click', () => {
+        autoSelectFixes(recommendedCategories);
+        applySelectedFixes(true);
+        pushLog({ type: 'system', level: 'system', message: '已按建议一键应用修复参数（请保存生效）' });
+      });
+      row.appendChild(apply);
     }
     metricFailureAdviceList.appendChild(row);
   });
@@ -1169,6 +1178,7 @@ function autoSelectFixes(categories) {
   });
   const env = parseEnv(envEditor.value || '');
   const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
+  let selected = 0;
   checkboxes.forEach((cb) => {
     const key = cb.dataset.key;
     const value = cb.dataset.value;
@@ -1177,8 +1187,17 @@ function autoSelectFixes(categories) {
     const normalizedCurrent = current === undefined ? '' : String(current).trim();
     const normalizedValue = String(value || '').trim();
     const isMismatch = normalizedCurrent !== normalizedValue;
-    cb.checked = recommendedKeys.has(key) && isMismatch;
+    const shouldSelect = recommendedKeys.has(key) && isMismatch;
+    cb.checked = shouldSelect;
+    if (shouldSelect) selected += 1;
   });
+  if (healthExportHint) {
+    if (selected > 0) {
+      healthExportHint.textContent = `已按建议勾选 ${selected} 项，可直接应用。`;
+    } else {
+      healthExportHint.textContent = '建议项均已匹配，无需再次勾选。';
+    }
+  }
 }
 
 function renderFixSelect(entries, env) {
@@ -1287,7 +1306,7 @@ function renderFixSelect(entries, env) {
   });
 }
 
-function applySelectedFixes() {
+function applySelectedFixes(quiet = false) {
   if (!fixSelectList) return;
   const checkboxes = Array.from(fixSelectList.querySelectorAll('input[type="checkbox"]'));
   let text = envEditor.value || '';
@@ -1302,13 +1321,17 @@ function applySelectedFixes() {
     diffs.push(`${key}: ${current ?? '未设置'} → ${value}`);
   });
   if (diffs.length === 0) {
-    pushLog({ type: 'system', level: 'system', message: '没有选中任何修复建议' });
+    if (!quiet) {
+      pushLog({ type: 'system', level: 'system', message: '没有选中任何修复建议' });
+    }
     return;
   }
-  const confirmed = confirm(`即将应用以下修改：\n${diffs.join('\n')}\n\n确认应用吗？`);
-  if (!confirmed) {
-    pushLog({ type: 'system', level: 'system', message: '已取消修复建议应用' });
-    return;
+  if (!quiet) {
+    const confirmed = confirm(`即将应用以下修改：\n${diffs.join('\n')}\n\n确认应用吗？`);
+    if (!confirmed) {
+      pushLog({ type: 'system', level: 'system', message: '已取消修复建议应用' });
+      return;
+    }
   }
   checkboxes.forEach((cb) => {
     if (!cb.checked) return;
@@ -1322,7 +1345,9 @@ function applySelectedFixes() {
   detectTradingMode(text);
   syncTogglesFromEnv(text);
   updateMetricsPaths();
-  pushLog({ type: 'system', level: 'system', message: `已应用 ${applied} 条修复建议（请保存生效）` });
+  if (!quiet) {
+    pushLog({ type: 'system', level: 'system', message: `已应用 ${applied} 条修复建议（请保存生效）` });
+  }
 }
 
 function buildFixTemplate() {
