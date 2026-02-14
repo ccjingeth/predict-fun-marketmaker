@@ -137,6 +137,8 @@ export interface Config {
   mmDynamicCancelDecayMs?: number;
   mmDynamicCancelMaxBoost?: number;
   mmOnlyPointsMarkets?: boolean;
+  mmPointsMinOnly?: boolean;
+  mmPointsMinMultiplier?: number;
   antiFillBps?: number;
   nearTouchBps?: number;
   cooldownAfterCancelMs?: number;

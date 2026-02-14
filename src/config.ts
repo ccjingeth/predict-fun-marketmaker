@@ -170,6 +170,8 @@ export function loadConfig(): Config {
     mmDynamicCancelDecayMs: parseInt(process.env.MM_DYNAMIC_CANCEL_DECAY_MS || '60000'),
     mmDynamicCancelMaxBoost: parseFloat(process.env.MM_DYNAMIC_CANCEL_MAX_BOOST || '2'),
     mmOnlyPointsMarkets: process.env.MM_ONLY_POINTS_MARKETS === 'true',
+    mmPointsMinOnly: process.env.MM_POINTS_MIN_ONLY === 'true',
+    mmPointsMinMultiplier: parseFloat(process.env.MM_POINTS_MIN_MULTIPLIER || '1'),
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -728,6 +730,9 @@ export function loadConfig(): Config {
   if ((config.mmDynamicCancelMaxBoost ?? 0) < 1) {
     config.mmDynamicCancelMaxBoost = 1;
   }
+  if ((config.mmPointsMinMultiplier ?? 0) < 1) {
+    config.mmPointsMinMultiplier = 1;
+  }
 
   if ((config.mmFillPenaltyBps ?? 0) < 0) {
     config.mmFillPenaltyBps = 0;
@@ -799,6 +804,9 @@ export function printConfig(config: Config): void {
   console.log(`Anti Fill Bps: ${(config.antiFillBps ?? 0) * 100}%`);
   console.log(`Near Touch Bps: ${(config.nearTouchBps ?? 0) * 100}%`);
   console.log(`MM Only Points Markets: ${config.mmOnlyPointsMarkets ? '✅' : '❌'}`);
+  console.log(
+    `MM Points Min Only: ${config.mmPointsMinOnly ? '✅' : '❌'} x${config.mmPointsMinMultiplier ?? 1}`
+  );
   console.log(`Hedge On Fill: ${config.hedgeOnFill ? '✅' : '❌'}`);
   console.log(`Hedge Mode: ${config.hedgeMode}`);
   console.log(`Cross-Platform Enabled: ${config.crossPlatformEnabled ? '✅' : '❌'}`);

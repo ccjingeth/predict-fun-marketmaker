@@ -146,6 +146,8 @@ const FIX_HINTS = {
   MM_FILL_PENALTY_MAX_BPS: '成交惩罚上限',
   MM_FILL_PENALTY_DECAY_MS: '成交惩罚衰减时间',
   MM_ONLY_POINTS_MARKETS: '只做有积分/激励的市场',
+  MM_POINTS_MIN_ONLY: '积分市场只挂最小份额',
+  MM_POINTS_MIN_MULTIPLIER: '积分最小份额倍率',
   ARB_MAX_VWAP_DEVIATION_BPS: 'VWAP 最大允许偏离（bps）',
   ARB_RECHECK_DEVIATION_BPS: '偏离过大时需要二次确认（bps）',
   ARB_MAX_VWAP_LEVELS: '限制 VWAP 使用的档位数',
@@ -1605,6 +1607,8 @@ function applyMmPassiveTemplate() {
       MM_DYNAMIC_CANCEL_MAX_BOOST: '2',
       MM_DYNAMIC_CANCEL_DECAY_MS: '60000',
       MM_ORDER_DEPTH_USAGE: '0.2',
+      MM_POINTS_MIN_ONLY: 'true',
+      MM_POINTS_MIN_MULTIPLIER: '1',
     },
     '做市防吃单模板'
   );

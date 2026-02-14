@@ -1237,6 +1237,15 @@ export class MarketMaker {
       }
     }
 
+    if (market.liquidity_activation?.active && this.config.mmPointsMinOnly && minShares > 0) {
+      const multiplier = Math.max(1, this.config.mmPointsMinMultiplier ?? 1);
+      const cap = Math.max(minShares, Math.floor(minShares * multiplier));
+      shares = Math.min(shares, cap);
+      if (shares < minShares) {
+        shares = minShares;
+      }
+    }
+
     if (depthCap > 0) {
       shares = Math.min(shares, depthCap);
     }

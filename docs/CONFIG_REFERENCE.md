@@ -85,6 +85,8 @@
 - `MM_DYNAMIC_CANCEL_DECAY_MS`：动态撤单敏感度恢复时间。
 - `MM_DYNAMIC_CANCEL_MAX_BOOST`：动态撤单最大提升倍率。
 - `MM_ONLY_POINTS_MARKETS`：只在有积分/做市激励的市场挂单。
+- `MM_POINTS_MIN_ONLY`：只挂积分最低份额（降低被吃单风险）。
+- `MM_POINTS_MIN_MULTIPLIER`：积分最低份额乘数（默认 1）。
 
 ### 做市自适应参数（新增）
 
@@ -335,7 +337,7 @@
 - `CROSS_PLATFORM_METRICS_FLUSH_MS`：指标落盘间隔（毫秒）。
 - `CROSS_PLATFORM_ORDER_TYPE`：跨平台下单类型（FOK / FAK / GTC / GTD）。
 - `CROSS_PLATFORM_ORDER_TYPE_FALLBACK`：失败重试时使用的订单类型序列（逗号分隔）。
-- `CROSS_PLATFORM_FALLBACK_MODE`：失败时降级模式（AUTO / SEQUENTIAL / SINGLE_LEG）。
+- `CROSS_PLATFORM_FALLBACK_MODE`：失败时降级模式（AUTO / SEQUENTIAL / SINGLE_LEG）。AUTO 会在失败/降级时自动切换为顺序或单腿。
 - `CROSS_PLATFORM_BATCH_ORDERS`：Polymarket 批量下单（仅 Polymarket，最多 15）。
 - `CROSS_PLATFORM_BATCH_MAX`：批量下单单次最大腿数（默认 15）。
 - `CROSS_PLATFORM_USE_FOK`：Polymarket 使用 FOK 下单（更安全）。

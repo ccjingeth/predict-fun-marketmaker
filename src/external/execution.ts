@@ -823,7 +823,7 @@ export class CrossPlatformExecutionRouter {
     };
 
     let execOptions = this.resolveExecutionOptions(attempt);
-    const fallbackMode = (this.config.crossPlatformFallbackMode || 'AUTO').toUpperCase();
+    const fallbackMode = this.resolveFallbackMode(attempt);
 
     const tasks: Promise<ExecutionResult>[] = [];
     if (fallbackMode === 'SINGLE_LEG' && attempt > 0) {
@@ -880,6 +880,27 @@ export class CrossPlatformExecutionRouter {
       return bScore - aScore;
     });
     return sorted.slice(0, Math.max(1, maxLegs));
+  }
+
+  private resolveFallbackMode(attempt: number): 'AUTO' | 'SEQUENTIAL' | 'SINGLE_LEG' {
+    const raw = (this.config.crossPlatformFallbackMode || 'AUTO').toUpperCase();
+    if (raw === 'SEQUENTIAL' || raw === 'SINGLE_LEG') {
+      return raw;
+    }
+    if (attempt <= 0) {
+      return 'AUTO';
+    }
+    if (this.isDegraded()) {
+      const minQuality = this.config.crossPlatformGlobalMinQuality ?? 50;
+      if (this.qualityScore < minQuality || attempt > 1) {
+        return 'SINGLE_LEG';
+      }
+      return 'SEQUENTIAL';
+    }
+    if (this.circuitFailures > 0) {
+      return 'SEQUENTIAL';
+    }
+    return 'AUTO';
   }
 
   private legQualityScore(leg: PlatformLeg): number {
