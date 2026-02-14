@@ -826,8 +826,12 @@ export class CrossPlatformExecutionRouter {
     const fallbackMode = this.resolveFallbackMode(attempt);
 
     const tasks: Promise<ExecutionResult>[] = [];
+    const prepared = attempt > 0 ? this.shrinkFallbackLegs(legs, attempt) : legs;
     if (fallbackMode === 'SINGLE_LEG' && attempt > 0) {
-      const bestLegs = this.selectBestLegs(legs, 2);
+      const bestLegs = this.selectBestLegs(
+        prepared,
+        Math.max(1, this.config.crossPlatformSingleLegTopN || 2)
+      );
       const bestGrouped = new Map<ExternalPlatform, PlatformLeg[]>();
       for (const leg of bestLegs) {
         if (!bestGrouped.has(leg.platform)) {
@@ -839,7 +843,14 @@ export class CrossPlatformExecutionRouter {
         tasks.push(runExecution(platform, legsForPlatform, execOptions));
       }
     } else {
-      for (const [platform, legsForPlatform] of grouped.entries()) {
+      const groupedPrepared = new Map<ExternalPlatform, PlatformLeg[]>();
+      for (const leg of prepared) {
+        if (!groupedPrepared.has(leg.platform)) {
+          groupedPrepared.set(leg.platform, []);
+        }
+        groupedPrepared.get(leg.platform)!.push(leg);
+      }
+      for (const [platform, legsForPlatform] of groupedPrepared.entries()) {
         tasks.push(runExecution(platform, legsForPlatform, execOptions));
       }
     }
@@ -901,6 +912,16 @@ export class CrossPlatformExecutionRouter {
       return 'SEQUENTIAL';
     }
     return 'AUTO';
+  }
+
+  private shrinkFallbackLegs(legs: PlatformLeg[], attempt: number): PlatformLeg[] {
+    if (attempt <= 0) {
+      return legs;
+    }
+    const shrink = Math.max(0.05, Math.min(1, this.config.crossPlatformFallbackShrinkFactor ?? 0.7));
+    const minFactor = Math.max(0.05, Math.min(1, this.config.crossPlatformFallbackMinFactor ?? 0.3));
+    const factor = Math.max(minFactor, Math.pow(shrink, attempt));
+    return legs.map((leg) => ({ ...leg, shares: Math.max(1, leg.shares * factor) }));
   }
 
   private legQualityScore(leg: PlatformLeg): number {

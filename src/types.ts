@@ -304,6 +304,9 @@ export interface Config {
   crossPlatformNetRiskAutoTighten?: boolean;
   crossPlatformNetRiskTightenOnFailure?: number;
   crossPlatformNetRiskRelaxOnSuccess?: number;
+  crossPlatformFallbackShrinkFactor?: number;
+  crossPlatformFallbackMinFactor?: number;
+  crossPlatformSingleLegTopN?: number;
   crossPlatformMaxRetries?: number;
   crossPlatformRetryDelayMs?: number;
   crossPlatformCircuitMaxFailures?: number;

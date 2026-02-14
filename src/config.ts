@@ -353,6 +353,9 @@ export function loadConfig(): Config {
     crossPlatformNetRiskAutoTighten: process.env.CROSS_PLATFORM_NET_RISK_AUTO_TIGHTEN !== 'false',
     crossPlatformNetRiskTightenOnFailure: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_TIGHTEN_ON_FAILURE || '0.08'),
     crossPlatformNetRiskRelaxOnSuccess: parseFloat(process.env.CROSS_PLATFORM_NET_RISK_RELAX_ON_SUCCESS || '0.03'),
+    crossPlatformFallbackShrinkFactor: parseFloat(process.env.CROSS_PLATFORM_FALLBACK_SHRINK_FACTOR || '0.7'),
+    crossPlatformFallbackMinFactor: parseFloat(process.env.CROSS_PLATFORM_FALLBACK_MIN_FACTOR || '0.3'),
+    crossPlatformSingleLegTopN: parseInt(process.env.CROSS_PLATFORM_SINGLE_LEG_TOP_N || '2'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -643,6 +646,15 @@ export function loadConfig(): Config {
   }
   if ((config.crossPlatformReasonHedgePenalty ?? 0) < 0) {
     config.crossPlatformReasonHedgePenalty = 0.5;
+  }
+  if ((config.crossPlatformFallbackShrinkFactor ?? 0) <= 0 || (config.crossPlatformFallbackShrinkFactor ?? 0) > 1) {
+    config.crossPlatformFallbackShrinkFactor = 0.7;
+  }
+  if ((config.crossPlatformFallbackMinFactor ?? 0) <= 0 || (config.crossPlatformFallbackMinFactor ?? 0) > 1) {
+    config.crossPlatformFallbackMinFactor = 0.3;
+  }
+  if ((config.crossPlatformSingleLegTopN ?? 0) < 1) {
+    config.crossPlatformSingleLegTopN = 1;
   }
   if ((config.crossPlatformRetryFactorMin ?? 0) <= 0 || (config.crossPlatformRetryFactorMin ?? 0) > 1) {
     config.crossPlatformRetryFactorMin = 0.4;
