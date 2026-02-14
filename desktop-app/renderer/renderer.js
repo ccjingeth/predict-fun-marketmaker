@@ -561,7 +561,11 @@ function classifyFailure(line) {
   if (/insufficient depth|min depth|depth/.test(text)) return '深度不足';
   if (/vwap/.test(text)) return 'VWAP 偏离';
   if (/drift/.test(text)) return '价格漂移';
+  if (/post[- ]?trade|posttrade/.test(text)) return '成交后漂移';
   if (/volatility/.test(text)) return '高波动';
+  if (/preflight|sanity check|validation/.test(text)) return '预检失败';
+  if (/hedge/.test(text)) return '对冲失败';
+  if (/execution|submit|fill failed|order failed/.test(text)) return '执行失败';
   if (/open orders remain/.test(text)) return '未成交订单';
   if (/credentials|api key|private key|jwt/.test(text)) return '权限/密钥';
   if (/circuit breaker/.test(text)) return '熔断触发';
@@ -697,8 +701,13 @@ function renderMetricFailureReasons(reasons) {
     } else {
       hint.textContent = `${value} 次`;
     }
+    const actions = document.createElement('button');
+    actions.className = 'btn ghost';
+    actions.textContent = '一键建议';
+    actions.addEventListener('click', () => copyFailureAdvice(key));
     row.appendChild(label);
     row.appendChild(hint);
+    row.appendChild(actions);
     metricFailureReasons.appendChild(row);
   }
 }
@@ -727,6 +736,33 @@ function getFailureAdvice(line) {
   if (/insufficient depth|insufficient/i.test(line)) {
     hints.push('降低下单量或调低 CROSS_PLATFORM_DEPTH_USAGE');
     hints.push('开启 CROSS_PLATFORM_ADAPTIVE_SIZE=true');
+  }
+  if (/preflight/i.test(line)) {
+    hints.push('提高 CROSS_PLATFORM_STABILITY_INTERVAL_MS 与 CROSS_PLATFORM_STABILITY_SAMPLES');
+    hints.push('提高 CROSS_PLATFORM_MIN_PROFIT_USD 与 CROSS_PLATFORM_MIN_NOTIONAL_USD');
+    hints.push('检查映射表/依赖表是否过期');
+  }
+  if (/post-trade|post trade|drift/i.test(line)) {
+    hints.push('提高 CROSS_PLATFORM_POST_TRADE_DRIFT_BPS 或 CROSS_PLATFORM_STABILITY_BPS');
+    hints.push('降低 CROSS_PLATFORM_DEPTH_USAGE 或启用 CROSS_PLATFORM_ADAPTIVE_SIZE');
+    hints.push('降低 CROSS_PLATFORM_CHUNK_FACTOR_MIN，减小并发冲击');
+  }
+  if (/hedge/i.test(line)) {
+    hints.push('提高 CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD 或 CROSS_PLATFORM_HEDGE_MIN_EDGE');
+    hints.push('提高 CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS 并确认对冲行情源稳定');
+  }
+  if (/execution|timeout|rate limit|429/i.test(line)) {
+    hints.push('提高 CROSS_PLATFORM_RETRY_DELAY_MS，减少并发执行');
+    hints.push('降低 CROSS_PLATFORM_MAX_RETRIES 或延长 CROSS_PLATFORM_ABORT_COOLDOWN_MS');
+    hints.push('启用 CROSS_PLATFORM_ABORT_COOLDOWN_MS 降低频繁重试');
+  }
+  if (/mapping|match/i.test(line)) {
+    hints.push('校验 markets-mapping.json 与依赖映射是否一致');
+    hints.push('开启 CROSS_PLATFORM_USE_MAPPING=true，补充人工映射');
+  }
+  if (/liquidity|slippage/i.test(line)) {
+    hints.push('提高 CROSS_PLATFORM_SLIPPAGE_BPS 或启用自适应滑点');
+    hints.push('降低 CROSS_PLATFORM_DEPTH_USAGE 并提高最小利润阈值');
   }
   if (/VWAP deviates|vwap/i.test(line)) {
     hints.push('增加 CROSS_PLATFORM_SLIPPAGE_BPS 或缩小下单量');
@@ -1056,6 +1092,11 @@ function buildFixTemplate() {
     template.push('CROSS_PLATFORM_ADAPTIVE_SIZE=true');
     template.push('CROSS_PLATFORM_DEPTH_USAGE=0.25');
     template.push('CROSS_PLATFORM_CHUNK_MAX_SHARES=8');
+  } else if (topCategory === '预检失败') {
+    template.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
+    template.push('CROSS_PLATFORM_STABILITY_INTERVAL_MS=160');
+    template.push('CROSS_PLATFORM_MIN_PROFIT_USD=0.02');
+    template.push('CROSS_PLATFORM_MIN_NOTIONAL_USD=10');
   } else if (topCategory === 'VWAP 偏离') {
     template.push('CROSS_PLATFORM_SLIPPAGE_BPS=250');
     template.push('CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true');
@@ -1064,9 +1105,21 @@ function buildFixTemplate() {
     template.push('CROSS_PLATFORM_PRICE_DRIFT_BPS=40');
     template.push('CROSS_PLATFORM_RECHECK_MS=300');
     template.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
+  } else if (topCategory === '成交后漂移') {
+    template.push('CROSS_PLATFORM_POST_TRADE_DRIFT_BPS=60');
+    template.push('CROSS_PLATFORM_STABILITY_BPS=25');
+    template.push('CROSS_PLATFORM_CHUNK_FACTOR_MIN=0.6');
+  } else if (topCategory === '执行失败') {
+    template.push('CROSS_PLATFORM_MAX_RETRIES=1');
+    template.push('CROSS_PLATFORM_RETRY_DELAY_MS=500');
+    template.push('CROSS_PLATFORM_ABORT_COOLDOWN_MS=120000');
   } else if (topCategory === '高波动') {
     template.push('CROSS_PLATFORM_VOLATILITY_BPS=80');
     template.push('CROSS_PLATFORM_STABILITY_SAMPLES=3');
+  } else if (topCategory === '对冲失败') {
+    template.push('CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD=0.02');
+    template.push('CROSS_PLATFORM_HEDGE_MIN_EDGE=0.01');
+    template.push('CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS=450');
   } else if (topCategory === '未成交订单') {
     template.push('CROSS_PLATFORM_POST_FILL_CHECK=true');
     template.push('CROSS_PLATFORM_USE_FOK=true');
