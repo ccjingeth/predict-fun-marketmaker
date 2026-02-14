@@ -107,6 +107,7 @@ MAX_ORDERS_PER_MARKET=2        # 每市场挂单上限
 MAX_DAILY_LOSS=200             # 当日亏损熔断
 ANTI_FILL_BPS=0.002            # 防吃单阈值
 NEAR_TOUCH_BPS=0.0015          # 接近吃单提前撤单
+MM_TOUCH_BUFFER_BPS=0.0008     # 盘口保护缓冲（被动挂单，越大越不容易成交）
 COOLDOWN_AFTER_CANCEL_MS=4000  # 撤单冷却
 VOLATILITY_PAUSE_BPS=0.01      # 波动暂停阈值
 VOLATILITY_LOOKBACK_MS=10000   # 波动检测窗口

@@ -112,6 +112,7 @@ export function loadConfig(): Config {
     mmAsymSpreadMinFactor: parseFloat(process.env.MM_ASYM_SPREAD_MIN_FACTOR || '0.6'),
     mmAsymSpreadMaxFactor: parseFloat(process.env.MM_ASYM_SPREAD_MAX_FACTOR || '1.8'),
     mmQuoteOffsetBps: parseFloat(process.env.MM_QUOTE_OFFSET_BPS || '0'),
+    mmTouchBufferBps: parseFloat(process.env.MM_TOUCH_BUFFER_BPS || '0'),
     mmAggressiveMoveBps: parseFloat(process.env.MM_AGGRESSIVE_MOVE_BPS || '0.002'),
     mmAggressiveMoveWindowMs: parseInt(process.env.MM_AGGRESSIVE_MOVE_WINDOW_MS || '1500'),
     mmVolatilityHighBps: parseFloat(process.env.MM_VOLATILITY_HIGH_BPS || '0.006'),

@@ -1042,8 +1042,17 @@ export class MarketMaker {
     let ask = fairPrice * (1 + half * askFactor + quoteOffset);
 
     // Keep maker-friendly but never cross top of book
-    bid = Math.max(bid, bestBid + MarketMaker.MIN_TICK);
-    ask = Math.min(ask, bestAsk - MarketMaker.MIN_TICK);
+    const touchBufferBps = Math.max(0, this.config.mmTouchBufferBps ?? 0);
+    if (touchBufferBps > 0) {
+      const buffer = touchBufferBps / 10000;
+      const maxBid = bestBid * (1 - buffer);
+      const minAsk = bestAsk * (1 + buffer);
+      bid = Math.min(bid, maxBid);
+      ask = Math.max(ask, minAsk);
+    } else {
+      bid = Math.max(bid, bestBid + MarketMaker.MIN_TICK);
+      ask = Math.min(ask, bestAsk - MarketMaker.MIN_TICK);
+    }
 
     bid = this.clamp(bid, 0.01, 0.99);
     ask = this.clamp(ask, 0.01, 0.99);

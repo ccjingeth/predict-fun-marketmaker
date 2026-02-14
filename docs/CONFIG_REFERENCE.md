@@ -35,6 +35,7 @@
 - `MM_ASYM_SPREAD_MIN_FACTOR`：非对称价差最小因子（<1 收紧）。
 - `MM_ASYM_SPREAD_MAX_FACTOR`：非对称价差最大因子（>1 放宽）。
 - `MM_QUOTE_OFFSET_BPS`：额外偏离做市中间价的 bps 偏移。
+- `MM_TOUCH_BUFFER_BPS`：挂单离盘口最优价的最小缓冲（bps，>0 会更“被动”以防吃单）。
 - `MM_AGGRESSIVE_MOVE_BPS`：盘口快速逼近时的撤单阈值。
 - `MM_AGGRESSIVE_MOVE_WINDOW_MS`：快速逼近检测窗口。
 - `MM_VOLATILITY_HIGH_BPS`：高波动阈值（触发“波动档”）。

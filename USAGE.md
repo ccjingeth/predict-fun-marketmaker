@@ -96,6 +96,15 @@ WS 健康日志：
 - `ARB_WS_HEALTH_LOG_MS=0`（>0 启用，单位毫秒）
 开启后 `npm run start:arb` 会进入持续监控模式
 
+## 做市防吃单建议（新手必看）
+
+如果你希望“挂单赚积分但尽量不成交”，建议打开以下保护：
+
+- `MM_TOUCH_BUFFER_BPS=0.0008`：挂单远离盘口最优价，越大越不容易成交。
+- `MM_SOFT_CANCEL_BPS=0.0012` / `MM_HARD_CANCEL_BPS=0.0025`：提前撤单避免被吃。
+- `MM_HOLD_NEAR_TOUCH_MS=800`：接近成交时短暂观察，避免误撤。
+- `MM_DYNAMIC_CANCEL_ON_FILL=true`：一旦成交，提高撤单敏感度。
+
 ## 小额实盘演练（推荐）
 
 用于验证下单与撤单链路是否正常：
