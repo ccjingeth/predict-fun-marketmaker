@@ -668,7 +668,7 @@ function renderFailureTopN() {
   });
 }
 
-function renderMetricFailureAdvice(reasons) {
+function renderMetricFailureAdvice(reasons, metricsSnapshot) {
   if (!metricFailureAdviceList) return;
   metricFailureAdviceList.innerHTML = '';
   if (!reasons) {
@@ -688,13 +688,25 @@ function renderMetricFailureAdvice(reasons) {
   }
   const sorted = entries.sort((a, b) => Number(b[1]) - Number(a[1]));
   const top = sorted.slice(0, 2);
-  const lines = [];
+  const hints = [];
   top.forEach(([key]) => {
-    const hints = getFailureAdvice(String(key));
-    if (hints.length) {
-      lines.push(...hints.slice(0, 2));
+    const rows = getFailureAdvice(String(key));
+    if (rows.length) {
+      hints.push(...rows);
     }
   });
+  if (metricsSnapshot) {
+    if (metricsSnapshot.failureRate > 40) {
+      hints.push('建议应用修复模板：提高稳定窗口、降低深度使用、缩小执行量');
+    }
+    if (metricsSnapshot.preflightFailRate > 20) {
+      hints.push('建议应用修复模板：提高稳定采样、提高最小利润门槛');
+    }
+    if (metricsSnapshot.postFailRate > 10) {
+      hints.push('建议应用修复模板：降低分块系数、提高漂移阈值');
+    }
+  }
+  const lines = Array.from(new Set(hints)).slice(0, 5);
   if (!lines.length) {
     const item = document.createElement('div');
     item.className = 'alert-item';
@@ -702,7 +714,7 @@ function renderMetricFailureAdvice(reasons) {
     metricFailureAdviceList.appendChild(item);
     return;
   }
-  lines.slice(0, 4).forEach((text) => {
+  lines.forEach((text) => {
     const row = document.createElement('div');
     row.className = 'alert-item';
     row.textContent = text;
@@ -1640,7 +1652,6 @@ async function loadMetrics() {
     setMetricText(metricLastError, metrics.lastError || '无');
     setMetricText(metricUpdatedAt, formatTimestamp(updatedAt));
     renderMetricFailureReasons(metrics.failureReasons);
-    renderMetricFailureAdvice(metrics.failureReasons);
 
     if (updatedAt && successRate >= 0) {
       const last = metricsHistory[metricsHistory.length - 1];
@@ -1685,6 +1696,7 @@ async function loadMetrics() {
       last.riskScore = risk.score;
     }
     updateCharts();
+    renderMetricFailureAdvice(metrics.failureReasons, metricsSnapshot);
 
     const flushMs = Number(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_METRICS_FLUSH_MS') || 30000);
     if (metricsAgeMs > flushMs * 2) {
