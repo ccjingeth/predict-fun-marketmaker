@@ -276,6 +276,9 @@ export interface Config {
   crossPlatformAvoidHoursAuto?: boolean;
   crossPlatformAvoidHoursDecayDays?: number;
   crossPlatformAvoidHoursMode?: 'BLOCK' | 'TEMPLATE';
+  crossPlatformAvoidHoursModeAuto?: boolean;
+  crossPlatformAvoidHoursBlockScore?: number;
+  crossPlatformAvoidHoursTemplateScore?: number;
   crossPlatformConsistencyCooldownMs?: number;
   crossPlatformConsistencyCooldownThreshold?: number;
   crossPlatformConsistencyCooldownWindowMs?: number;
@@ -451,6 +454,7 @@ export interface Config {
   arbWsRealtimeMaxBatch?: number;
   arbWsRealtimeQuiet?: boolean;
   arbRequireWs?: boolean;
+  arbWsHealthScoreMin?: number;
   arbMaxErrors?: number;
   arbErrorWindowMs?: number;
   arbPauseOnErrorMs?: number;

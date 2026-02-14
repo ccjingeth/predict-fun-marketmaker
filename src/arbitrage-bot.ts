@@ -960,6 +960,14 @@ class ArbitrageBot {
       this.applyWsHealthPenalty(now);
       return false;
     }
+    const minScore = Math.max(0, this.config.arbWsHealthScoreMin || 0);
+    if (minScore > 0) {
+      const score = this.calcWsHealthScore(status.lastMessageAt, maxAge, now);
+      if (score < minScore) {
+        this.applyWsHealthPenalty(now);
+        return false;
+      }
+    }
     return true;
   }
 
@@ -978,6 +986,8 @@ class ArbitrageBot {
     }
     const maxAge = this.getWsHealthMaxAge();
     const status = this.crossAggregator.getWsStatus();
+    const minScore = Math.max(0, this.config.arbWsHealthScoreMin || 0);
+    const scores: number[] = [];
     if (this.config.polymarketWsEnabled) {
       const poly = status.polymarket;
       if (!poly || !poly.connected) {
@@ -987,6 +997,9 @@ class ArbitrageBot {
       if (maxAge > 0 && now - poly.lastMessageAt > maxAge) {
         this.applyWsHealthPenalty(now);
         return false;
+      }
+      if (minScore > 0) {
+        scores.push(this.calcWsHealthScore(poly.lastMessageAt, maxAge, now));
       }
     }
     if (this.config.opinionWsEnabled) {
@@ -999,8 +1012,27 @@ class ArbitrageBot {
         this.applyWsHealthPenalty(now);
         return false;
       }
+      if (minScore > 0) {
+        scores.push(this.calcWsHealthScore(opn.lastMessageAt, maxAge, now));
+      }
+    }
+    if (minScore > 0 && scores.length > 0) {
+      const score = Math.min(...scores);
+      if (score < minScore) {
+        this.applyWsHealthPenalty(now);
+        return false;
+      }
     }
     return true;
+  }
+
+  private calcWsHealthScore(lastMessageAt: number, maxAge: number, now: number): number {
+    if (!maxAge || maxAge <= 0) {
+      return 100;
+    }
+    const age = Math.max(0, now - lastMessageAt);
+    const ratio = Math.min(1, age / maxAge);
+    return Math.max(0, Math.round((1 - ratio) * 100));
   }
 
   private getWsHealthMaxAge(): number {
@@ -1053,21 +1085,24 @@ class ArbitrageBot {
 
     if (this.predictWs) {
       const status = this.predictWs.getStatus();
+      const score = this.calcWsHealthScore(status.lastMessageAt, this.getWsHealthMaxAge(), now);
       lines.push(
-        `PredictWS connected=${status.connected} subscribed=${status.subscribed} cache=${status.cacheSize} last=${this.formatAge(now, status.lastMessageAt)} msgs=${status.messageCount}`
+        `PredictWS connected=${status.connected} subscribed=${status.subscribed} cache=${status.cacheSize} last=${this.formatAge(now, status.lastMessageAt)} msgs=${status.messageCount} score=${score}`
       );
     }
 
     if (this.crossAggregator) {
       const status = this.crossAggregator.getWsStatus();
       if (status.polymarket) {
+        const score = this.calcWsHealthScore(status.polymarket.lastMessageAt, this.getWsHealthMaxAge(), now);
         lines.push(
-          `PolymarketWS connected=${status.polymarket.connected} subscribed=${status.polymarket.subscribed} cache=${status.polymarket.cacheSize} last=${this.formatAge(now, status.polymarket.lastMessageAt)} msgs=${status.polymarket.messageCount}`
+          `PolymarketWS connected=${status.polymarket.connected} subscribed=${status.polymarket.subscribed} cache=${status.polymarket.cacheSize} last=${this.formatAge(now, status.polymarket.lastMessageAt)} msgs=${status.polymarket.messageCount} score=${score}`
         );
       }
       if (status.opinion) {
+        const score = this.calcWsHealthScore(status.opinion.lastMessageAt, this.getWsHealthMaxAge(), now);
         lines.push(
-          `OpinionWS connected=${status.opinion.connected} subscribed=${status.opinion.subscribed} cache=${status.opinion.cacheSize} last=${this.formatAge(now, status.opinion.lastMessageAt)} msgs=${status.opinion.messageCount}`
+          `OpinionWS connected=${status.opinion.connected} subscribed=${status.opinion.subscribed} cache=${status.opinion.cacheSize} last=${this.formatAge(now, status.opinion.lastMessageAt)} msgs=${status.opinion.messageCount} score=${score}`
         );
       }
     }

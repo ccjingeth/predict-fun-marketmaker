@@ -193,6 +193,7 @@
 - `ARB_RECHECK_DEVIATION_BPS`：VWAP 偏离超过该阈值时要求二次确认（bps）。
 - `ARB_MAX_VWAP_LEVELS`：VWAP 计算允许使用的最大档位数（避免吃深度）。
 - `ARB_REQUIRE_WS`：仅使用 WS 数据（不回落 REST）。
+- `ARB_WS_HEALTH_SCORE_MIN`：WS 健康评分最低门槛（0-100），低于该值会跳过执行。
 
 ## 5. 自动执行熔断
 
@@ -376,6 +377,9 @@
 - `CROSS_PLATFORM_AVOID_HOURS_AUTO`：自动避开一致性热区（true/false）。
 - `CROSS_PLATFORM_AVOID_HOURS_DECAY_DAYS`：避开时段衰减天数（自动避开时使用）。
 - `CROSS_PLATFORM_AVOID_HOURS_MODE`：避开时段策略（`BLOCK`=暂停执行，`TEMPLATE`=启用一致性模板但不强制暂停）。
+- `CROSS_PLATFORM_AVOID_HOURS_MODE_AUTO`：自动根据热区强度切换避开策略（true/false）。
+- `CROSS_PLATFORM_AVOID_HOURS_BLOCK_SCORE`：热区强度达到该值后自动切换为 BLOCK。
+- `CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_SCORE`：热区强度达到该值后自动切换为 TEMPLATE。
 - `CROSS_PLATFORM_CONSISTENCY_COOLDOWN_MS`：一致性失败触发全局冷却时长（毫秒）。
 - `CROSS_PLATFORM_CONSISTENCY_COOLDOWN_THRESHOLD`：一致性失败冷却阈值次数。
 - `CROSS_PLATFORM_CONSISTENCY_COOLDOWN_WINDOW_MS`：一致性冷却统计窗口（毫秒）。

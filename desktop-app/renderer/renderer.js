@@ -38,6 +38,7 @@ const metricConsistencyRateLimit = document.getElementById('metricConsistencyRat
 const metricConsistencyTighten = document.getElementById('metricConsistencyTighten');
 const metricAvoidHours = document.getElementById('metricAvoidHours');
 const metricAvoidMode = document.getElementById('metricAvoidMode');
+const metricAvoidSeverity = document.getElementById('metricAvoidSeverity');
 const metricAvoidDecay = document.getElementById('metricAvoidDecay');
 const metricConsistencyCooldown = document.getElementById('metricConsistencyCooldown');
 let lastAutoAvoidHours = '';
@@ -1857,6 +1858,30 @@ function getConsistencyHotspotHours() {
     .map((entry) => entry.hour);
 }
 
+function getConsistencyHotspotScore() {
+  const buckets = buildConsistencyHeatmapSeries();
+  if (!buckets.length) return 0;
+  return buckets.reduce((max, value) => (value > max ? value : max), 0);
+}
+
+function getAvoidModeThresholds() {
+  const env = parseEnv(envEditor.value || '');
+  const blockScore = Number(env.get('CROSS_PLATFORM_AVOID_HOURS_BLOCK_SCORE') || 3);
+  const templateScore = Number(env.get('CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_SCORE') || 1.5);
+  return {
+    blockScore: Number.isFinite(blockScore) && blockScore > 0 ? blockScore : 3,
+    templateScore: Number.isFinite(templateScore) && templateScore > 0 ? templateScore : 1.5,
+  };
+}
+
+function getAvoidSeverity(score) {
+  if (!score || score <= 0) return { level: '无', tone: 'ok' };
+  const { blockScore, templateScore } = getAvoidModeThresholds();
+  if (score >= blockScore) return { level: '高', tone: 'error' };
+  if (score >= templateScore) return { level: '中', tone: 'warn' };
+  return { level: '低', tone: 'ok' };
+}
+
 function applyConsistencyAvoidHours() {
   const hours = getConsistencyHotspotHours();
   if (!hours.length) {
@@ -1875,9 +1900,16 @@ function maybeAutoApplyAvoidHours() {
   if (!hours.length) return;
   const value = hours.map((h) => String(h).padStart(2, '0')).join(',');
   const current = String(env.get('CROSS_PLATFORM_AVOID_HOURS') || '');
+  const modeAuto = String(env.get('CROSS_PLATFORM_AVOID_HOURS_MODE_AUTO') || '').toLowerCase() === 'true';
+  const score = getConsistencyHotspotScore();
+  const severity = getAvoidSeverity(score);
+  const desiredMode = severity.level === '高' ? 'BLOCK' : 'TEMPLATE';
   if (value && value !== current && value !== lastAutoAvoidHours) {
     let text = envEditor.value || '';
     text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS', value);
+    if (modeAuto) {
+      text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS_MODE', desiredMode);
+    }
     envEditor.value = text;
     detectTradingMode(text);
     syncTogglesFromEnv(text);
@@ -1886,7 +1918,27 @@ function maybeAutoApplyAvoidHours() {
       saveEnvButton.classList.add('attention');
     }
     lastAutoAvoidHours = value;
-    pushLog({ type: 'system', level: 'system', message: `自动避开热区时段：${value}（请保存生效）` });
+    const modeMsg = modeAuto ? ` | 模式=${desiredMode}` : '';
+    pushLog({ type: 'system', level: 'system', message: `自动避开热区时段：${value}${modeMsg}（请保存生效）` });
+  }
+  if (modeAuto && value === current) {
+    const currentMode = String(env.get('CROSS_PLATFORM_AVOID_HOURS_MODE') || 'BLOCK').toUpperCase();
+    if (currentMode !== desiredMode) {
+      let text = envEditor.value || '';
+      text = setEnvValue(text, 'CROSS_PLATFORM_AVOID_HOURS_MODE', desiredMode);
+      envEditor.value = text;
+      detectTradingMode(text);
+      syncTogglesFromEnv(text);
+      updateMetricsPaths();
+      if (saveEnvButton) {
+        saveEnvButton.classList.add('attention');
+      }
+      pushLog({
+        type: 'system',
+        level: 'system',
+        message: `热区强度变化，避开策略切换为 ${desiredMode}（请保存生效）`,
+      });
+    }
   }
 }
 
@@ -2486,6 +2538,7 @@ function updateAlerts({
   consistencyCooldownActive,
   consistencyRateLimitActive,
   avoidActive,
+  avoidMode,
   cooldownUntil,
   metricsAgeMs,
 }) {
@@ -2525,9 +2578,10 @@ function updateAlerts({
   if (consistencyFailureRate >= 25) {
     warnings.push('一致性失败率偏高，建议启用一致性模板或提升一致性阈值。');
   }
-  const { hours: avoidHours, hour, mode: avoidMode } = getAvoidHourState();
+  const { hours: avoidHours, hour, mode: stateAvoidMode } = getAvoidHourState();
+  const mode = avoidMode || stateAvoidMode;
   if (avoidHours.length > 0 && avoidActive) {
-    if (avoidMode === 'TEMPLATE') {
+    if (mode === 'TEMPLATE') {
       warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），已启用一致性模板。`);
     } else {
       warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
@@ -2574,6 +2628,7 @@ function computeRiskLevel({
   consistencyCooldownActive,
   consistencyRateLimitActive,
   avoidActive,
+  avoidMode,
   metricsAgeMs,
 }) {
   let score = 0;
@@ -2658,7 +2713,8 @@ function computeRiskLevel({
     breakdown.push({ label: `一致性限速 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
   }
   if (avoidActive) {
-    const weighted = 35 * riskWeights.consistency;
+    const base = avoidMode === 'TEMPLATE' ? 15 : 35;
+    const weighted = base * riskWeights.consistency;
     score += weighted;
     breakdown.push({ label: `避开时段 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
   }
@@ -2754,6 +2810,12 @@ async function loadMetrics() {
     if (metricAvoidMode) {
       metricAvoidMode.textContent = avoidState.mode === 'TEMPLATE' ? '模板保守' : 'BLOCK';
     }
+    if (metricAvoidSeverity) {
+      const score = getConsistencyHotspotScore();
+      const severity = getAvoidSeverity(score);
+      const suffix = score > 0 ? ` (${formatNumber(score, 2)})` : '';
+      metricAvoidSeverity.textContent = `${severity.level}${suffix}`;
+    }
     if (metricAvoidDecay) {
       const env = parseEnv(envEditor.value || '');
       const decay = Number(env.get('CROSS_PLATFORM_AVOID_HOURS_DECAY_DAYS') || 3);
@@ -2842,6 +2904,7 @@ async function loadMetrics() {
       consistencyCooldownActive,
       consistencyRateLimitActive,
       avoidActive,
+      avoidMode: avoidState.mode,
       consistencyFailureRate,
       consistencyHigh: consistencyFailureRate >= 25,
     };

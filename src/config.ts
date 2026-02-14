@@ -359,6 +359,9 @@ export function loadConfig(): Config {
     crossPlatformAvoidHoursAuto: process.env.CROSS_PLATFORM_AVOID_HOURS_AUTO === 'true',
     crossPlatformAvoidHoursDecayDays: parseFloat(process.env.CROSS_PLATFORM_AVOID_HOURS_DECAY_DAYS || '3'),
     crossPlatformAvoidHoursMode: crossPlatformAvoidMode,
+    crossPlatformAvoidHoursModeAuto: process.env.CROSS_PLATFORM_AVOID_HOURS_MODE_AUTO === 'true',
+    crossPlatformAvoidHoursBlockScore: parseFloat(process.env.CROSS_PLATFORM_AVOID_HOURS_BLOCK_SCORE || '3'),
+    crossPlatformAvoidHoursTemplateScore: parseFloat(process.env.CROSS_PLATFORM_AVOID_HOURS_TEMPLATE_SCORE || '1.5'),
     crossPlatformConsistencyCooldownMs: parseInt(process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_MS || '0'),
     crossPlatformConsistencyCooldownThreshold: parseInt(
       process.env.CROSS_PLATFORM_CONSISTENCY_COOLDOWN_THRESHOLD || '0'
@@ -554,6 +557,7 @@ export function loadConfig(): Config {
     arbWsRealtimeMaxBatch: parseInt(process.env.ARB_WS_REALTIME_MAX_BATCH || '40'),
     arbWsRealtimeQuiet: process.env.ARB_WS_REALTIME_QUIET === 'true',
     arbRequireWs: process.env.ARB_REQUIRE_WS === 'true',
+    arbWsHealthScoreMin: parseFloat(process.env.ARB_WS_HEALTH_SCORE_MIN || '0'),
     arbMaxErrors: parseInt(process.env.ARB_MAX_ERRORS || '5'),
     arbErrorWindowMs: parseInt(process.env.ARB_ERROR_WINDOW_MS || '60000'),
     arbPauseOnErrorMs: parseInt(process.env.ARB_PAUSE_ON_ERROR_MS || '60000'),
