@@ -284,6 +284,26 @@ export function loadConfig(): Config {
     crossPlatformPostTradeHedgeSlippageBps: parseInt(
       process.env.CROSS_PLATFORM_POST_TRADE_HEDGE_SLIPPAGE_BPS || '0'
     ),
+    crossPlatformPostTradeNetHedge: process.env.CROSS_PLATFORM_POST_TRADE_NET_HEDGE === 'true',
+    crossPlatformPostTradeNetHedgeMinShares: parseFloat(
+      process.env.CROSS_PLATFORM_POST_TRADE_NET_HEDGE_MIN_SHARES || '0'
+    ),
+    crossPlatformPostTradeNetHedgeMaxShares: parseFloat(
+      process.env.CROSS_PLATFORM_POST_TRADE_NET_HEDGE_MAX_SHARES || '0'
+    ),
+    crossPlatformPostTradeNetHedgeForce: process.env.CROSS_PLATFORM_POST_TRADE_NET_HEDGE_FORCE === 'true',
+    crossPlatformPostTradeNetHedgePredictOnly:
+      process.env.CROSS_PLATFORM_POST_TRADE_NET_HEDGE_PREDICT_ONLY === 'true',
+    crossPlatformPostTradeNetHedgeSlippageBps: parseInt(
+      process.env.CROSS_PLATFORM_POST_TRADE_NET_HEDGE_SLIPPAGE_BPS || '0'
+    ),
+    crossPlatformDegradeMs: parseInt(process.env.CROSS_PLATFORM_DEGRADE_MS || '0'),
+    crossPlatformDegradeSlippageBps: parseInt(process.env.CROSS_PLATFORM_DEGRADE_SLIPPAGE_BPS || '0'),
+    crossPlatformDegradeStabilityBps: parseInt(process.env.CROSS_PLATFORM_DEGRADE_STABILITY_BPS || '0'),
+    crossPlatformDegradeChunkFactor: parseFloat(process.env.CROSS_PLATFORM_DEGRADE_CHUNK_FACTOR || '0'),
+    crossPlatformDegradeChunkDelayMs: parseInt(process.env.CROSS_PLATFORM_DEGRADE_CHUNK_DELAY_MS || '0'),
+    crossPlatformDegradeForceSequential: process.env.CROSS_PLATFORM_DEGRADE_FORCE_SEQUENTIAL === 'true',
+    crossPlatformDegradeOnPostTrade: process.env.CROSS_PLATFORM_DEGRADE_ON_POST_TRADE === 'true',
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),

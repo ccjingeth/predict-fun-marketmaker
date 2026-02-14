@@ -643,6 +643,8 @@ export class CrossPlatformExecutionRouter {
   };
   private lastMetricsLogAt = 0;
   private lastPreflight?: { maxDeviationBps: number; maxDriftBps: number };
+  private degradedUntil = 0;
+  private degradedReason = '';
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -827,7 +829,7 @@ export class CrossPlatformExecutionRouter {
       tasks.push(runExecution(platform, legsForPlatform));
     }
 
-    if (this.config.crossPlatformParallelSubmit !== false) {
+    if (this.shouldParallelSubmit()) {
       const results = await Promise.allSettled(tasks);
       const failed = results.find((result) => result.status === 'rejected');
       if (failed) {
@@ -873,6 +875,7 @@ export class CrossPlatformExecutionRouter {
       }
       const results = await this.executeOnce(chunk);
       await this.postFillCheck(results);
+      await this.hedgeResidualExposure(results);
       const post = await this.postTradeCheck(chunk);
       maxDriftBps = Math.max(maxDriftBps, post.maxDriftBps);
       this.mergeLegs(penalizedLegs, post.penalizedLegs);
@@ -895,13 +898,100 @@ export class CrossPlatformExecutionRouter {
         );
       }
 
-      const delayMs = Math.max(0, this.chunkDelayMs || 0);
+      const delayMs = this.getEffectiveChunkDelayMs();
       if (delayMs > 0 && i < chunks.length - 1) {
         await this.sleep(delayMs);
       }
     }
 
     return { postTrade: { maxDriftBps, penalizedLegs, penalizedTokenIds, spreadPenalizedLegs } };
+  }
+
+  private async hedgeResidualExposure(results: ExecutionResult[]): Promise<void> {
+    if (!this.config.crossPlatformPostTradeNetHedge) {
+      return;
+    }
+    if (!results.length) {
+      return;
+    }
+    const minShares = Math.max(0, this.config.crossPlatformPostTradeNetHedgeMinShares || 0);
+    const maxShares = Math.max(0, this.config.crossPlatformPostTradeNetHedgeMaxShares || 0);
+    const force = this.config.crossPlatformPostTradeNetHedgeForce === true;
+    const slippage =
+      (this.config.crossPlatformPostTradeNetHedgeSlippageBps && this.config.crossPlatformPostTradeNetHedgeSlippageBps > 0)
+        ? this.config.crossPlatformPostTradeNetHedgeSlippageBps
+        : this.config.crossPlatformHedgeSlippageBps || this.getSlippageBps() || 400;
+
+    const netMap = new Map<string, { platform: ExternalPlatform; tokenId: string; shares: number; notional: number }>();
+    for (const result of results) {
+      const platform = result.platform;
+      if (this.config.crossPlatformPostTradeNetHedgePredictOnly && platform !== 'Predict') {
+        continue;
+      }
+      for (const leg of result.legs || []) {
+        if (!leg.tokenId || !Number.isFinite(leg.shares)) {
+          continue;
+        }
+        const signed = leg.side === 'BUY' ? leg.shares : -leg.shares;
+        const key = `${platform}:${leg.tokenId}`;
+        const entry = netMap.get(key) || { platform, tokenId: leg.tokenId, shares: 0, notional: 0 };
+        entry.shares += signed;
+        entry.notional += Math.abs(leg.price) * Math.abs(leg.shares);
+        netMap.set(key, entry);
+      }
+    }
+
+    if (netMap.size === 0) {
+      return;
+    }
+
+    const grouped = new Map<ExternalPlatform, PlatformLeg[]>();
+    for (const entry of netMap.values()) {
+      if (!Number.isFinite(entry.shares) || entry.shares === 0) {
+        continue;
+      }
+      const absShares = Math.abs(entry.shares);
+      if (minShares > 0 && absShares < minShares) {
+        continue;
+      }
+      const cappedShares = maxShares > 0 ? Math.min(absShares, maxShares) : absShares;
+      if (cappedShares <= 0) {
+        continue;
+      }
+      const avgPrice = entry.notional > 0 ? entry.notional / absShares : 0;
+      const side: PlatformLeg['side'] = entry.shares > 0 ? 'BUY' : 'SELL';
+      const leg: PlatformLeg = {
+        platform: entry.platform,
+        tokenId: entry.tokenId,
+        side,
+        price: avgPrice > 0 ? avgPrice : 0.5,
+        shares: cappedShares,
+      };
+      if (!grouped.has(entry.platform)) {
+        grouped.set(entry.platform, []);
+      }
+      grouped.get(entry.platform)!.push(leg);
+    }
+
+    if (!grouped.size) {
+      return;
+    }
+
+    const hedgePromises: Promise<void>[] = [];
+    for (const [platform, legs] of grouped.entries()) {
+      const executor = this.executors.get(platform);
+      if (!executor || !executor.hedgeLegs) {
+        continue;
+      }
+      if (!force && !this.shouldHedgeLegs(legs, this.config.crossPlatformHedgeMinProfitUsd || 0, this.config.crossPlatformHedgeMinEdge || 0, slippage)) {
+        continue;
+      }
+      hedgePromises.push(executor.hedgeLegs(legs, slippage));
+    }
+
+    if (hedgePromises.length > 0) {
+      await Promise.allSettled(hedgePromises);
+    }
   }
 
   private async hedgeOnPostTrade(legs: PlatformLeg[]): Promise<void> {
@@ -956,7 +1046,7 @@ export class CrossPlatformExecutionRouter {
     const baseShares = Math.min(...legs.map((leg) => leg.shares));
     const maxChunkShares = this.config.crossPlatformChunkMaxShares || 0;
     const maxChunkNotional = this.config.crossPlatformChunkMaxNotional || 0;
-    let chunkShares = baseShares * this.chunkFactor;
+    let chunkShares = baseShares * this.getEffectiveChunkFactor();
     if (maxChunkShares > 0) {
       chunkShares = Math.min(chunkShares, maxChunkShares);
     }
@@ -1138,20 +1228,68 @@ export class CrossPlatformExecutionRouter {
   }
 
   private getStabilityBps(): number {
-    return Math.max(0, this.stabilityBpsDynamic || this.resolveDynamicStability());
+    const base = Math.max(0, this.stabilityBpsDynamic || this.resolveDynamicStability());
+    if (this.isDegraded()) {
+      const override = Math.max(0, this.config.crossPlatformDegradeStabilityBps || 0);
+      if (override > 0) {
+        return Math.min(base, override);
+      }
+    }
+    return base;
   }
 
   private getSlippageBps(): number {
     if (this.config.crossPlatformSlippageDynamic === false) {
-      return this.config.crossPlatformSlippageBps || 0;
+      const base = this.config.crossPlatformSlippageBps || 0;
+      if (this.isDegraded()) {
+        const override = Math.max(0, this.config.crossPlatformDegradeSlippageBps || 0);
+        if (override > 0) {
+          return Math.min(base, override);
+        }
+      }
+      return base;
     }
     const floor = Math.max(0, this.config.crossPlatformSlippageFloorBps || 0);
     const ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
     const value = this.slippageBpsDynamic || this.resolveDynamicSlippage();
     if (ceil > 0) {
-      return Math.max(floor, Math.min(ceil, value));
+      const base = Math.max(floor, Math.min(ceil, value));
+      if (this.isDegraded()) {
+        const override = Math.max(0, this.config.crossPlatformDegradeSlippageBps || 0);
+        if (override > 0) {
+          return Math.min(base, override);
+        }
+      }
+      return base;
     }
-    return Math.max(floor, value);
+    const base = Math.max(floor, value);
+    if (this.isDegraded()) {
+      const override = Math.max(0, this.config.crossPlatformDegradeSlippageBps || 0);
+      if (override > 0) {
+        return Math.min(base, override);
+      }
+    }
+    return base;
+  }
+
+  private getEffectiveChunkFactor(): number {
+    let factor = this.chunkFactor;
+    if (this.isDegraded()) {
+      const degrade = Math.max(0, this.config.crossPlatformDegradeChunkFactor || 0);
+      if (degrade > 0) {
+        factor *= degrade;
+      }
+    }
+    return Math.max(0.05, factor);
+  }
+
+  private getEffectiveChunkDelayMs(): number {
+    const base = Math.max(0, this.chunkDelayMs || 0);
+    if (this.isDegraded()) {
+      const extra = Math.max(0, this.config.crossPlatformDegradeChunkDelayMs || 0);
+      return base + extra;
+    }
+    return base;
   }
 
   private assertCircuitHealthy(): void {
@@ -1180,6 +1318,7 @@ export class CrossPlatformExecutionRouter {
   private onFailure(): void {
     this.circuitFailures += 1;
     this.applyFailurePause();
+    this.applyDegrade('failure');
   }
 
   private onSuccess(): void {
@@ -1187,6 +1326,30 @@ export class CrossPlatformExecutionRouter {
     this.circuitFailures = 0;
     this.circuitOpenedAt = 0;
     this.resetFailurePause();
+  }
+
+  private applyDegrade(reason: string): void {
+    const durationMs = Math.max(0, this.config.crossPlatformDegradeMs || 0);
+    if (!durationMs) {
+      return;
+    }
+    const now = Date.now();
+    this.degradedUntil = Math.max(this.degradedUntil, now + durationMs);
+    this.degradedReason = reason;
+  }
+
+  private isDegraded(): boolean {
+    return this.degradedUntil > Date.now();
+  }
+
+  private shouldParallelSubmit(): boolean {
+    if (this.config.crossPlatformParallelSubmit === false) {
+      return false;
+    }
+    if (this.isDegraded() && this.config.crossPlatformDegradeForceSequential) {
+      return false;
+    }
+    return true;
   }
 
   private applyFailurePause(): void {
@@ -2307,6 +2470,9 @@ export class CrossPlatformExecutionRouter {
 
     if (penalizedLegs.length > 0) {
       console.warn(`[CrossExec] post-trade drift exceeded ${threshold} bps on ${penalizedLegs.length} legs`);
+      if (this.config.crossPlatformDegradeOnPostTrade) {
+        this.applyDegrade('post-trade drift');
+      }
     }
 
     if (spreadPenalizedLegs.length > 0 && (spreadThreshold > 0 || vwapThreshold > 0)) {
