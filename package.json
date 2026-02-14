@@ -25,8 +25,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@polymarket/clob-client": "^1.0.1",
-    "@polymarket/order-utils": "^1.2.15",
+    "@polymarket/clob-client": "^5.2.3",
+    "@polymarket/order-utils": "^3.0.1",
     "@predictdotfun/sdk": "^1.0.0",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",
