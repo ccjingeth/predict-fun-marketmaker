@@ -346,6 +346,10 @@ canvas {
   padding: 10px;
 }
 
+.metric.full .alert-item.ok {
+  background: rgba(81, 209, 182, 0.08);
+}
+
 .metric.full .alert-item {
   background: rgba(17, 21, 38, 0.9);
 }
