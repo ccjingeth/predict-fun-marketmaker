@@ -39,6 +39,7 @@ const metricConsistencyTighten = document.getElementById('metricConsistencyTight
 const metricAvoidHours = document.getElementById('metricAvoidHours');
 const metricAvoidDecay = document.getElementById('metricAvoidDecay');
 let lastAutoAvoidHours = '';
+let autoDisabledCrossPlatform = false;
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -1870,6 +1871,59 @@ function maybeAutoApplyAvoidHours() {
   }
 }
 
+function maybeToggleCrossPlatformAutoExecute() {
+  const env = parseEnv(envEditor.value || '');
+  const avoidHours = String(env.get('CROSS_PLATFORM_AVOID_HOURS') || '')
+    .split(',')
+    .map((val) => Number(val))
+    .filter((val) => Number.isFinite(val));
+  if (!avoidHours.length) {
+    if (autoDisabledCrossPlatform) {
+      let text = envEditor.value || '';
+      text = setEnvValue(text, 'CROSS_PLATFORM_AUTO_EXECUTE', 'true');
+      envEditor.value = text;
+      detectTradingMode(text);
+      syncTogglesFromEnv(text);
+      updateMetricsPaths();
+      if (saveEnvButton) {
+        saveEnvButton.classList.add('attention');
+      }
+      pushLog({ type: 'system', level: 'system', message: '避开时段解除，已恢复跨平台自动执行（请保存生效）。' });
+      autoDisabledCrossPlatform = false;
+    }
+    return;
+  }
+  const hour = new Date().getHours();
+  if (avoidHours.includes(hour)) {
+    const enabled = String(env.get('CROSS_PLATFORM_AUTO_EXECUTE') || '').toLowerCase() === 'true';
+    if (enabled) {
+      let text = envEditor.value || '';
+      text = setEnvValue(text, 'CROSS_PLATFORM_AUTO_EXECUTE', 'false');
+      envEditor.value = text;
+      detectTradingMode(text);
+      syncTogglesFromEnv(text);
+      updateMetricsPaths();
+      if (saveEnvButton) {
+        saveEnvButton.classList.add('attention');
+      }
+      pushLog({ type: 'system', level: 'system', message: `避开时段 ${String(hour).padStart(2, '0')}:00，已暂停跨平台自动执行（请保存生效）。` });
+      autoDisabledCrossPlatform = true;
+    }
+  } else if (autoDisabledCrossPlatform) {
+    let text = envEditor.value || '';
+    text = setEnvValue(text, 'CROSS_PLATFORM_AUTO_EXECUTE', 'true');
+    envEditor.value = text;
+    detectTradingMode(text);
+    syncTogglesFromEnv(text);
+    updateMetricsPaths();
+    if (saveEnvButton) {
+      saveEnvButton.classList.add('attention');
+    }
+    pushLog({ type: 'system', level: 'system', message: '避开时段结束，已恢复跨平台自动执行（请保存生效）。' });
+    autoDisabledCrossPlatform = false;
+  }
+}
+
 function buildFixTemplate() {
   const categories = new Map();
   for (const [line, count] of failureCounts.entries()) {
@@ -2426,12 +2480,16 @@ function updateAlerts({
     .split(',')
     .map((val) => Number(val))
     .filter((val) => Number.isFinite(val));
-    if (avoidHours.length > 0) {
-      const hour = new Date().getHours();
-      if (avoidHours.includes(hour)) {
-        warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
-      }
+  if (avoidHours.length > 0) {
+    const hour = new Date().getHours();
+    if (avoidHours.includes(hour)) {
+      warnings.push(`当前处于避开时段（${String(hour).padStart(2, '0')}:00），跨平台将暂停。`);
     }
+  }
+  const autoEnabled = String(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_AVOID_HOURS_AUTO') || '').toLowerCase() === 'true';
+  if (autoEnabled) {
+    warnings.push('避开时段自动联动跨平台自动执行。');
+  }
     const autoAvoid = String(parseEnv(envEditor.value || '').get('CROSS_PLATFORM_AVOID_HOURS_AUTO') || '').toLowerCase() === 'true';
     if (autoAvoid) {
       warnings.push('已启用自动避开热区时段，将自动更新避开小时。');
@@ -2724,6 +2782,7 @@ async function loadMetrics() {
     renderConsistencyFailures();
     renderConsistencyHotspots();
     maybeAutoApplyAvoidHours();
+    maybeToggleCrossPlatformAutoExecute();
     const changedCount = renderFixSummary();
     const hasPendingSave = !!(saveEnvButton && saveEnvButton.classList.contains('attention'));
     if (changedCount === 0) {
