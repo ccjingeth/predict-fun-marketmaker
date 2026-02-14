@@ -164,6 +164,10 @@ body::after {
   flex-wrap: wrap;
 }
 
+.button-row + .button-row {
+  margin-top: 10px;
+}
+
 .btn {
   border: none;
   cursor: pointer;

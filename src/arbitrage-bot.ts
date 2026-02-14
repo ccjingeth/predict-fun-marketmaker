@@ -443,7 +443,9 @@ class ArbitrageBot {
       undefined,
       this.config.arbDepthUsage || 0.6,
       this.config.arbMinNotionalUsd || 0,
-      this.config.arbMinProfitUsd || 0
+      this.config.arbMinProfitUsd || 0,
+      this.config.arbMaxVwapDeviationBps || 0,
+      this.config.arbRecheckDeviationBps || 60
     );
     const refreshed = detector.scanMarkets([yesMarket, noMarket], orderbooks);
     if (refreshed.length === 0) {
@@ -475,6 +477,8 @@ class ArbitrageBot {
       depthUsage: this.config.arbDepthUsage || 0.6,
       minNotionalUsd: this.config.arbMinNotionalUsd || 0,
       minProfitUsd: this.config.arbMinProfitUsd || 0,
+      maxVwapDeviationBps: this.config.arbMaxVwapDeviationBps || 0,
+      recheckDeviationBps: this.config.arbRecheckDeviationBps || 60,
     });
     const refreshed = detector.scanMarkets(group, orderbooks);
     if (refreshed.length === 0) {

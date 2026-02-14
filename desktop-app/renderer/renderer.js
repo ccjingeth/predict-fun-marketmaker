@@ -13,6 +13,8 @@ const tradingMode = document.getElementById('tradingMode');
 const statusMM = document.getElementById('statusMM');
 const statusArb = document.getElementById('statusArb');
 const toggleInputs = Array.from(document.querySelectorAll('.toggle input[data-env]'));
+const applyMmPassiveBtn = document.getElementById('applyMmPassive');
+const applyArbSafeBtn = document.getElementById('applyArbSafe');
 const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
 const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
 const metricsStatus = document.getElementById('metricsStatus');
@@ -1524,6 +1526,60 @@ function applySelectedFixes(quiet = false) {
   }
 }
 
+function applyTemplate(updates, label) {
+  let text = envEditor.value || '';
+  Object.entries(updates).forEach(([key, value]) => {
+    text = setEnvValue(text, key, value);
+  });
+  envEditor.value = text;
+  detectTradingMode(text);
+  syncTogglesFromEnv(text);
+  updateMetricsPaths();
+  updateFixPreview();
+  if (saveEnvButton) {
+    saveEnvButton.classList.add('attention');
+  }
+  if (healthExportHint) {
+    healthExportHint.textContent = `${label} 已应用，请点击“保存配置”生效。`;
+  }
+  pushLog({ type: 'system', level: 'system', message: `${label} 已应用（请保存生效）` });
+}
+
+function applyMmPassiveTemplate() {
+  applyTemplate(
+    {
+      MM_TOUCH_BUFFER_BPS: '0.0008',
+      MM_FILL_RISK_SPREAD_BPS: '0.0015',
+      MM_SOFT_CANCEL_BPS: '0.0012',
+      MM_HARD_CANCEL_BPS: '0.0025',
+      MM_HOLD_NEAR_TOUCH_MS: '800',
+      MM_DYNAMIC_CANCEL_ON_FILL: 'true',
+      MM_DYNAMIC_CANCEL_BOOST: '0.5',
+      MM_DYNAMIC_CANCEL_MAX_BOOST: '2',
+      MM_DYNAMIC_CANCEL_DECAY_MS: '60000',
+      MM_ORDER_DEPTH_USAGE: '0.2',
+    },
+    '做市防吃单模板'
+  );
+}
+
+function applyArbSafeTemplate() {
+  applyTemplate(
+    {
+      ARB_PREFLIGHT_ENABLED: 'true',
+      ARB_REQUIRE_WS: 'true',
+      ARB_MAX_VWAP_DEVIATION_BPS: '200',
+      ARB_RECHECK_DEVIATION_BPS: '60',
+      ARB_STABILITY_REQUIRED: 'true',
+      ARB_STABILITY_MIN_COUNT: '2',
+      ARB_STABILITY_WINDOW_MS: '2000',
+      ARB_MIN_PROFIT_USD: '0.05',
+      ARB_DEPTH_USAGE: '0.5',
+    },
+    '套利稳健模板'
+  );
+}
+
 function buildFixTemplate() {
   const categories = new Map();
   for (const [line, count] of failureCounts.entries()) {
@@ -2325,6 +2381,12 @@ downgradeSafeBtn.addEventListener('click', () => applyDowngradeProfile('safe'));
 downgradeUltraBtn.addEventListener('click', () => applyDowngradeProfile('ultra'));
 applyFixTemplateBtn.addEventListener('click', applyFixTemplate);
 refreshMmMetrics.addEventListener('click', loadMmMetrics);
+if (applyMmPassiveBtn) {
+  applyMmPassiveBtn.addEventListener('click', applyMmPassiveTemplate);
+}
+if (applyArbSafeBtn) {
+  applyArbSafeBtn.addEventListener('click', applyArbSafeTemplate);
+}
 
 init().catch((err) => {
   pushLog({ type: 'system', level: 'stderr', message: err?.message || '初始化失败' });
