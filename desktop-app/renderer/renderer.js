@@ -1394,7 +1394,8 @@ function renderFixSelect(entries, env) {
   fixSelectList.appendChild(toolRow);
   entries.forEach((entry) => {
     const row = document.createElement('div');
-    row.className = 'health-item';
+    const isRecommended = recommendedKeys.has(entry.key);
+    row.className = `health-item${isRecommended ? ' related' : ''}`;
 
     const checkboxWrap = document.createElement('label');
     checkboxWrap.className = 'checkbox';
@@ -1416,9 +1417,10 @@ function renderFixSelect(entries, env) {
     const isSame = normalizedCurrent === normalizedValue;
     checkbox.checked = !isSame;
     const description = FIX_HINTS[entry.key] ? `｜${FIX_HINTS[entry.key]}` : '';
+    const tag = isRecommended ? '（推荐）' : '';
     hint.textContent = isSame
-      ? `当前: ${current ?? '未设置'}（已匹配）${description}`
-      : `当前: ${current ?? '未设置'} → 建议: ${entry.value}${description}`;
+      ? `当前: ${current ?? '未设置'}（已匹配）${tag}${description}`
+      : `当前: ${current ?? '未设置'} → 建议: ${entry.value}${tag}${description}`;
 
     row.appendChild(checkboxWrap);
     row.appendChild(hint);
