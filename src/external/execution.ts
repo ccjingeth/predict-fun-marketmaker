@@ -2327,7 +2327,10 @@ export class CrossPlatformExecutionRouter {
       }
       this.checkVolatility(leg, book);
 
-      const minDepthUsd = Math.max(0, this.config.crossPlatformLegMinDepthUsd || 0);
+      let minDepthUsd = Math.max(0, this.config.crossPlatformLegMinDepthUsd || 0);
+      if (this.circuitFailures > 0 || this.isDegraded()) {
+        minDepthUsd += Math.max(0, this.config.crossPlatformFailureLegMinDepthUsdAdd || 0);
+      }
       if (minDepthUsd > 0) {
         const levels = leg.side === 'BUY' ? book.asks : book.bids;
         const maxLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
@@ -2359,7 +2362,13 @@ export class CrossPlatformExecutionRouter {
       if (!vwap) {
         throw new Error(`Preflight failed: insufficient depth for ${leg.platform}:${leg.tokenId}`);
       }
-      const maxLevels = this.config.crossPlatformMaxVwapLevels ?? 0;
+      let maxLevels = this.config.crossPlatformMaxVwapLevels ?? 0;
+      if ((this.circuitFailures > 0 || this.isDegraded()) && maxLevels > 0) {
+        const cut = Math.max(0, this.config.crossPlatformFailureMaxVwapLevelsCut || 0);
+        if (cut > 0) {
+          maxLevels = Math.max(1, maxLevels - cut);
+        }
+      }
       if (maxLevels > 0 && vwap.levelsUsed > maxLevels) {
         throw new Error(
           `Preflight failed: VWAP depth ${vwap.levelsUsed} levels (max ${maxLevels}) for ${leg.platform}:${leg.tokenId}`

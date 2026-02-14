@@ -362,6 +362,8 @@ export function loadConfig(): Config {
     crossPlatformFailureStabilitySamplesAdd: parseInt(process.env.CROSS_PLATFORM_FAILURE_STABILITY_SAMPLES_ADD || '0'),
     crossPlatformFailureStabilityIntervalAddMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_STABILITY_INTERVAL_ADD_MS || '0'),
     crossPlatformFailureVwapDeviationBps: parseInt(process.env.CROSS_PLATFORM_FAILURE_VWAP_DEVIATION_BPS || '0'),
+    crossPlatformFailureLegMinDepthUsdAdd: parseFloat(process.env.CROSS_PLATFORM_FAILURE_LEG_MIN_DEPTH_USD_ADD || '0'),
+    crossPlatformFailureMaxVwapLevelsCut: parseInt(process.env.CROSS_PLATFORM_FAILURE_MAX_VWAP_LEVELS_CUT || '0'),
     crossPlatformMaxRetries: parseInt(process.env.CROSS_PLATFORM_MAX_RETRIES || '1'),
     crossPlatformRetryDelayMs: parseInt(process.env.CROSS_PLATFORM_RETRY_DELAY_MS || '300'),
     crossPlatformCircuitMaxFailures: parseInt(process.env.CROSS_PLATFORM_CIRCUIT_MAX_FAILURES || '3'),
@@ -730,6 +732,12 @@ export function loadConfig(): Config {
   }
   if ((config.crossPlatformFailureVwapDeviationBps ?? 0) < 0) {
     config.crossPlatformFailureVwapDeviationBps = 0;
+  }
+  if ((config.crossPlatformFailureLegMinDepthUsdAdd ?? 0) < 0) {
+    config.crossPlatformFailureLegMinDepthUsdAdd = 0;
+  }
+  if ((config.crossPlatformFailureMaxVwapLevelsCut ?? 0) < 0) {
+    config.crossPlatformFailureMaxVwapLevelsCut = 0;
   }
   if ((config.crossPlatformFailureChunkDelayBumpMs ?? 0) < 0) {
     config.crossPlatformFailureChunkDelayBumpMs = 0;
