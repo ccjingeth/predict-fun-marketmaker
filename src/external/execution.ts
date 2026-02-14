@@ -614,6 +614,7 @@ export class CrossPlatformExecutionRouter {
   private platformFailures = new Map<ExternalPlatform, { count: number; windowStart: number; cooldownUntil: number }>();
   private blockedTokens = new Map<string, number>();
   private blockedPlatforms = new Map<ExternalPlatform, number>();
+  private legMarketQuality = new Map<string, number>();
   private globalCooldownUntil = 0;
   private failurePauseUntil = 0;
   private failurePauseMs = 0;
@@ -660,6 +661,7 @@ export class CrossPlatformExecutionRouter {
   private degradedAt = 0;
   private degradedSuccesses = 0;
   private netRiskTightenFactor = 1;
+  private depthRatioPenalty = 0;
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -959,7 +961,9 @@ export class CrossPlatformExecutionRouter {
     const price = Number.isFinite(leg.price) ? leg.price : 0;
     const size = Number.isFinite(leg.shares) ? leg.shares : 0;
     const liquidityScore = Math.min(1, (price * size) / 50);
-    return tokenScore * 0.6 + platformScore * 0.3 + liquidityScore * 10;
+    const legKey = `${leg.platform}:${leg.tokenId}:${leg.side}`;
+    const marketQuality = Math.max(0.1, Math.min(1, this.legMarketQuality.get(legKey) ?? 1));
+    return (tokenScore * 0.6 + platformScore * 0.3 + liquidityScore * 10) * marketQuality;
   }
 
   private groupQualityScore(legs: PlatformLeg[]): number {
@@ -1594,6 +1598,7 @@ export class CrossPlatformExecutionRouter {
     this.applyFailurePause();
     this.applyDegrade('failure');
     this.tightenNetRiskBudget();
+    this.adjustDepthRatioPenalty(false);
   }
 
   private onSuccess(): void {
@@ -1603,6 +1608,7 @@ export class CrossPlatformExecutionRouter {
     this.resetFailurePause();
     this.updateDegradeOnSuccess();
     this.relaxNetRiskBudget();
+    this.adjustDepthRatioPenalty(true);
   }
 
   private tightenNetRiskBudget(): void {
@@ -2067,6 +2073,26 @@ export class CrossPlatformExecutionRouter {
     }
   }
 
+  private adjustDepthRatioPenalty(success: boolean): void {
+    const up = Math.max(0, this.config.crossPlatformDepthRatioPenaltyUp ?? 0.08);
+    const down = Math.max(0, this.config.crossPlatformDepthRatioPenaltyDown ?? 0.04);
+    const maxPenalty = Math.max(0, this.config.crossPlatformDepthRatioPenaltyMax ?? 0.5);
+    if (success) {
+      this.depthRatioPenalty = Math.max(0, this.depthRatioPenalty - down);
+    } else {
+      this.depthRatioPenalty = Math.min(maxPenalty, this.depthRatioPenalty + up);
+    }
+  }
+
+  private getDepthRatioPenaltyFactor(): number {
+    return 1 + Math.max(0, this.depthRatioPenalty);
+  }
+
+  private getDepthRatioShrinkFloorFactor(): number {
+    const penalty = Math.max(0, this.depthRatioPenalty);
+    return Math.max(0.05, 1 - penalty * 0.5);
+  }
+
   private applyQualityPenalty(multiplier: number): void {
     if (this.config.crossPlatformAutoTune === false) {
       return;
@@ -2204,6 +2230,7 @@ export class CrossPlatformExecutionRouter {
         `preflight=${this.metrics.emaPreflightMs.toFixed(0)}ms exec=${this.metrics.emaExecMs.toFixed(0)}ms ` +
         `total=${this.metrics.emaTotalMs.toFixed(0)}ms postDrift=${this.metrics.emaPostTradeDriftBps.toFixed(1)}bps ` +
         `alerts=${this.metrics.postTradeAlerts} softBlocks=${this.metrics.softBlocks} quality=${this.qualityScore.toFixed(2)} ` +
+        `depthPenalty=${this.depthRatioPenalty.toFixed(2)} ` +
         `failures=preflight:${reasons.preflight} exec:${reasons.execution} post:${reasons.postTrade} hedge:${reasons.hedge} ` +
         `lastError=${this.metrics.lastError || 'none'}`
     );
@@ -2251,6 +2278,7 @@ export class CrossPlatformExecutionRouter {
       ts: Date.now(),
       metrics: { ...this.metrics },
       qualityScore: this.qualityScore,
+      depthRatioPenalty: this.depthRatioPenalty,
       chunkFactor: this.chunkFactor,
       chunkDelayMs: this.chunkDelayMs,
       globalCooldownUntil: this.globalCooldownUntil,
@@ -2266,6 +2294,7 @@ export class CrossPlatformExecutionRouter {
       version: 1,
       ts: Date.now(),
       qualityScore: this.qualityScore,
+      depthRatioPenalty: this.depthRatioPenalty,
       chunkFactor: this.chunkFactor,
       chunkDelayMs: this.chunkDelayMs,
       globalCooldownUntil: this.globalCooldownUntil,
@@ -2333,6 +2362,10 @@ export class CrossPlatformExecutionRouter {
     const maxQuality = Math.max(minQuality, this.config.crossPlatformAutoTuneMaxFactor || 1.2);
     if (Number.isFinite(data?.qualityScore)) {
       this.qualityScore = Math.min(maxQuality, Math.max(minQuality, Number(data.qualityScore)));
+    }
+    const maxPenalty = Math.max(0, this.config.crossPlatformDepthRatioPenaltyMax ?? 0.5);
+    if (Number.isFinite(data?.depthRatioPenalty)) {
+      this.depthRatioPenalty = Math.min(maxPenalty, Math.max(0, Number(data.depthRatioPenalty)));
     }
 
     const minChunk = Math.max(0.1, this.config.crossPlatformChunkFactorMin || 0.5);
@@ -2458,10 +2491,15 @@ export class CrossPlatformExecutionRouter {
     const deviationByLeg = new Map<string, number>();
     const driftByLeg = new Map<string, number>();
     const depthByLeg = new Map<string, { depthUsd: number; depthShares: number }>();
+    this.legMarketQuality.clear();
     const extraDeviation =
       this.circuitFailures > 0 || this.isDegraded()
         ? Math.max(0, this.config.crossPlatformFailureVwapDeviationBps || 0)
         : 0;
+    const deviationCap = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor() + extraDeviation);
+    const depthRatioPenaltyFactor = this.getDepthRatioPenaltyFactor();
+    const depthRatioSoftBase = Math.max(0, this.config.crossPlatformLegDepthRatioSoft || 0);
+    const depthRatioSoft = Math.min(1, depthRatioSoftBase * depthRatioPenaltyFactor);
     const checks = legs.map(async (leg) => {
       if (!leg.tokenId || !leg.price || !leg.shares) {
         throw new Error(`Invalid leg for preflight: ${leg.platform}`);
@@ -2595,6 +2633,23 @@ export class CrossPlatformExecutionRouter {
     });
 
     await Promise.all(checks);
+    const depthValues = Array.from(depthByLeg.values())
+      .map((entry) => entry.depthUsd)
+      .filter((val) => Number.isFinite(val) && val > 0);
+    const maxDepthUsd = depthValues.length ? Math.max(...depthValues) : 0;
+    if (maxDepthUsd > 0) {
+      for (const [legKey, depth] of depthByLeg.entries()) {
+        const depthRatio = depth.depthUsd / maxDepthUsd;
+        const depthPenalty =
+          depthRatioSoft > 0
+            ? Math.max(0, Math.min(1, (depthRatioSoft - depthRatio) / depthRatioSoft))
+            : Math.max(0, Math.min(1, 1 - depthRatio));
+        const dev = deviationByLeg.get(legKey) ?? 0;
+        const devPenalty = Math.max(0, Math.min(1, Math.abs(dev) / deviationCap));
+        const quality = Math.max(0, Math.min(1, 1 - (devPenalty * 0.6 + depthPenalty * 0.4)));
+        this.legMarketQuality.set(legKey, quality);
+      }
+    }
     const driftSpreadThreshold = Math.max(
       0,
       (this.config.crossPlatformLegDriftSpreadBps || 0) * this.getAutoTuneFactor()
@@ -2610,7 +2665,7 @@ export class CrossPlatformExecutionRouter {
     }
     const depthRatioMin = Math.max(
       0,
-      Math.min(1, (this.config.crossPlatformLegDepthRatioMin || 0) * this.getAutoTuneFactor())
+      Math.min(1, (this.config.crossPlatformLegDepthRatioMin || 0) * this.getAutoTuneFactor() * depthRatioPenaltyFactor)
     );
     if (depthRatioMin > 0 && depthByLeg.size >= 2) {
       const values = Array.from(depthByLeg.values())
@@ -2851,7 +2906,8 @@ export class CrossPlatformExecutionRouter {
     legs: PlatformLeg[],
     cache: Map<string, Promise<OrderbookSnapshot | null>>
   ): Promise<number | null> {
-    const soft = Math.max(0, Math.min(1, this.config.crossPlatformLegDepthRatioSoft || 0));
+    const baseSoft = Math.max(0, this.config.crossPlatformLegDepthRatioSoft || 0);
+    const soft = Math.max(0, Math.min(1, baseSoft * this.getDepthRatioPenaltyFactor()));
     if (!soft) {
       return null;
     }
@@ -2888,7 +2944,8 @@ export class CrossPlatformExecutionRouter {
     if (ratio >= soft) {
       return 1;
     }
-    const minFactor = Math.max(0.1, Math.min(1, this.config.crossPlatformLegDepthRatioShrinkMinFactor || 0.3));
+    const baseMinFactor = Math.max(0.1, Math.min(1, this.config.crossPlatformLegDepthRatioShrinkMinFactor || 0.3));
+    const minFactor = Math.max(0.05, Math.min(1, baseMinFactor * this.getDepthRatioShrinkFloorFactor()));
     return Math.max(minFactor, ratio / soft);
   }
 

@@ -235,6 +235,9 @@ export interface Config {
   crossPlatformLegDepthRatioMin?: number;
   crossPlatformLegDepthRatioSoft?: number;
   crossPlatformLegDepthRatioShrinkMinFactor?: number;
+  crossPlatformDepthRatioPenaltyUp?: number;
+  crossPlatformDepthRatioPenaltyDown?: number;
+  crossPlatformDepthRatioPenaltyMax?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];
