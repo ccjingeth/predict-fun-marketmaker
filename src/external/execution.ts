@@ -245,6 +245,14 @@ class PolymarketExecutor implements PlatformExecutor {
     }
   }
 
+  private async importClobModule<T = any>(primaryPath: string, fallbackPath: string): Promise<T> {
+    try {
+      return (await import(primaryPath)) as T;
+    } catch {
+      return (await import(fallbackPath)) as T;
+    }
+  }
+
   async execute(legs: PlatformLeg[], options?: PlatformExecuteOptions): Promise<ExecutionResult> {
     await this.ensureApiCreds();
     if (!this.apiCreds) {
@@ -344,8 +352,8 @@ class PolymarketExecutor implements PlatformExecutor {
     clientAny.creds = creds;
 
     const [{ createL2Headers }, { orderToJson }] = await Promise.all([
-      import('@polymarket/clob-client/dist/headers/index.js'),
-      import('@polymarket/clob-client/dist/utilities.js'),
+      this.importClobModule('@polymarket/clob-client/dist/src/headers/index.js', '@polymarket/clob-client/dist/headers/index.js'),
+      this.importClobModule('@polymarket/clob-client/dist/src/utilities.js', '@polymarket/clob-client/dist/utilities.js'),
     ]);
 
     const payload = orders.map((order) => orderToJson(order, creds.key, orderType as any));
