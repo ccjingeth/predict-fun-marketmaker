@@ -43,6 +43,10 @@ class ArbitrageBot {
   private wsRealtimeTimer?: NodeJS.Timeout;
   private wsRealtimeRunning = false;
   private wsRealtimeUnsub?: () => void;
+  private crossRealtimeTimer?: NodeJS.Timeout;
+  private crossRealtimeRunning = false;
+  private crossRealtimeUnsub?: () => void;
+  private crossDirtyTokens: Set<string> = new Set();
 
   constructor() {
     this.config = loadConfig();
@@ -128,6 +132,16 @@ class ArbitrageBot {
     if (this.config.arbWsRealtime && !this.config.predictWsEnabled) {
       throw new Error('ARB_WS_REALTIME=true requires PREDICT_WS_ENABLED=true');
     }
+    if (this.config.crossPlatformWsRealtime && !this.config.crossPlatformEnabled) {
+      throw new Error('CROSS_PLATFORM_WS_REALTIME=true requires CROSS_PLATFORM_ENABLED=true');
+    }
+    if (
+      this.config.crossPlatformWsRealtime &&
+      !this.config.polymarketWsEnabled &&
+      !this.config.opinionWsEnabled
+    ) {
+      throw new Error('CROSS_PLATFORM_WS_REALTIME=true requires POLYMARKET_WS_ENABLED or OPINION_WS_ENABLED');
+    }
 
     if (this.config.enableTrading) {
       if (!this.config.jwtToken) {
@@ -162,6 +176,8 @@ class ArbitrageBot {
       this.attachRealtimeSubscription();
     }
 
+    this.attachCrossRealtimeSubscription();
+
     this.startWsHealthLogger();
 
     console.log('✅ Initialization complete\n');
@@ -184,6 +200,7 @@ class ArbitrageBot {
     console.log('🔄 Starting continuous monitoring...\n');
 
     this.startRealtimeLoop();
+    this.startCrossRealtimeLoop();
 
     await this.monitor.startMonitoring(
       async () => {
@@ -433,6 +450,23 @@ class ArbitrageBot {
     });
   }
 
+  private attachCrossRealtimeSubscription(): void {
+    if (this.config.crossPlatformWsRealtime !== true) {
+      return;
+    }
+    if (!this.crossAggregator) {
+      return;
+    }
+    if (this.crossRealtimeUnsub) {
+      return;
+    }
+    this.crossRealtimeUnsub = this.crossAggregator.onWsOrderbook((platform, tokenId) => {
+      if (tokenId) {
+        this.crossDirtyTokens.add(`${platform}:${tokenId}`);
+      }
+    });
+  }
+
   private startRealtimeLoop(): void {
     if (this.config.arbWsRealtime !== true) {
       return;
@@ -446,6 +480,22 @@ class ArbitrageBot {
     const interval = Math.max(100, this.config.arbWsRealtimeIntervalMs || 400);
     this.wsRealtimeTimer = setInterval(() => {
       void this.flushRealtime();
+    }, interval);
+  }
+
+  private startCrossRealtimeLoop(): void {
+    if (this.config.crossPlatformWsRealtime !== true) {
+      return;
+    }
+    if (!this.crossAggregator) {
+      return;
+    }
+    if (this.crossRealtimeTimer) {
+      return;
+    }
+    const interval = Math.max(200, this.config.crossPlatformWsRealtimeIntervalMs || 600);
+    this.crossRealtimeTimer = setInterval(() => {
+      void this.flushCrossRealtime();
     }, interval);
   }
 
@@ -488,6 +538,50 @@ class ArbitrageBot {
       console.warn('WS realtime scan failed:', error);
     } finally {
       this.wsRealtimeRunning = false;
+    }
+  }
+
+  private async flushCrossRealtime(): Promise<void> {
+    if (this.crossRealtimeRunning) {
+      return;
+    }
+    if (this.crossDirtyTokens.size === 0) {
+      return;
+    }
+    this.crossRealtimeRunning = true;
+    try {
+      const maxBatch = Math.max(1, this.config.crossPlatformWsRealtimeMaxBatch || 30);
+      const tokens = Array.from(this.crossDirtyTokens);
+      this.crossDirtyTokens.clear();
+      const batch = tokens.slice(0, maxBatch);
+      if (tokens.length > maxBatch) {
+        for (const tokenId of tokens.slice(maxBatch)) {
+          this.crossDirtyTokens.add(tokenId);
+        }
+      }
+      if (batch.length === 0) {
+        return;
+      }
+      const markets = await this.getMarketsCached();
+      const sample = markets.slice(0, this.config.arbMaxMarkets || 80);
+      const orderbooks = await this.loadOrderbooks(sample, this.config.arbWsMaxAgeMs || 10000);
+      const crossOps = await this.monitor.scanCrossPlatform(sample, orderbooks);
+      if (this.config.arbAutoExecute) {
+        await this.autoExecute({
+          valueMismatches: [],
+          inPlatform: [],
+          multiOutcome: [],
+          crossPlatform: crossOps,
+          dependency: [],
+        });
+      }
+      if (this.config.crossPlatformWsRealtimeQuiet !== true) {
+        this.monitor.printCrossRealtimeReport(crossOps);
+      }
+    } catch (error) {
+      console.warn('Cross-platform WS realtime scan failed:', error);
+    } finally {
+      this.crossRealtimeRunning = false;
     }
   }
 

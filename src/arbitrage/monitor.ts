@@ -294,6 +294,45 @@ export class ArbitrageMonitor {
     return results;
   }
 
+  async scanCrossPlatform(markets: Market[], orderbooks: Map<string, Orderbook>): Promise<ArbitrageOpportunity[]> {
+    if (!this.config.enableCrossPlatform) {
+      return [];
+    }
+    if (!this.crossPlatformAggregator) {
+      return [];
+    }
+    const platformMarkets = await this.crossPlatformAggregator.getPlatformMarkets(markets, orderbooks);
+    const mappingStore = this.crossPlatformAggregator.getMappingStore();
+    const cross = this.crossArbDetector.scanMarkets(
+      platformMarkets,
+      mappingStore,
+      this.config.crossPlatformUseMapping
+    );
+    const opportunities = cross.map((arb) => this.crossArbDetector.toOpportunity(arb));
+
+    for (const opp of opportunities) {
+      const key = this.getOpportunityKey(opp);
+      if (!this.opportunities.has(key) || this.isNewer(opp, this.opportunities.get(key)!)) {
+        if (this.config.alertOnNewOpportunity) {
+          this.alertNewOpportunity(opp);
+        }
+      }
+      this.opportunities.set(key, opp);
+    }
+
+    this.lastScanTime = Date.now();
+    return opportunities;
+  }
+
+  printCrossRealtimeReport(opps: ArbitrageOpportunity[]): void {
+    if (opps.length === 0) {
+      return;
+    }
+    console.log('\n⚡ CROSS-PLATFORM WS UPDATE');
+    console.log(`Timestamp: ${new Date().toISOString()}`);
+    console.log(`Found ${opps.length} cross-platform opportunities`);
+  }
+
   printRealtimeReport(scanResults: {
     valueMismatches: ArbitrageOpportunity[];
     inPlatform: ArbitrageOpportunity[];

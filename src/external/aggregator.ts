@@ -14,6 +14,8 @@ export class CrossPlatformAggregator {
   private mappingStore?: CrossPlatformMappingStore;
   private polymarketWs?: PolymarketWebSocketFeed;
   private opinionWs?: OpinionWebSocketFeed;
+  private wsSubscribers = new Set<(platform: PlatformMarket['platform'], tokenId: string) => void>();
+  private wsHookAttached = false;
 
   constructor(config: Config) {
     this.config = config;
@@ -114,6 +116,35 @@ export class CrossPlatformAggregator {
       polymarket: this.polymarketWs?.getStatus(),
       opinion: this.opinionWs?.getStatus(),
     };
+  }
+
+  onWsOrderbook(callback: (platform: PlatformMarket['platform'], tokenId: string) => void): () => void {
+    this.wsSubscribers.add(callback);
+    if (!this.wsHookAttached) {
+      this.wsHookAttached = true;
+      if (this.polymarketWs) {
+        this.polymarketWs.onOrderbook((assetId) => {
+          this.notifyWsSubscribers('Polymarket', assetId);
+        });
+      }
+      if (this.opinionWs) {
+        this.opinionWs.onOrderbook((tokenId) => {
+          this.notifyWsSubscribers('Opinion', tokenId);
+        });
+      }
+    }
+    return () => {
+      this.wsSubscribers.delete(callback);
+    };
+  }
+
+  private notifyWsSubscribers(platform: PlatformMarket['platform'], tokenId: string): void {
+    if (!tokenId) {
+      return;
+    }
+    for (const callback of this.wsSubscribers) {
+      callback(platform, tokenId);
+    }
   }
 
   async getPlatformMarkets(

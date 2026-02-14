@@ -48,6 +48,7 @@ export class PolymarketWebSocketFeed {
   private lastMessageAt = 0;
   private messageCount = 0;
   private hasConnected = false;
+  private orderbookSubscribers = new Set<(assetId: string, orderbook: PlatformOrderbook) => void>();
 
   constructor(config: PolymarketWsConfig) {
     this.config = config;
@@ -96,6 +97,13 @@ export class PolymarketWebSocketFeed {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       this.start();
     }
+  }
+
+  onOrderbook(callback: (assetId: string, orderbook: PlatformOrderbook) => void): () => void {
+    this.orderbookSubscribers.add(callback);
+    return () => {
+      this.orderbookSubscribers.delete(callback);
+    };
   }
 
   getStatus(): {
@@ -293,7 +301,7 @@ export class PolymarketWebSocketFeed {
       return;
     }
 
-    this.topOfBook.set(entry.asset_id, {
+    const snapshot = {
       bestBid: Number.isFinite(bid) ? bid : undefined,
       bestAsk: Number.isFinite(ask) ? ask : undefined,
       bidSize: Number.isFinite(bidSize) ? bidSize : undefined,
@@ -301,7 +309,9 @@ export class PolymarketWebSocketFeed {
       bids: limitedBids,
       asks: limitedAsks,
       timestamp: Date.now(),
-    });
+    };
+    this.topOfBook.set(entry.asset_id, snapshot);
+    this.notifyOrderbook(entry.asset_id, snapshot);
   }
 
   private applyPriceChange(entry: PriceChangeUpdate): void {
@@ -332,7 +342,7 @@ export class PolymarketWebSocketFeed {
       return;
     }
 
-    this.topOfBook.set(assetId, {
+    const snapshot = {
       bestBid: Number.isFinite(bestBid) ? bestBid : undefined,
       bestAsk: Number.isFinite(bestAsk) ? bestAsk : undefined,
       bidSize,
@@ -340,7 +350,9 @@ export class PolymarketWebSocketFeed {
       bids: current.bids,
       asks: current.asks,
       timestamp: Date.now(),
-    });
+    };
+    this.topOfBook.set(assetId, snapshot);
+    this.notifyOrderbook(assetId, snapshot);
   }
 
   private applyBestBidAsk(entry: BestBidAskUpdate): void {
@@ -350,7 +362,7 @@ export class PolymarketWebSocketFeed {
       return;
     }
     const current = this.topOfBook.get(entry.asset_id) || { timestamp: 0 };
-    this.topOfBook.set(entry.asset_id, {
+    const snapshot = {
       bestBid: Number.isFinite(bid) ? bid : current.bestBid,
       bestAsk: Number.isFinite(ask) ? ask : current.bestAsk,
       bidSize: current.bidSize,
@@ -358,6 +370,17 @@ export class PolymarketWebSocketFeed {
       bids: current.bids,
       asks: current.asks,
       timestamp: Date.now(),
-    });
+    };
+    this.topOfBook.set(entry.asset_id, snapshot);
+    this.notifyOrderbook(entry.asset_id, snapshot);
+  }
+
+  private notifyOrderbook(assetId: string, orderbook: PlatformOrderbook): void {
+    if (!assetId || this.orderbookSubscribers.size === 0) {
+      return;
+    }
+    for (const callback of this.orderbookSubscribers) {
+      callback(assetId, orderbook);
+    }
   }
 }

@@ -46,6 +46,7 @@ export class OpinionWebSocketFeed {
   private lastMessageAt = 0;
   private messageCount = 0;
   private hasConnected = false;
+  private orderbookSubscribers = new Set<(tokenId: string, orderbook: PlatformOrderbook) => void>();
 
   constructor(config: OpinionWsConfig) {
     this.config = config;
@@ -101,6 +102,13 @@ export class OpinionWebSocketFeed {
         this.start();
       }
     }
+  }
+
+  onOrderbook(callback: (tokenId: string, orderbook: PlatformOrderbook) => void): () => void {
+    this.orderbookSubscribers.add(callback);
+    return () => {
+      this.orderbookSubscribers.delete(callback);
+    };
   }
 
   getStatus(): {
@@ -356,6 +364,12 @@ export class OpinionWebSocketFeed {
 
     book.timestamp = Date.now();
     this.books.set(tokenId, book);
+    this.notifyOrderbook(tokenId, {
+      bestBid: book.bestBid,
+      bestAsk: book.bestAsk,
+      bidSize: book.bidSize,
+      askSize: book.askSize,
+    });
   }
 
   private createBook(): OrderbookState {
@@ -393,5 +407,14 @@ export class OpinionWebSocketFeed {
       }
     }
     return { price: bestPrice, size: bestSize };
+  }
+
+  private notifyOrderbook(tokenId: string, orderbook: PlatformOrderbook): void {
+    if (!tokenId || this.orderbookSubscribers.size === 0) {
+      return;
+    }
+    for (const callback of this.orderbookSubscribers) {
+      callback(tokenId, orderbook);
+    }
   }
 }

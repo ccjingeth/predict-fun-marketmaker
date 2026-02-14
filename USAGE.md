@@ -124,6 +124,13 @@ WS 健康日志：
 1. **做市防吃单模板**：自动开启盘口缓冲 + 成交压力价差 + 近触碰撤单。
 2. **套利稳健模板**：自动启用 WS + 预检 + VWAP 偏离二次确认 + 稳定性窗口。
 
+## 跨平台 WS 实时扫描（进阶）
+
+- `CROSS_PLATFORM_WS_REALTIME=true`
+- `CROSS_PLATFORM_WS_REALTIME_INTERVAL_MS=600`
+- `CROSS_PLATFORM_WS_REALTIME_MAX_BATCH=30`
+- `CROSS_PLATFORM_WS_REALTIME_QUIET=false`
+
 ## 小额实盘演练（推荐）
 
 用于验证下单与撤单链路是否正常：
