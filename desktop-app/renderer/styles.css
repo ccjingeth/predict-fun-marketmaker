@@ -333,6 +333,12 @@ canvas {
   color: #b5f3e6;
 }
 
+.alert-item.done {
+  background: rgba(81, 209, 182, 0.18);
+  border-color: rgba(81, 209, 182, 0.6);
+  color: #d2fff4;
+}
+
 .alert-item .btn {
   padding: 4px 10px;
   font-size: 11px;

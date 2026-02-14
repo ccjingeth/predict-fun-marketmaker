@@ -71,6 +71,7 @@ const metricFailureAdviceList = document.getElementById('metricFailureAdviceList
 const metricFixSummaryList = document.getElementById('metricFixSummaryList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
 const saveEnvButton = document.getElementById('saveEnv');
+const metricFlowList = document.getElementById('metricFlowList');
 const healthStatus = document.getElementById('healthStatus');
 const healthList = document.getElementById('healthList');
 const healthAdviceList = document.getElementById('healthAdviceList');
@@ -853,6 +854,22 @@ function renderFixSummary() {
   }
 }
 
+function renderFlowStatus({ appliedFixes, saved } = {}) {
+  if (!metricFlowList) return;
+  const rows = Array.from(metricFlowList.querySelectorAll('.alert-item'));
+  if (!rows.length) return;
+  rows.forEach((row) => row.classList.remove('done'));
+  if (appliedFixes) {
+    rows[0]?.classList.add('done');
+    rows[1]?.classList.add('done');
+  }
+  if (saved) {
+    rows[0]?.classList.add('done');
+    rows[1]?.classList.add('done');
+    rows[2]?.classList.add('done');
+  }
+}
+
 function renderMetricFailureReasons(reasons) {
   if (!metricFailureReasons) return;
   metricFailureReasons.innerHTML = '';
@@ -1045,6 +1062,7 @@ async function saveEnv() {
   if (saveEnvButton) {
     saveEnvButton.classList.remove('attention');
   }
+  renderFlowStatus({ appliedFixes: false, saved: true });
   pushLog({ type: 'system', level: 'system', message: '配置已保存' });
 }
 
@@ -1416,6 +1434,7 @@ function applySelectedFixes(quiet = false) {
   if (saveEnvButton) {
     saveEnvButton.classList.add('attention');
   }
+  renderFlowStatus({ appliedFixes: true, saved: false });
   if (!quiet) {
     pushLog({ type: 'system', level: 'system', message: `已应用 ${applied} 条修复建议（请保存生效）` });
   }
