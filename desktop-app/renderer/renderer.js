@@ -30,6 +30,8 @@ const metricTotal = document.getElementById('metricTotal');
 const metricPostDrift = document.getElementById('metricPostDrift');
 const metricQuality = document.getElementById('metricQuality');
 const metricDepthPenalty = document.getElementById('metricDepthPenalty');
+const metricConsistencyFail = document.getElementById('metricConsistencyFail');
+const metricConsistencyReason = document.getElementById('metricConsistencyReason');
 const metricChunkFactor = document.getElementById('metricChunkFactor');
 const metricChunkDelay = document.getElementById('metricChunkDelay');
 const metricAlerts = document.getElementById('metricAlerts');
@@ -199,6 +201,10 @@ const FIX_HINTS = {
   CROSS_PLATFORM_CONSISTENCY_VWAP_DRIFT_BPS: '一致性 VWAP 漂移阈值（bps）',
   CROSS_PLATFORM_CONSISTENCY_DEPTH_RATIO_MIN: '一致性腿间深度比最小值（0-1）',
   CROSS_PLATFORM_CONSISTENCY_DEPTH_RATIO_DRIFT: '一致性腿间深度比漂移阈值（0-1）',
+  CROSS_PLATFORM_CONSISTENCY_FAIL_LIMIT: '一致性失败次数阈值',
+  CROSS_PLATFORM_CONSISTENCY_FAIL_WINDOW_MS: '一致性失败统计窗口（毫秒）',
+  CROSS_PLATFORM_CONSISTENCY_DEGRADE_MS: '一致性失败降级时长（毫秒）',
+  CROSS_PLATFORM_CONSISTENCY_PENALTY: '一致性失败惩罚系数',
   CROSS_PLATFORM_QUALITY_PROFIT_MULT: '质量分收益门槛放大系数',
   CROSS_PLATFORM_QUALITY_PROFIT_MAX: '质量分收益门槛放大上限',
   CROSS_PLATFORM_MAX_VWAP_LEVELS: '跨平台 VWAP 档位数上限',
@@ -2287,6 +2293,12 @@ async function loadMetrics() {
     if (metricDepthPenalty) {
       const penalty = Number(data.depthRatioPenalty || 0);
       setMetricText(metricDepthPenalty, `${formatNumber(penalty * 100, 1)}%`);
+    }
+    if (metricConsistencyFail && metricConsistencyReason) {
+      const failAt = Number(data.lastConsistencyFailureAt || 0);
+      metricConsistencyFail.textContent = failAt ? formatTimestamp(failAt) : '暂无';
+      const reason = typeof data.lastConsistencyFailureReason === 'string' ? data.lastConsistencyFailureReason : '';
+      metricConsistencyReason.textContent = reason || '暂无记录';
     }
     setMetricText(metricChunkFactor, formatNumber(data.chunkFactor, 2));
     setMetricText(metricChunkDelay, formatMs(data.chunkDelayMs));

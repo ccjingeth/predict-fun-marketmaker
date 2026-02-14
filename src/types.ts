@@ -246,6 +246,10 @@ export interface Config {
   crossPlatformConsistencyDepthRatioDrift?: number;
   crossPlatformQualityProfitMult?: number;
   crossPlatformQualityProfitMax?: number;
+  crossPlatformConsistencyFailLimit?: number;
+  crossPlatformConsistencyFailWindowMs?: number;
+  crossPlatformConsistencyDegradeMs?: number;
+  crossPlatformConsistencyPenalty?: number;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];

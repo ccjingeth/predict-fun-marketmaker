@@ -662,6 +662,9 @@ export class CrossPlatformExecutionRouter {
   private degradedSuccesses = 0;
   private netRiskTightenFactor = 1;
   private depthRatioPenalty = 0;
+  private consistencyFailures = { count: 0, windowStart: 0 };
+  private lastConsistencyFailureAt = 0;
+  private lastConsistencyFailureReason = '';
 
   constructor(config: Config, api: PredictAPI, orderManager: OrderManager) {
     this.config = config;
@@ -790,6 +793,7 @@ export class CrossPlatformExecutionRouter {
         const hadSuccess = Boolean(error?.hadSuccess);
         const reason = this.classifyFailure(error);
         this.onFailure();
+        this.recordConsistencyFailure(error);
         this.recordTokenFailure(preparedLegs.length ? preparedLegs : plannedLegs);
         this.recordPlatformFailure(preparedLegs.length ? preparedLegs : plannedLegs);
         this.adjustTokenScores(
@@ -2134,6 +2138,43 @@ export class CrossPlatformExecutionRouter {
     return 'unknown';
   }
 
+  private isConsistencyFailure(error: any): boolean {
+    const message = String(error?.message || error || '').toLowerCase();
+    return message.includes('consistency');
+  }
+
+  private recordConsistencyFailure(error: any): void {
+    if (!this.isConsistencyFailure(error)) {
+      return;
+    }
+    const now = Date.now();
+    const windowMs = Math.max(0, this.config.crossPlatformConsistencyFailWindowMs || 0);
+    if (windowMs > 0) {
+      if (!this.consistencyFailures.windowStart || now - this.consistencyFailures.windowStart > windowMs) {
+        this.consistencyFailures.windowStart = now;
+        this.consistencyFailures.count = 0;
+      }
+    }
+    this.consistencyFailures.count += 1;
+    this.lastConsistencyFailureAt = now;
+    this.lastConsistencyFailureReason = String(error?.message || error || 'consistency failed').slice(0, 180);
+    const limit = Math.max(0, this.config.crossPlatformConsistencyFailLimit || 0);
+    if (limit > 0 && this.consistencyFailures.count >= limit) {
+      const extraMs = Math.max(0, this.config.crossPlatformConsistencyDegradeMs || 0);
+      if (extraMs > 0) {
+        this.degradedUntil = Math.max(this.degradedUntil, now + extraMs);
+        this.degradedReason = 'consistency';
+        if (!this.degradedAt) {
+          this.degradedAt = now;
+        }
+      }
+      const penalty = Math.max(0, this.config.crossPlatformConsistencyPenalty || 0);
+      if (penalty > 0) {
+        this.applyQualityPenalty(penalty);
+      }
+    }
+  }
+
   private applyFailureReasonPenalty(
     reason: 'preflight' | 'execution' | 'postTrade' | 'hedge' | 'unknown'
   ): void {
@@ -2285,6 +2326,8 @@ export class CrossPlatformExecutionRouter {
       chunkFactor: this.chunkFactor,
       chunkDelayMs: this.chunkDelayMs,
       globalCooldownUntil: this.globalCooldownUntil,
+      lastConsistencyFailureAt: this.lastConsistencyFailureAt,
+      lastConsistencyFailureReason: this.lastConsistencyFailureReason,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2301,6 +2344,8 @@ export class CrossPlatformExecutionRouter {
       chunkFactor: this.chunkFactor,
       chunkDelayMs: this.chunkDelayMs,
       globalCooldownUntil: this.globalCooldownUntil,
+      lastConsistencyFailureAt: this.lastConsistencyFailureAt,
+      lastConsistencyFailureReason: this.lastConsistencyFailureReason,
       tokenScores: this.serializeTokenScores(),
       platformScores: this.serializePlatformScores(),
       blockedTokens: this.serializeBlockedTokens(),
@@ -2385,6 +2430,13 @@ export class CrossPlatformExecutionRouter {
 
     if (Number.isFinite(data?.globalCooldownUntil)) {
       this.globalCooldownUntil = Number(data.globalCooldownUntil);
+    }
+
+    if (Number.isFinite(data?.lastConsistencyFailureAt)) {
+      this.lastConsistencyFailureAt = Number(data.lastConsistencyFailureAt);
+    }
+    if (typeof data?.lastConsistencyFailureReason === 'string') {
+      this.lastConsistencyFailureReason = data.lastConsistencyFailureReason;
     }
 
     const platformSet = new Set<ExternalPlatform>(['Predict', 'Polymarket', 'Opinion']);
