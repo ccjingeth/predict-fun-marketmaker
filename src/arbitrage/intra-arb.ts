@@ -6,7 +6,7 @@
 import type { Market, Orderbook } from '../types.js';
 import type { ArbitrageOpportunity, InPlatformArbitrage } from './types.js';
 import { buildYesNoPairs } from './pairs.js';
-import { estimateBuy, estimateSell, sumDepth } from './orderbook-vwap.js';
+import { estimateBuy, estimateSell, sumDepth, maxBuySharesForLimit, maxSellSharesForLimit } from './orderbook-vwap.js';
 
 export class InPlatformArbitrageDetector {
   private minProfitThreshold: number;
@@ -105,8 +105,50 @@ export class InPlatformArbitrageDetector {
     const buyDepth = Math.min(sumDepth(yesBook.asks), sumDepth(noBook.asks));
     const sellDepth = Math.min(sumDepth(yesBook.bids), sumDepth(noBook.bids));
 
-    const buySize = Math.floor(Math.min(buyDepth * this.depthUsage, this.maxRecommendedShares));
-    const sellSize = Math.floor(Math.min(sellDepth * this.depthUsage, this.maxRecommendedShares));
+    let buySize = Math.floor(Math.min(buyDepth * this.depthUsage, this.maxRecommendedShares));
+    let sellSize = Math.floor(Math.min(sellDepth * this.depthUsage, this.maxRecommendedShares));
+
+    if (this.maxVwapDeviationBps > 0) {
+      const maxYes = maxBuySharesForLimit(
+        yesBook.asks,
+        yesTop.ask,
+        this.maxVwapDeviationBps,
+        yesFeeBps,
+        undefined,
+        undefined,
+        slippageBps
+      );
+      const maxNo = maxBuySharesForLimit(
+        noBook.asks,
+        noTop.ask,
+        this.maxVwapDeviationBps,
+        noFeeBps,
+        undefined,
+        undefined,
+        slippageBps
+      );
+      buySize = Math.min(buySize, Math.floor(Math.min(maxYes, maxNo)));
+
+      const maxYesSell = maxSellSharesForLimit(
+        yesBook.bids,
+        yesTop.bid,
+        this.maxVwapDeviationBps,
+        yesFeeBps,
+        undefined,
+        undefined,
+        slippageBps
+      );
+      const maxNoSell = maxSellSharesForLimit(
+        noBook.bids,
+        noTop.bid,
+        this.maxVwapDeviationBps,
+        noFeeBps,
+        undefined,
+        undefined,
+        slippageBps
+      );
+      sellSize = Math.min(sellSize, Math.floor(Math.min(maxYesSell, maxNoSell)));
+    }
     let buyCandidate = this.findBestBuySize(
       yesBook,
       noBook,

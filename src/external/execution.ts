@@ -2275,6 +2275,26 @@ export class CrossPlatformExecutionRouter {
       }
       this.checkVolatility(leg, book);
 
+      const minDepthUsd = Math.max(0, this.config.crossPlatformLegMinDepthUsd || 0);
+      if (minDepthUsd > 0) {
+        const levels = leg.side === 'BUY' ? book.asks : book.bids;
+        const maxLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
+        const capped = maxLevels > 0 ? levels.slice(0, maxLevels) : levels;
+        const depthUsd = capped.reduce((sum, entry) => {
+          const price = Number(entry.price);
+          const shares = Number(entry.shares);
+          if (!Number.isFinite(price) || !Number.isFinite(shares) || price <= 0 || shares <= 0) {
+            return sum;
+          }
+          return sum + price * shares;
+        }, 0);
+        if (depthUsd < minDepthUsd) {
+          throw new Error(
+            `Preflight failed: depth $${depthUsd.toFixed(2)} < min $${minDepthUsd} for ${leg.platform}:${leg.tokenId}`
+          );
+        }
+      }
+
       const feeBps = this.getFeeBps(leg.platform);
       const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
       const slippageBps = this.config.crossPlatformSlippageBps || 0;

@@ -5,7 +5,7 @@
 
 import type { Market, Orderbook } from '../types.js';
 import type { ArbitrageOpportunity } from './types.js';
-import { estimateBuy, sumDepth } from './orderbook-vwap.js';
+import { estimateBuy, sumDepth, maxBuySharesForLimit } from './orderbook-vwap.js';
 
 export interface MultiOutcomeArbitrage {
   marketId: string;
@@ -170,6 +170,31 @@ export class MultiOutcomeArbitrageDetector {
       return null;
     }
     let size = startSize;
+    if (this.config.maxVwapDeviationBps > 0) {
+      let cap = size;
+      for (const market of group) {
+        const book = orderbooks.get(market.token_id);
+        const ask = book?.best_ask ?? 0;
+        if (!book || ask <= 0) {
+          cap = 0;
+          break;
+        }
+        const maxShares = maxBuySharesForLimit(
+          book.asks,
+          ask,
+          this.config.maxVwapDeviationBps,
+          market.fee_rate_bps || this.config.feeBps,
+          undefined,
+          undefined,
+          this.config.slippageBps
+        );
+        cap = Math.min(cap, Math.floor(maxShares));
+        if (cap <= 0) {
+          break;
+        }
+      }
+      size = Math.min(size, cap);
+    }
     let best: { size: number; totalCost: number; totalFees: number; totalSlippage: number; totalAllIn: number; edge: number } | null = null;
     for (let i = 0; i < 4 && size >= 1; i += 1) {
       let totalCost = 0;
