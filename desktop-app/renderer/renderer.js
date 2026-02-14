@@ -59,6 +59,9 @@ const metricRiskBar = document.getElementById('metricRiskBar');
 const chartSuccess = document.getElementById('chartSuccess');
 const chartDrift = document.getElementById('chartDrift');
 const chartRisk = document.getElementById('chartRisk');
+const chartFailure = document.getElementById('chartFailure');
+const chartFailPreflight = document.getElementById('chartFailPreflight');
+const chartFailPost = document.getElementById('chartFailPost');
 const metricFailureReasons = document.getElementById('metricFailureReasons');
 const metricAlertsList = document.getElementById('metricAlertsList');
 const riskBreakdownList = document.getElementById('riskBreakdownList');
@@ -1319,9 +1322,15 @@ function updateCharts() {
   const successSeries = metricsHistory.map((item) => item.successRate);
   const driftSeries = metricsHistory.map((item) => item.postTradeDriftBps);
   const riskSeries = metricsHistory.map((item) => item.riskScore);
+  const failureSeries = metricsHistory.map((item) => item.failureRate || 0);
+  const preflightSeries = metricsHistory.map((item) => item.preflightFailRate || 0);
+  const postSeries = metricsHistory.map((item) => item.postFailRate || 0);
   drawSparkline(chartSuccess, successSeries, '#6aa3ff');
   drawSparkline(chartDrift, driftSeries, '#f7c46c');
   drawSparkline(chartRisk, riskSeries, '#ff6b6b');
+  drawSparkline(chartFailure, failureSeries, '#f07ca2');
+  drawSparkline(chartFailPreflight, preflightSeries, '#9b8cff');
+  drawSparkline(chartFailPost, postSeries, '#6dd3ce');
 }
 
 function updateAlerts({ successRate, postTradeDriftBps, qualityScore, cooldownUntil, metricsAgeMs }) {
@@ -1438,7 +1447,13 @@ async function loadMetrics() {
     const attempts = Number(metrics.attempts || 0);
     const successes = Number(metrics.successes || 0);
     const failures = Number(metrics.failures || 0);
+    const failureReasons = metrics.failureReasons || {};
+    const preflightFailures = Number(failureReasons.preflight || 0);
+    const postFailures = Number(failureReasons.postTrade || 0);
     const successRate = attempts > 0 ? (successes / attempts) * 100 : 0;
+    const failureRate = attempts > 0 ? (failures / attempts) * 100 : 0;
+    const preflightFailRate = attempts > 0 ? (preflightFailures / attempts) * 100 : 0;
+    const postFailRate = attempts > 0 ? (postFailures / attempts) * 100 : 0;
     const postTradeDriftBps = Number(metrics.emaPostTradeDriftBps || 0);
     const updatedAt = Number(data.ts || 0);
     const metricsAgeMs = updatedAt ? Date.now() - updatedAt : Infinity;
@@ -1473,6 +1488,9 @@ async function loadMetrics() {
           successRate,
           postTradeDriftBps,
           riskScore: 0,
+          failureRate,
+          preflightFailRate,
+          postFailRate,
         });
         if (metricsHistory.length > METRICS_HISTORY_MAX) {
           metricsHistory.shift();
