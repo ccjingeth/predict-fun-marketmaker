@@ -339,6 +339,17 @@ canvas {
   border-radius: 999px;
 }
 
+.metric.full .alert-list {
+  border-radius: 12px;
+  background: rgba(11, 14, 29, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 10px;
+}
+
+.metric.full .alert-item {
+  background: rgba(17, 21, 38, 0.9);
+}
+
 .health-list {
   display: flex;
   flex-direction: column;
