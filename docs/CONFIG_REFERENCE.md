@@ -49,6 +49,8 @@
 - `MM_NO_FILL_PENALTY_MAX_BPS`：无成交惩罚上限（bps）。
 - `MM_NO_FILL_RAMP_MS`：无成交惩罚平滑递增时间（毫秒）。
 - `MM_NO_FILL_SIZE_PENALTY`：无成交时缩小挂单份额的比例（0-1）。
+- `MM_NO_FILL_TOUCH_BPS`：无成交时额外触碰缓冲（bps）。
+- `MM_NO_FILL_TOUCH_MAX_BPS`：无成交触碰缓冲上限（bps）。
 - `MM_AGGRESSIVE_MOVE_BPS`：盘口快速逼近时的撤单阈值。
 - `MM_AGGRESSIVE_MOVE_WINDOW_MS`：快速逼近检测窗口。
 - `MM_VOLATILITY_HIGH_BPS`：高波动阈值（触发“波动档”）。
@@ -194,6 +196,9 @@
 - `ARB_PAUSE_BACKOFF`：连续失败时暂停时间指数回退倍率。
 - `ARB_PAUSE_MAX_MS`：暂停时间最大值（毫秒）。
 - `ARB_PAUSE_RECOVERY_FACTOR`：成功后回撤暂停时间的系数（<1）。
+- `ARB_DEGRADE_MAX_LEVEL`：失败降级最大等级。
+- `ARB_DEGRADE_FACTOR`：降级系数（<1 越保守）。
+- `ARB_DEGRADE_STABILITY_ADD`：每级降级额外要求的稳定次数。
 - `ARB_WS_HEALTH_LOG_MS`：WS 健康日志间隔，0=关闭。
 - `ARB_PREFLIGHT_ENABLED`：自动执行前二次确认机会是否仍有效。
 - `ARB_PREFLIGHT_MAX_AGE_MS`：预检时允许的 WS 最大延迟。

@@ -48,6 +48,7 @@ class ArbitrageBot {
   private crossRealtimeUnsub?: () => void;
   private crossDirtyTokens: Set<string> = new Set();
   private arbPauseMs = 0;
+  private arbDegradeLevel = 0;
 
   constructor() {
     this.config = loadConfig();
@@ -227,8 +228,9 @@ class ArbitrageBot {
 
     const markets = await this.getMarketsCached();
     const now = Date.now();
-    const cooldown = this.config.arbExecutionCooldownMs || 60000;
-    const maxTop = Math.max(1, this.config.arbExecuteTopN || 1);
+    const baseCooldown = this.config.arbExecutionCooldownMs || 60000;
+    const cooldown = this.getEffectiveCooldownMs(baseCooldown);
+    const maxTop = this.getEffectiveTopN(Math.max(1, this.config.arbExecuteTopN || 1));
 
     const executeOne = async (opp: any) => {
       if (opp.type === 'CROSS_PLATFORM') {
@@ -652,13 +654,14 @@ class ArbitrageBot {
       this.config.arbPreflightMaxAgeMs || this.config.arbWsMaxAgeMs
     );
     const minProfit = this.config.crossPlatformMinProfit || 0.02;
+    const profitMult = this.getDegradeProfitMultiplier();
     const detector = new InPlatformArbitrageDetector(
       minProfit,
       (this.config.predictFeeBps || 0) / 10000,
       false,
       undefined,
       undefined,
-      this.config.arbDepthUsage || 0.6,
+      this.getEffectiveDepthUsage(this.config.arbDepthUsage || 0.6),
       this.config.arbMinNotionalUsd || 0,
       this.config.arbMinProfitUsd || 0,
       this.config.arbMinDepthUsd || 0,
@@ -676,11 +679,11 @@ class ArbitrageBot {
     const profitUsd = edge * size;
     const notional = (best.yesPlusNo || best.yesPrice + best.noPrice) * size;
     const impactBps = this.estimateImpactBpsInPlatform(best);
-    const required = this.computeDynamicMinProfitUsd(notional, impactBps);
+    const required = this.computeDynamicMinProfitUsd(notional, impactBps, profitMult);
     if (required > 0 && profitUsd < required) {
       return false;
     }
-    const minProfitPct = minProfit * 100;
+    const minProfitPct = minProfit * 100 * profitMult;
     return best.maxProfit >= minProfitPct;
   }
 
@@ -698,12 +701,13 @@ class ArbitrageBot {
       this.config.arbPreflightMaxAgeMs || this.config.arbWsMaxAgeMs
     );
     const minProfit = this.config.crossPlatformMinProfit || 0.02;
+    const profitMult = this.getDegradeProfitMultiplier();
     const detector = new MultiOutcomeArbitrageDetector({
       minProfitThreshold: minProfit,
       minOutcomes: this.config.multiOutcomeMinOutcomes || 3,
       maxRecommendedShares: this.config.multiOutcomeMaxShares || 500,
       feeBps: this.config.predictFeeBps || 100,
-      depthUsage: this.config.arbDepthUsage || 0.6,
+      depthUsage: this.getEffectiveDepthUsage(this.config.arbDepthUsage || 0.6),
       minNotionalUsd: this.config.arbMinNotionalUsd || 0,
       minProfitUsd: this.config.arbMinProfitUsd || 0,
       minDepthUsd: this.config.arbMinDepthUsd || 0,
@@ -720,15 +724,15 @@ class ArbitrageBot {
     const profitUsd = Math.max(0, (best.guaranteedProfit || 0) * size);
     const notional = Math.max(0, (best.totalCost || 0) * size);
     const impactBps = this.estimateImpactBpsMultiOutcome(best);
-    const required = this.computeDynamicMinProfitUsd(notional, impactBps);
+    const required = this.computeDynamicMinProfitUsd(notional, impactBps, profitMult);
     if (required > 0 && profitUsd < required) {
       return false;
     }
-    const minProfitPct = minProfit * 100;
+    const minProfitPct = minProfit * 100 * profitMult;
     return (best.expectedReturn || 0) >= minProfitPct;
   }
 
-  private computeDynamicMinProfitUsd(notional: number, impactBps: number): number {
+  private computeDynamicMinProfitUsd(notional: number, impactBps: number, multiplier: number = 1): number {
     const base = Math.max(0, this.config.arbMinProfitUsd || 0);
     const baseBps = Math.max(0, this.config.arbMinProfitBps || 0);
     const impactMult = Math.max(0, this.config.arbMinProfitImpactMult || 0);
@@ -737,7 +741,7 @@ class ArbitrageBot {
     }
     const notionalTerm = notional * (baseBps / 10000);
     const impactTerm = notional * (Math.max(0, impactBps) / 10000) * impactMult;
-    return base + notionalTerm + impactTerm;
+    return (base + notionalTerm + impactTerm) * Math.max(1, multiplier);
   }
 
   private estimateImpactBpsInPlatform(arb: any): number {
@@ -763,7 +767,7 @@ class ArbitrageBot {
     if (this.config.arbStabilityRequired === false) {
       return true;
     }
-    const minCount = Math.max(1, this.config.arbStabilityMinCount || 2);
+    const minCount = this.getEffectiveStabilityCount();
     const windowMs = Math.max(0, this.config.arbStabilityWindowMs || 2000);
     const scanInterval = Math.max(0, this.config.arbScanIntervalMs || 10000);
     const effectiveWindow =
@@ -788,6 +792,37 @@ class ArbitrageBot {
       }
     }
     return nextCount >= minCount;
+  }
+
+  private getEffectiveStabilityCount(): number {
+    const base = Math.max(1, this.config.arbStabilityMinCount || 2);
+    const extra = Math.max(0, this.config.arbDegradeStabilityAdd || 0);
+    return base + this.arbDegradeLevel * extra;
+  }
+
+  private getArbDegradeFactor(): number {
+    const factor = Math.max(0.4, Math.min(0.95, this.config.arbDegradeFactor || 0.7));
+    return Math.pow(factor, this.arbDegradeLevel);
+  }
+
+  private getEffectiveCooldownMs(base: number): number {
+    const factor = this.getArbDegradeFactor();
+    return Math.max(0, Math.round(base / Math.max(0.05, factor)));
+  }
+
+  private getEffectiveDepthUsage(base: number): number {
+    const factor = this.getArbDegradeFactor();
+    return Math.max(0.05, Math.min(1, base * factor));
+  }
+
+  private getEffectiveTopN(base: number): number {
+    const factor = this.getArbDegradeFactor();
+    return Math.max(1, Math.floor(base * factor));
+  }
+
+  private getDegradeProfitMultiplier(): number {
+    const factor = this.getArbDegradeFactor();
+    return Math.max(1, 1 / Math.max(0.05, factor));
   }
 
   private async getMarketsCached(): Promise<Market[]> {
@@ -825,6 +860,10 @@ class ArbitrageBot {
       this.arbErrorCount = 0;
       console.error(`Arb auto-exec paused until ${new Date(this.arbPausedUntil).toISOString()}`);
     }
+    const maxLevel = Math.max(0, this.config.arbDegradeMaxLevel || 3);
+    if (maxLevel > 0) {
+      this.arbDegradeLevel = Math.min(maxLevel, this.arbDegradeLevel + 1);
+    }
   }
 
   private recordArbSuccess(): void {
@@ -838,6 +877,9 @@ class ArbitrageBot {
     }
     const next = Math.max(base, Math.round(this.arbPauseMs * recovery));
     this.arbPauseMs = next;
+    if (this.arbDegradeLevel > 0) {
+      this.arbDegradeLevel -= 1;
+    }
   }
 
   private isArbPaused(): boolean {

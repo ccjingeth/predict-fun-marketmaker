@@ -134,6 +134,8 @@ export function loadConfig(): Config {
     mmNoFillPenaltyMaxBps: parseFloat(process.env.MM_NO_FILL_PENALTY_MAX_BPS || '0'),
     mmNoFillRampMs: parseInt(process.env.MM_NO_FILL_RAMP_MS || '30000'),
     mmNoFillSizePenalty: parseFloat(process.env.MM_NO_FILL_SIZE_PENALTY || '1'),
+    mmNoFillTouchBps: parseFloat(process.env.MM_NO_FILL_TOUCH_BPS || '0'),
+    mmNoFillTouchMaxBps: parseFloat(process.env.MM_NO_FILL_TOUCH_MAX_BPS || '0'),
     mmAggressiveMoveBps: parseFloat(process.env.MM_AGGRESSIVE_MOVE_BPS || '0.002'),
     mmAggressiveMoveWindowMs: parseInt(process.env.MM_AGGRESSIVE_MOVE_WINDOW_MS || '1500'),
     mmVolatilityHighBps: parseFloat(process.env.MM_VOLATILITY_HIGH_BPS || '0.006'),
@@ -414,6 +416,9 @@ export function loadConfig(): Config {
     arbPauseBackoff: parseFloat(process.env.ARB_PAUSE_BACKOFF || '1.5'),
     arbPauseMaxMs: parseInt(process.env.ARB_PAUSE_MAX_MS || '600000'),
     arbPauseRecoveryFactor: parseFloat(process.env.ARB_PAUSE_RECOVERY_FACTOR || '0.8'),
+    arbDegradeMaxLevel: parseInt(process.env.ARB_DEGRADE_MAX_LEVEL || '3'),
+    arbDegradeFactor: parseFloat(process.env.ARB_DEGRADE_FACTOR || '0.7'),
+    arbDegradeStabilityAdd: parseInt(process.env.ARB_DEGRADE_STABILITY_ADD || '1'),
     arbWsHealthLogMs: parseInt(process.env.ARB_WS_HEALTH_LOG_MS || '0'),
     arbPreflightEnabled: process.env.ARB_PREFLIGHT_ENABLED !== 'false',
     arbPreflightMaxAgeMs: parseInt(process.env.ARB_PREFLIGHT_MAX_AGE_MS || '3000'),
@@ -546,6 +551,15 @@ export function loadConfig(): Config {
   }
   if ((config.arbPauseRecoveryFactor ?? 0) <= 0 || (config.arbPauseRecoveryFactor ?? 0) >= 1) {
     config.arbPauseRecoveryFactor = 0.8;
+  }
+  if ((config.arbDegradeMaxLevel ?? 0) < 0) {
+    config.arbDegradeMaxLevel = 0;
+  }
+  if ((config.arbDegradeFactor ?? 0) <= 0 || (config.arbDegradeFactor ?? 0) >= 1) {
+    config.arbDegradeFactor = 0.7;
+  }
+  if ((config.arbDegradeStabilityAdd ?? 0) < 0) {
+    config.arbDegradeStabilityAdd = 0;
   }
 
   if (
@@ -828,6 +842,9 @@ export function printConfig(config: Config): void {
     `MM No-Fill Passive: after=${config.mmNoFillPassiveMs ?? 0}ms base=${config.mmNoFillPenaltyBps ?? 0}bps max=${config.mmNoFillPenaltyMaxBps ?? 0}bps size=${config.mmNoFillSizePenalty ?? 1}`
   );
   console.log(
+    `MM No-Fill Touch: base=${config.mmNoFillTouchBps ?? 0}bps max=${config.mmNoFillTouchMaxBps ?? 0}bps`
+  );
+  console.log(
     `MM Cancel Confirm: reprice=${config.mmRepriceConfirmMs}ms cancel=${config.mmCancelConfirmMs}ms`
   );
   console.log(
@@ -920,6 +937,9 @@ export function printConfig(config: Config): void {
   );
   console.log(
     `Arb Pause Backoff: base=${config.arbPauseOnErrorMs}ms max=${config.arbPauseMaxMs}ms backoff=${config.arbPauseBackoff} recover=${config.arbPauseRecoveryFactor}`
+  );
+  console.log(
+    `Arb Degrade: maxLevel=${config.arbDegradeMaxLevel} factor=${config.arbDegradeFactor} stability+${config.arbDegradeStabilityAdd}`
   );
   console.log(
     `Arb Stability: ${config.arbStabilityRequired ? '✅' : '❌'} count=${config.arbStabilityMinCount} window=${config.arbStabilityWindowMs}ms`

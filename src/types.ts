@@ -101,6 +101,8 @@ export interface Config {
   mmNoFillPenaltyMaxBps?: number;
   mmNoFillRampMs?: number;
   mmNoFillSizePenalty?: number;
+  mmNoFillTouchBps?: number;
+  mmNoFillTouchMaxBps?: number;
   mmAggressiveMoveBps?: number;
   mmAggressiveMoveWindowMs?: number;
   mmVolatilityHighBps?: number;
@@ -365,6 +367,9 @@ export interface Config {
   arbPauseBackoff?: number;
   arbPauseMaxMs?: number;
   arbPauseRecoveryFactor?: number;
+  arbDegradeMaxLevel?: number;
+  arbDegradeFactor?: number;
+  arbDegradeStabilityAdd?: number;
   arbWsHealthLogMs?: number;
   arbPreflightEnabled?: boolean;
   arbPreflightMaxAgeMs?: number;

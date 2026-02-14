@@ -789,18 +789,18 @@ export class MarketMaker {
     return value;
   }
 
-  private getNoFillPenalty(tokenId: string): { spreadBps: number; sizeFactor: number } {
+  private getNoFillPenalty(tokenId: string): { spreadBps: number; sizeFactor: number; touchBps: number } {
     const threshold = Math.max(0, this.config.mmNoFillPassiveMs ?? 0);
     if (threshold <= 0) {
-      return { spreadBps: 0, sizeFactor: 1 };
+      return { spreadBps: 0, sizeFactor: 1, touchBps: 0 };
     }
     const last = this.lastFillAt.get(tokenId);
     if (!last) {
-      return { spreadBps: 0, sizeFactor: 1 };
+      return { spreadBps: 0, sizeFactor: 1, touchBps: 0 };
     }
     const elapsed = Date.now() - last;
     if (elapsed <= threshold) {
-      return { spreadBps: 0, sizeFactor: 1 };
+      return { spreadBps: 0, sizeFactor: 1, touchBps: 0 };
     }
     const rampMs = Math.max(1, this.config.mmNoFillRampMs ?? 30000);
     const intensity = this.clamp((elapsed - threshold) / rampMs, 0, 1);
@@ -809,7 +809,10 @@ export class MarketMaker {
     const spreadBps = base > 0 ? base + (maxBps - base) * intensity : 0;
     const sizePenalty = this.clamp(this.config.mmNoFillSizePenalty ?? 1, 0.2, 1);
     const sizeFactor = 1 - (1 - sizePenalty) * intensity;
-    return { spreadBps, sizeFactor };
+    const touchBase = Math.max(0, this.config.mmNoFillTouchBps ?? 0);
+    const touchMax = Math.max(touchBase, this.config.mmNoFillTouchMaxBps ?? touchBase * 2);
+    const touchBps = touchBase > 0 ? touchBase + (touchMax - touchBase) * intensity : 0;
+    return { spreadBps, sizeFactor, touchBps };
   }
 
   private canRecheck(tokenId: string): boolean {
@@ -1160,7 +1163,7 @@ export class MarketMaker {
     let ask = fairPrice * (1 + half * askFactor + quoteOffset);
 
     // Keep maker-friendly but never cross top of book
-    const touchBufferBps = Math.max(0, this.config.mmTouchBufferBps ?? 0);
+    const touchBufferBps = Math.max(0, this.config.mmTouchBufferBps ?? 0) + (noFillPenalty.touchBps || 0);
     if (touchBufferBps > 0) {
       const buffer = touchBufferBps / 10000;
       const maxBid = bestBid * (1 - buffer);
