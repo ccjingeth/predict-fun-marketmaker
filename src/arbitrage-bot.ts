@@ -297,11 +297,38 @@ class ArbitrageBot {
     }
     for (const bucket of buckets) {
       if (!bucket || bucket.length === 0) continue;
-      const sorted = [...bucket].sort((a, b) => (b.expectedReturn || 0) - (a.expectedReturn || 0));
+      const sorted = [...bucket].sort((a, b) => this.compareOpportunities(a, b));
       for (let i = 0; i < Math.min(maxTop, sorted.length); i++) {
         await executeOne(sorted[i]);
       }
     }
+  }
+
+  private estimateOpportunityProfitUsd(opp: any): number {
+    const size = Math.max(0, opp?.positionSize ?? opp?.recommendedSize ?? opp?.depthShares ?? 0);
+    const expectedReturn = Math.max(0, opp?.expectedReturn ?? 0);
+    const arbitrageProfit = Math.max(0, opp?.arbitrageProfit ?? 0);
+    if (Number.isFinite(opp?.guaranteedProfit)) {
+      return Math.max(0, Number(opp.guaranteedProfit));
+    }
+    if (size > 0) {
+      const pct = expectedReturn || arbitrageProfit;
+      if (pct > 0) {
+        return (pct / 100) * size;
+      }
+    }
+    return expectedReturn;
+  }
+
+  private compareOpportunities(a: any, b: any): number {
+    const profitA = this.estimateOpportunityProfitUsd(a);
+    const profitB = this.estimateOpportunityProfitUsd(b);
+    if (profitA !== profitB) {
+      return profitB - profitA;
+    }
+    const retA = Math.max(0, a?.expectedReturn ?? 0);
+    const retB = Math.max(0, b?.expectedReturn ?? 0);
+    return retB - retA;
   }
 
   async executeArbitrage(opportunityType: string, index: number): Promise<void> {
