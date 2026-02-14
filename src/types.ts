@@ -113,6 +113,8 @@ export interface Config {
   mmVolatilityLowBps?: number;
   mmIntervalProfileVolatileMultiplier?: number;
   mmIntervalProfileCalmMultiplier?: number;
+  mmSpreadJumpBps?: number;
+  mmSpreadJumpWindowMs?: number;
   mmMaxSharesPerOrder?: number;
   mmSizeInventoryWeight?: number;
   mmSizeImbalanceWeight?: number;

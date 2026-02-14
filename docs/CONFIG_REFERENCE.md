@@ -61,6 +61,8 @@
 - `MM_VOLATILITY_LOW_BPS`：低波动阈值（触发“平稳档”）。
 - `MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER`：波动档下单间隔倍率。
 - `MM_INTERVAL_PROFILE_CALM_MULTIPLIER`：平稳档下单间隔倍率。
+- `MM_SPREAD_JUMP_BPS`：盘口价差跳变阈值（bps），超出则暂停挂单。
+- `MM_SPREAD_JUMP_WINDOW_MS`：价差跳变检测窗口（毫秒）。
 - `MM_MAX_SHARES_PER_ORDER`：单笔挂单最大份额上限（0=不限制）。
 - `MM_SIZE_INVENTORY_WEIGHT`：库存方向对“挂单份额”的影响权重。
 - `MM_SIZE_IMBALANCE_WEIGHT`：盘口不平衡对“挂单份额”的影响权重。

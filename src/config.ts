@@ -146,6 +146,8 @@ export function loadConfig(): Config {
     mmVolatilityLowBps: parseFloat(process.env.MM_VOLATILITY_LOW_BPS || '0.002'),
     mmIntervalProfileVolatileMultiplier: parseFloat(process.env.MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER || '1.3'),
     mmIntervalProfileCalmMultiplier: parseFloat(process.env.MM_INTERVAL_PROFILE_CALM_MULTIPLIER || '0.8'),
+    mmSpreadJumpBps: parseFloat(process.env.MM_SPREAD_JUMP_BPS || '0'),
+    mmSpreadJumpWindowMs: parseInt(process.env.MM_SPREAD_JUMP_WINDOW_MS || '0'),
     mmMaxSharesPerOrder: parseFloat(process.env.MM_MAX_SHARES_PER_ORDER || '0'),
     mmSizeInventoryWeight: parseFloat(process.env.MM_SIZE_INVENTORY_WEIGHT || '0.4'),
     mmSizeImbalanceWeight: parseFloat(process.env.MM_SIZE_IMBALANCE_WEIGHT || '0.3'),

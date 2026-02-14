@@ -168,6 +168,8 @@ const FIX_HINTS = {
   MM_NO_FILL_REPRICE_MAX_BPS: '无成交重报价阈值上限',
   MM_NO_FILL_CANCEL_BPS: '无成交额外撤单阈值（bps）',
   MM_NO_FILL_CANCEL_MAX_BPS: '无成交撤单阈值上限',
+  MM_SPREAD_JUMP_BPS: '盘口价差跳变阈值（bps）',
+  MM_SPREAD_JUMP_WINDOW_MS: '价差跳变检测窗口（毫秒）',
   MM_ONLY_POINTS_MARKETS: '只做有积分/激励的市场',
   MM_POINTS_MIN_ONLY: '积分市场只挂最小份额',
   MM_POINTS_MIN_MULTIPLIER: '积分最小份额倍率',

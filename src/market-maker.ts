@@ -48,6 +48,8 @@ export class MarketMaker {
   private lastBestBid: Map<string, number> = new Map();
   private lastBestAsk: Map<string, number> = new Map();
   private lastBestAt: Map<string, number> = new Map();
+  private lastBookSpread: Map<string, number> = new Map();
+  private lastBookSpreadAt: Map<string, number> = new Map();
   private volatilityEma: Map<string, number> = new Map();
   private depthEma: Map<string, number> = new Map();
   private totalDepthEma: Map<string, number> = new Map();
@@ -413,6 +415,30 @@ export class MarketMaker {
     }
 
     return false;
+  }
+
+  private checkSpreadJump(tokenId: string, orderbook: Orderbook): boolean {
+    const thresholdBps = Math.max(0, this.config.mmSpreadJumpBps ?? 0);
+    if (!thresholdBps) {
+      return false;
+    }
+    const bestBid = orderbook.best_bid;
+    const bestAsk = orderbook.best_ask;
+    if (!bestBid || !bestAsk || bestBid <= 0 || bestAsk <= 0) {
+      return false;
+    }
+    const spread = (bestAsk - bestBid) / ((bestAsk + bestBid) / 2);
+    const now = Date.now();
+    const last = this.lastBookSpread.get(tokenId);
+    const lastAt = this.lastBookSpreadAt.get(tokenId) || 0;
+    this.lastBookSpread.set(tokenId, spread);
+    this.lastBookSpreadAt.set(tokenId, now);
+    const windowMs = Math.max(0, this.config.mmSpreadJumpWindowMs ?? 0);
+    if (!last || (windowMs > 0 && now - lastAt > windowMs)) {
+      return false;
+    }
+    const deltaBps = Math.abs(spread - last) * 10000;
+    return deltaBps >= thresholdBps;
   }
 
   private evaluateOrderRisk(
@@ -1463,6 +1489,13 @@ export class MarketMaker {
 
     if (this.checkVolatility(tokenId, orderbook)) {
       console.log(`⚠️ Volatility spike detected for ${tokenId}, pausing quoting...`);
+      await this.cancelOrdersForMarket(tokenId);
+      this.markCooldown(tokenId, this.config.pauseAfterVolatilityMs ?? 8000);
+      return;
+    }
+
+    if (this.checkSpreadJump(tokenId, orderbook)) {
+      console.log(`⚠️ Spread jump detected for ${tokenId}, pausing quoting...`);
       await this.cancelOrdersForMarket(tokenId);
       this.markCooldown(tokenId, this.config.pauseAfterVolatilityMs ?? 8000);
       return;
