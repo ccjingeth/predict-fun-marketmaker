@@ -2656,6 +2656,7 @@ function computeRiskLevel({
   avoidActive,
   avoidMode,
   consistencyPressure,
+  hardGateActiveUntil,
   metricsAgeMs,
 }) {
   let score = 0;
@@ -2747,6 +2748,11 @@ function computeRiskLevel({
     const weighted = 10 * riskWeights.consistency;
     score += weighted;
     breakdown.push({ label: `一致性压力上升 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
+  }
+  if (hardGateActiveUntil && hardGateActiveUntil > Date.now()) {
+    const weighted = 35 * riskWeights.consistency;
+    score += weighted;
+    breakdown.push({ label: `硬门控触发 x${riskWeights.consistency.toFixed(1)}`, score: weighted.toFixed(1) });
   }
   if (avoidActive) {
     const base = avoidMode === 'TEMPLATE' ? 15 : 35;

@@ -2418,12 +2418,17 @@ export class CrossPlatformExecutionRouter {
       this.consistencyRateLimitUntil = Math.max(this.consistencyRateLimitUntil, now + rateLimitMs);
       this.globalCooldownUntil = Math.max(this.globalCooldownUntil, now + rateLimitMs);
     }
-    if (!wasActive && this.hardGateActiveUntil > now && this.config.alertWebhookUrl) {
-      void sendAlert(
-        this.config.alertWebhookUrl,
-        `🚨 硬门控触发（${reason}），已降级并限速 ${Math.round(rateLimitMs / 1000)}s。`,
-        this.config.alertMinIntervalMs
+    if (!wasActive && this.hardGateActiveUntil > now) {
+      console.warn(
+        `Hard gate triggered: ${reason} | cooldown=${Math.round(rateLimitMs / 1000)}s | degradeMs=${duration}`
       );
+      if (this.config.alertWebhookUrl) {
+        void sendAlert(
+          this.config.alertWebhookUrl,
+          `🚨 硬门控触发（${reason}），已降级并限速 ${Math.round(rateLimitMs / 1000)}s。`,
+          this.config.alertMinIntervalMs
+        );
+      }
     }
   }
 
