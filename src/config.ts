@@ -426,6 +426,7 @@ export function loadConfig(): Config {
     crossPlatformHardGateUseDegradeProfile:
       process.env.CROSS_PLATFORM_HARD_GATE_USE_DEGRADE_PROFILE !== 'false',
     crossPlatformHardGateRateLimitMs: parseInt(process.env.CROSS_PLATFORM_HARD_GATE_RATE_LIMIT_MS || '4000'),
+    crossPlatformHardGateAutoApplyFix: process.env.CROSS_PLATFORM_HARD_GATE_AUTO_APPLY_FIX === 'true',
     crossPlatformAllowlistTokens: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_TOKENS),
     crossPlatformBlocklistTokens: parseList(process.env.CROSS_PLATFORM_BLOCKLIST_TOKENS),
     crossPlatformAllowlistPlatforms: parseList(process.env.CROSS_PLATFORM_ALLOWLIST_PLATFORMS),

@@ -303,6 +303,7 @@ export interface Config {
   crossPlatformHardGateDegradeMs?: number;
   crossPlatformHardGateUseDegradeProfile?: boolean;
   crossPlatformHardGateRateLimitMs?: number;
+  crossPlatformHardGateAutoApplyFix?: boolean;
   crossPlatformAllowlistTokens?: string[];
   crossPlatformBlocklistTokens?: string[];
   crossPlatformAllowlistPlatforms?: string[];

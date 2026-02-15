@@ -934,6 +934,33 @@ function recordHardGateEvent(reason) {
     category: '硬门控',
     keyword: 'hard gate',
   });
+  const env = parseEnv(envEditor.value || '');
+  const autoFix = String(env.get('CROSS_PLATFORM_HARD_GATE_AUTO_APPLY_FIX') || '').toLowerCase() === 'true';
+  if (autoFix) {
+    const template = buildFixTemplate();
+    if (template.includes('硬门控')) {
+      let text = envEditor.value || '';
+      const lines = template.split('\n').filter(Boolean);
+      for (const line of lines) {
+        if (line.startsWith('#')) {
+          continue;
+        }
+        const idx = line.indexOf('=');
+        if (idx === -1) continue;
+        const key = line.slice(0, idx).trim();
+        const value = line.slice(idx + 1).trim();
+        text = setEnvValue(text, key, value);
+      }
+      envEditor.value = text;
+      detectTradingMode(text);
+      syncTogglesFromEnv(text);
+      updateMetricsPaths();
+      if (saveEnvButton) {
+        saveEnvButton.classList.add('attention');
+      }
+      pushLog({ type: 'system', level: 'system', message: '硬门控触发，已自动应用修复模板（请保存生效）' });
+    }
+  }
 }
 
 function renderFailureTopN() {
