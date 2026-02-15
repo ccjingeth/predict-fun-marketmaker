@@ -92,6 +92,7 @@
 - `MM_LAYER_SPEED_SIZE_MIN_FACTOR`：深度消耗过快时，挂单份额最小系数（0-1）。
 - `MM_LAYER_RETREAT_SIZE_MIN_FACTOR`：撤退模式下，挂单份额最小系数（0-1）。
 - `MM_LAYER_PANIC_SIZE_MIN_FACTOR`：强撤单后，挂单份额最小系数（0-1）。
+- `MM_LAYER_STEP_BPS_RETREAT_ADD`：撤退模式下每层额外偏移（bps）。
 - `MM_LAYER_PANIC_INTERVAL_MULT`：强撤单保护期内，下单间隔倍数。
 - `MM_LAYER_RETREAT_ONLY_FAR`：撤退模式仅挂最远一层。
 - `MM_LAYER_RETREAT_HOLD_MS`：撤退模式持续时间（毫秒）。

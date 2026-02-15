@@ -85,6 +85,7 @@ export class MarketMaker {
   private nearTouchPenalty: Map<string, { value: number; ts: number }> = new Map();
   private fillPenalty: Map<string, { value: number; ts: number }> = new Map();
   private layerPanicUntil: Map<string, number> = new Map();
+  private layerRetreatUntil: Map<string, number> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -1286,6 +1287,22 @@ export class MarketMaker {
     return until > Date.now();
   }
 
+  private applyLayerRetreat(tokenId: string): void {
+    const holdMs = Math.max(0, this.config.mmLayerRetreatHoldMs ?? 0);
+    if (!holdMs) {
+      return;
+    }
+    const now = Date.now();
+    const until = now + holdMs;
+    const current = this.layerRetreatUntil.get(tokenId) || 0;
+    this.layerRetreatUntil.set(tokenId, Math.max(current, until));
+  }
+
+  private isLayerRetreatActive(tokenId: string): boolean {
+    const until = this.layerRetreatUntil.get(tokenId) || 0;
+    return until > Date.now();
+  }
+
   private getEffectiveLayerCount(
     tokenId: string,
     profile: 'CALM' | 'NORMAL' | 'VOLATILE',
@@ -1324,9 +1341,16 @@ export class MarketMaker {
     const retreatThreshold = Math.max(0, this.config.mmLayerDepthSpeedRetreatBps ?? 0);
     if (retreatThreshold > 0 && depthSpeedBps >= retreatThreshold) {
       const cap = Math.max(0, Math.floor(this.config.mmLayerRetreatCount ?? 0));
+      this.applyLayerRetreat(tokenId);
       if (this.config.mmLayerRetreatOnlyFar) {
         this.actionLockUntil.set(tokenId, Date.now() + Math.max(0, this.config.mmLayerRetreatHoldMs ?? 0));
       }
+      if (cap > 0) {
+        effective = Math.min(effective, cap);
+      }
+    }
+    if (this.isLayerRetreatActive(tokenId)) {
+      const cap = Math.max(0, Math.floor(this.config.mmLayerRetreatCount ?? 0));
       if (cap > 0) {
         effective = Math.min(effective, cap);
       }
@@ -1354,6 +1378,9 @@ export class MarketMaker {
     const speedThreshold = Math.max(0, this.config.mmLayerDepthSpeedBps ?? 0);
     if (speedThreshold > 0 && depthSpeedBps >= speedThreshold) {
       step += Math.max(0, this.config.mmLayerStepBpsSpeedAdd ?? 0);
+    }
+    if (this.isLayerRetreatActive(tokenId)) {
+      step += Math.max(0, this.config.mmLayerStepBpsRetreatAdd ?? 0);
     }
     return step;
   }
@@ -2091,6 +2118,12 @@ export class MarketMaker {
         sizeFloor = Math.min(sizeFloor, floor);
       }
     }
+    if (this.isLayerRetreatActive(tokenId)) {
+      const floor = this.config.mmLayerRetreatSizeMinFactor ?? 0;
+      if (floor > 0) {
+        sizeFloor = Math.min(sizeFloor, floor);
+      }
+    }
     const speedFloor = this.config.mmLayerSpeedSizeMinFactor ?? 0;
     const retreatFloor = this.config.mmLayerRetreatSizeMinFactor ?? 0;
     if (speedFloor > 0 && metrics.depthSpeedBps >= (this.config.mmLayerDepthSpeedBps ?? 0)) {
@@ -2107,8 +2140,9 @@ export class MarketMaker {
 
     const retreatOnlyFar =
       this.config.mmLayerRetreatOnlyFar === true &&
-      this.config.mmLayerDepthSpeedRetreatBps &&
-      metrics.depthSpeedBps >= this.config.mmLayerDepthSpeedRetreatBps;
+      (this.isLayerRetreatActive(tokenId) ||
+        (this.config.mmLayerDepthSpeedRetreatBps &&
+          metrics.depthSpeedBps >= this.config.mmLayerDepthSpeedRetreatBps));
     const bidStart = retreatOnlyFar ? bidLayers - 1 : 0;
     const askStart = retreatOnlyFar ? askLayers - 1 : 0;
 

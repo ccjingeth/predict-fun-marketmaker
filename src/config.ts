@@ -192,6 +192,7 @@ export function loadConfig(): Config {
     mmLayerSpeedSizeMinFactor: parseFloat(process.env.MM_LAYER_SPEED_SIZE_MIN_FACTOR || '0'),
     mmLayerRetreatSizeMinFactor: parseFloat(process.env.MM_LAYER_RETREAT_SIZE_MIN_FACTOR || '0'),
     mmLayerPanicSizeMinFactor: parseFloat(process.env.MM_LAYER_PANIC_SIZE_MIN_FACTOR || '0'),
+    mmLayerStepBpsRetreatAdd: parseFloat(process.env.MM_LAYER_STEP_BPS_RETREAT_ADD || '0'),
     mmLayerPanicIntervalMult: parseFloat(process.env.MM_LAYER_PANIC_INTERVAL_MULT || '1'),
     mmLayerSizeDecay: parseFloat(process.env.MM_LAYER_SIZE_DECAY || '0.6'),
     mmLayerAllowBelowMinShares: process.env.MM_LAYER_ALLOW_BELOW_MIN_SHARES === 'true',

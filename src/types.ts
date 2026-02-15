@@ -144,6 +144,7 @@ export interface Config {
   mmLayerSpeedSizeMinFactor?: number;
   mmLayerRetreatSizeMinFactor?: number;
   mmLayerPanicSizeMinFactor?: number;
+  mmLayerStepBpsRetreatAdd?: number;
   mmLayerPanicIntervalMult?: number;
   mmLayerRetreatOnlyFar?: boolean;
   mmLayerRetreatHoldMs?: number;
