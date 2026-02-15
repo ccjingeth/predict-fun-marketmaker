@@ -355,6 +355,8 @@ export interface Config {
   crossPlatformAutoSequentialVwapBps?: number;
   crossPlatformAutoFokDriftBps?: number;
   crossPlatformAutoFokVwapBps?: number;
+  crossPlatformAutoSingleLegDriftBps?: number;
+  crossPlatformAutoSingleLegVwapBps?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;

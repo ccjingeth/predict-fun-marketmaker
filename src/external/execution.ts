@@ -881,7 +881,8 @@ export class CrossPlatformExecutionRouter {
 
     const taskDefs: Array<{ platform: ExternalPlatform; legs: PlatformLeg[]; options: PlatformExecuteOptions }> = [];
     const prepared = attempt > 0 ? this.shrinkFallbackLegs(legs, attempt) : legs;
-    if (fallbackMode === 'SINGLE_LEG' && attempt > 0) {
+    const auto = this.getAutoExecutionOverrides();
+    if ((fallbackMode === 'SINGLE_LEG' && attempt > 0) || auto.forceSingleLeg) {
       const bestLegs = this.selectBestLegs(
         prepared,
         Math.max(1, this.config.crossPlatformSingleLegTopN || 2)
@@ -946,7 +947,8 @@ export class CrossPlatformExecutionRouter {
     const minProfitBps = Math.max(0, this.config.crossPlatformPreSubmitProfitBps || 0);
     const minProfitUsd = Math.max(0, this.config.crossPlatformPreSubmitProfitUsd || 0);
     const totalCostBps = Math.max(0, this.config.crossPlatformPreSubmitTotalCostBps || 0);
-    if (!driftBps && !vwapBps && !minProfitBps && !minProfitUsd && !totalCostBps) {
+    const legSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0);
+    if (!driftBps && !vwapBps && !minProfitBps && !minProfitUsd && !totalCostBps && !legSpreadBps) {
       return;
     }
     const slippageBps = this.getSlippageBps();
@@ -962,7 +964,7 @@ export class CrossPlatformExecutionRouter {
       minProfitBps > 0 ||
       minProfitUsd > 0 ||
       totalCostBps > 0 ||
-      Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0) > 0;
+      legSpreadBps > 0;
     for (const leg of legs) {
       const book = await this.fetchOrderbookInternal(leg);
       if (!book) {
@@ -1008,7 +1010,6 @@ export class CrossPlatformExecutionRouter {
         }
       }
     }
-    const legSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0);
     if (legSpreadBps > 0 && legDeviationSamples.length >= 2) {
       const minDev = Math.min(...legDeviationSamples);
       const maxDev = Math.max(...legDeviationSamples);
@@ -1879,10 +1880,10 @@ export class CrossPlatformExecutionRouter {
     return true;
   }
 
-  private getAutoExecutionOverrides(): { forceSequential: boolean; forceFok: boolean } {
+  private getAutoExecutionOverrides(): { forceSequential: boolean; forceFok: boolean; forceSingleLeg: boolean } {
     const preflight = this.lastBatchPreflight || this.lastPreflight;
     if (!preflight) {
-      return { forceSequential: false, forceFok: false };
+      return { forceSequential: false, forceFok: false, forceSingleLeg: false };
     }
     const drift = Math.max(0, preflight.maxDriftBps || 0);
     const deviation = Math.max(0, preflight.maxDeviationBps || 0);
@@ -1891,13 +1892,17 @@ export class CrossPlatformExecutionRouter {
     const seqDev = Math.max(0, this.config.crossPlatformAutoSequentialVwapBps || 0);
     const fokDrift = Math.max(0, this.config.crossPlatformAutoFokDriftBps || 0);
     const fokDev = Math.max(0, this.config.crossPlatformAutoFokVwapBps || 0);
+    const singleDrift = Math.max(0, this.config.crossPlatformAutoSingleLegDriftBps || 0);
+    const singleDev = Math.max(0, this.config.crossPlatformAutoSingleLegVwapBps || 0);
 
     const forceSequential =
       (seqDrift > 0 && drift >= seqDrift) || (seqDev > 0 && deviation >= seqDev);
     const forceFok =
       (fokDrift > 0 && drift >= fokDrift) || (fokDev > 0 && deviation >= fokDev);
+    const forceSingleLeg =
+      (singleDrift > 0 && drift >= singleDrift) || (singleDev > 0 && deviation >= singleDev);
 
-    return { forceSequential, forceFok };
+    return { forceSequential, forceFok, forceSingleLeg };
   }
 
   private resolveExecutionOptions(attempt: number): PlatformExecuteOptions {

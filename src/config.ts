@@ -487,6 +487,8 @@ export function loadConfig(): Config {
     crossPlatformAutoSequentialVwapBps: parseFloat(process.env.CROSS_PLATFORM_AUTO_SEQUENTIAL_VWAP_BPS || '0'),
     crossPlatformAutoFokDriftBps: parseFloat(process.env.CROSS_PLATFORM_AUTO_FOK_DRIFT_BPS || '0'),
     crossPlatformAutoFokVwapBps: parseFloat(process.env.CROSS_PLATFORM_AUTO_FOK_VWAP_BPS || '0'),
+    crossPlatformAutoSingleLegDriftBps: parseFloat(process.env.CROSS_PLATFORM_AUTO_SINGLE_LEG_DRIFT_BPS || '0'),
+    crossPlatformAutoSingleLegVwapBps: parseFloat(process.env.CROSS_PLATFORM_AUTO_SINGLE_LEG_VWAP_BPS || '0'),
     crossPlatformLimitOrders: process.env.CROSS_PLATFORM_LIMIT_ORDERS !== 'false',
     crossPlatformCancelOpenMs: parseInt(process.env.CROSS_PLATFORM_CANCEL_OPEN_MS || '1500'),
     crossPlatformPostFillCheck: process.env.CROSS_PLATFORM_POST_FILL_CHECK !== 'false',
