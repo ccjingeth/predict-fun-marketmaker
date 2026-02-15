@@ -50,6 +50,10 @@ export class InPlatformArbitrageDetector {
     this.maxVwapLevels = Math.max(0, Math.floor(maxVwapLevels));
   }
 
+  setMinProfitThreshold(value: number): void {
+    this.minProfitThreshold = Math.max(0, value);
+  }
+
 
   private topOfBook(orderbook?: Orderbook): {
     bid: number;

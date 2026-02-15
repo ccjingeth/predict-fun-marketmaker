@@ -62,6 +62,10 @@ export class MultiOutcomeArbitrageDetector {
     this.config.minProfitUsd = Math.max(0, this.config.minProfitUsd);
   }
 
+  setMinProfitThreshold(value: number): void {
+    this.config.minProfitThreshold = Math.max(0, value);
+  }
+
   scanMarkets(markets: Market[], orderbooks: Map<string, Orderbook>): ArbitrageOpportunity[] {
     const groups = this.groupByCondition(markets);
     const opportunities: ArbitrageOpportunity[] = [];

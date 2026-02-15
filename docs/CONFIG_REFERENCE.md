@@ -192,6 +192,7 @@
 - `ARB_WS_BOOST_MS`：套利 WS 加速持续时长（毫秒）。
 - `ARB_WS_BOOST_INTERVAL_MS`：套利 WS 加速扫描间隔（毫秒）。
 - `ARB_WS_BOOST_MAX_BATCH`：套利 WS 加速期间最大批量。
+- `ARB_WS_BOOST_PROFIT_MULT`：套利 WS 加速期利润门槛倍率（<1 放宽，>1 收紧）。
 - `ARB_MAX_VWAP_DEVIATION_BPS`：VWAP 与盘口最优价的最大偏离（bps，防止低流动性误判）。
 - `ARB_RECHECK_DEVIATION_BPS`：VWAP 偏离超过该阈值时要求二次确认（bps）。
 - `ARB_MAX_VWAP_LEVELS`：VWAP 计算允许使用的最大档位数（避免吃深度）。
@@ -290,6 +291,7 @@
 - `CROSS_PLATFORM_WS_BOOST_MS`：跨平台 WS 加速持续时长（毫秒）。
 - `CROSS_PLATFORM_WS_BOOST_INTERVAL_MS`：跨平台 WS 加速扫描间隔（毫秒）。
 - `CROSS_PLATFORM_WS_BOOST_MAX_BATCH`：跨平台 WS 加速期间最大批量。
+- `CROSS_PLATFORM_WS_BOOST_PROFIT_MULT`：跨平台 WS 加速期利润门槛倍率（<1 放宽，>1 收紧）。
 - `CROSS_PLATFORM_WS_REALTIME_FALLBACK_ENABLED`：WS 无增量/不健康时启用回退扫描。
 - `CROSS_PLATFORM_WS_REALTIME_FALLBACK_INTERVAL_MS`：回退扫描最小间隔（毫秒）。
 - `CROSS_PLATFORM_WS_REALTIME_FALLBACK_MAX_MARKETS`：回退扫描抽样市场上限。

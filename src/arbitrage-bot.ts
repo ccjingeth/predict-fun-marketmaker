@@ -206,6 +206,7 @@ class ArbitrageBot {
   async scanOnce(): Promise<void> {
     console.log('🔍 Scanning for arbitrage opportunities...\n');
 
+    this.monitor.setMinProfitThreshold(this.getEffectiveMinProfitThreshold());
     const markets = await this.getMarketsCached();
     console.log(`Found ${markets.length} markets\n`);
 
@@ -224,6 +225,7 @@ class ArbitrageBot {
 
     await this.monitor.startMonitoring(
       async () => {
+        this.monitor.setMinProfitThreshold(this.getEffectiveMinProfitThreshold());
         const markets = await this.getMarketsCached();
         const sample = markets.slice(0, this.config.arbMaxMarkets || 80);
         const orderbooks = await this.loadOrderbooks(sample);
@@ -353,6 +355,7 @@ class ArbitrageBot {
     const sample = markets.slice(0, this.config.arbMaxMarkets || 80);
     const orderbooks = await this.loadOrderbooks(sample);
 
+    this.monitor.setMinProfitThreshold(this.getEffectiveMinProfitThreshold());
     const results = await this.monitor.scanOpportunities(markets, orderbooks);
 
     let opportunities: any[] = [];
@@ -930,8 +933,9 @@ class ArbitrageBot {
       [yesMarket, noMarket],
       this.config.arbPreflightMaxAgeMs || this.config.arbWsMaxAgeMs
     );
-    const minProfit = this.config.crossPlatformMinProfit || 0.02;
-    const profitMult = this.getDegradeProfitMultiplier();
+    const baseMinProfit = this.config.crossPlatformMinProfit || 0.02;
+    const profitMult = this.getEffectiveProfitMultiplier();
+    const minProfit = baseMinProfit * profitMult;
     const detector = new InPlatformArbitrageDetector(
       minProfit,
       (this.config.predictFeeBps || 0) / 10000,
@@ -960,7 +964,7 @@ class ArbitrageBot {
     if (required > 0 && profitUsd < required) {
       return false;
     }
-    const minProfitPct = minProfit * 100 * profitMult;
+    const minProfitPct = minProfit * 100;
     return best.maxProfit >= minProfitPct;
   }
 
@@ -977,8 +981,9 @@ class ArbitrageBot {
       group,
       this.config.arbPreflightMaxAgeMs || this.config.arbWsMaxAgeMs
     );
-    const minProfit = this.config.crossPlatformMinProfit || 0.02;
-    const profitMult = this.getDegradeProfitMultiplier();
+    const baseMinProfit = this.config.crossPlatformMinProfit || 0.02;
+    const profitMult = this.getEffectiveProfitMultiplier();
+    const minProfit = baseMinProfit * profitMult;
     const detector = new MultiOutcomeArbitrageDetector({
       minProfitThreshold: minProfit,
       minOutcomes: this.config.multiOutcomeMinOutcomes || 3,
@@ -1005,7 +1010,7 @@ class ArbitrageBot {
     if (required > 0 && profitUsd < required) {
       return false;
     }
-    const minProfitPct = minProfit * 100 * profitMult;
+    const minProfitPct = minProfit * 100;
     return (best.expectedReturn || 0) >= minProfitPct;
   }
 
@@ -1018,7 +1023,8 @@ class ArbitrageBot {
     }
     const notionalTerm = notional * (baseBps / 10000);
     const impactTerm = notional * (Math.max(0, impactBps) / 10000) * impactMult;
-    return (base + notionalTerm + impactTerm) * Math.max(1, multiplier);
+    const safeMult = Number.isFinite(multiplier) ? Math.max(0, multiplier) : 1;
+    return (base + notionalTerm + impactTerm) * safeMult;
   }
 
   private estimateImpactBpsInPlatform(arb: any): number {
@@ -1101,6 +1107,32 @@ class ArbitrageBot {
   private getDegradeProfitMultiplier(): number {
     const factor = this.getArbDegradeFactor();
     return Math.max(1, 1 / Math.max(0.05, factor));
+  }
+
+  private getWsBoostProfitMultiplier(): number {
+    const now = Date.now();
+    if (this.wsBoostUntil <= now) {
+      return 1;
+    }
+    const arbMult = Number.isFinite(this.config.arbWsBoostProfitMult)
+      ? this.config.arbWsBoostProfitMult
+      : 0.85;
+    const crossMult = Number.isFinite(this.config.crossPlatformWsBoostProfitMult)
+      ? this.config.crossPlatformWsBoostProfitMult
+      : 0.9;
+    const mult = Math.min(arbMult, crossMult);
+    return Math.max(0.1, Math.min(1, mult));
+  }
+
+  private getEffectiveProfitMultiplier(): number {
+    const degrade = this.getDegradeProfitMultiplier();
+    const boost = this.getWsBoostProfitMultiplier();
+    return Math.max(0, degrade * boost);
+  }
+
+  private getEffectiveMinProfitThreshold(): number {
+    const base = Math.max(0, this.config.crossPlatformMinProfit || 0.02);
+    return base * this.getEffectiveProfitMultiplier();
   }
 
   private getEffectiveRecheckDeviationBps(): number {

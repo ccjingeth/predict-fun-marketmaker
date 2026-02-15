@@ -49,6 +49,10 @@ export class CrossPlatformArbitrageDetector {
     this.minProfitUsd = Math.max(0, minProfitUsd);
   }
 
+  setMinProfitThreshold(value: number): void {
+    this.minProfitThreshold = Math.max(0, value);
+  }
+
   private toEntries(levels?: DepthLevel[]): OrderbookEntry[] {
     if (!levels || levels.length === 0) {
       return [];

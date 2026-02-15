@@ -194,6 +194,15 @@ export class ArbitrageMonitor {
     this.crossPlatformAggregator = crossPlatformAggregator;
   }
 
+  setMinProfitThreshold(value: number): void {
+    const next = Math.max(0, value);
+    this.config.minProfitThreshold = next;
+    this.intraArbDetector.setMinProfitThreshold(next);
+    this.multiOutcomeDetector.setMinProfitThreshold(next);
+    this.crossArbDetector.setMinProfitThreshold(next);
+    this.dependencyDetector?.setMinProfitThreshold(next);
+  }
+
   async scanOpportunities(markets: Market[], orderbooks: Map<string, Orderbook>): Promise<{
     valueMismatches: ArbitrageOpportunity[];
     inPlatform: ArbitrageOpportunity[];

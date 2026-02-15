@@ -105,6 +105,10 @@ export class DependencyArbitrageDetector {
     };
   }
 
+  setMinProfitThreshold(value: number): void {
+    this.config.minProfit = Math.max(0, value);
+  }
+
   async scanMarkets(markets: Market[], orderbooks: Map<string, Orderbook>): Promise<ArbitrageOpportunity[]> {
     if (!this.config.enabled) {
       return [];

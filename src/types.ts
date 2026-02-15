@@ -483,9 +483,11 @@ export interface Config {
   arbWsBoostMs?: number;
   arbWsBoostIntervalMs?: number;
   arbWsBoostMaxBatch?: number;
+  arbWsBoostProfitMult?: number;
   crossPlatformWsBoostMs?: number;
   crossPlatformWsBoostIntervalMs?: number;
   crossPlatformWsBoostMaxBatch?: number;
+  crossPlatformWsBoostProfitMult?: number;
   arbRequireWs?: boolean;
   arbWsHealthScoreMin?: number;
   arbMaxErrors?: number;
