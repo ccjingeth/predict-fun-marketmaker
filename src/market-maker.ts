@@ -48,6 +48,13 @@ export class MarketMaker {
   private lastBestBid: Map<string, number> = new Map();
   private lastBestAsk: Map<string, number> = new Map();
   private lastBestAt: Map<string, number> = new Map();
+  private lastBestBidSize: Map<string, number> = new Map();
+  private lastBestAskSize: Map<string, number> = new Map();
+  private prevBestBid: Map<string, number> = new Map();
+  private prevBestAsk: Map<string, number> = new Map();
+  private prevBestAt: Map<string, number> = new Map();
+  private prevBestBidSize: Map<string, number> = new Map();
+  private prevBestAskSize: Map<string, number> = new Map();
   private lastBookSpread: Map<string, number> = new Map();
   private lastBookSpreadAt: Map<string, number> = new Map();
   private volatilityEma: Map<string, number> = new Map();
@@ -339,11 +346,39 @@ export class MarketMaker {
   }
 
   private updateBestPrices(tokenId: string, orderbook: Orderbook): void {
+    const prevBid = this.lastBestBid.get(tokenId);
+    const prevAsk = this.lastBestAsk.get(tokenId);
+    const prevAt = this.lastBestAt.get(tokenId);
+    const prevBidSize = this.lastBestBidSize.get(tokenId);
+    const prevAskSize = this.lastBestAskSize.get(tokenId);
+    if (prevBid !== undefined) {
+      this.prevBestBid.set(tokenId, prevBid);
+    }
+    if (prevAsk !== undefined) {
+      this.prevBestAsk.set(tokenId, prevAsk);
+    }
+    if (prevAt !== undefined) {
+      this.prevBestAt.set(tokenId, prevAt);
+    }
+    if (prevBidSize !== undefined) {
+      this.prevBestBidSize.set(tokenId, prevBidSize);
+    }
+    if (prevAskSize !== undefined) {
+      this.prevBestAskSize.set(tokenId, prevAskSize);
+    }
     if (orderbook.best_bid !== undefined && orderbook.best_bid > 0) {
       this.lastBestBid.set(tokenId, orderbook.best_bid);
     }
     if (orderbook.best_ask !== undefined && orderbook.best_ask > 0) {
       this.lastBestAsk.set(tokenId, orderbook.best_ask);
+    }
+    const bidSize = this.parseShares(orderbook.bids?.[0]);
+    const askSize = this.parseShares(orderbook.asks?.[0]);
+    if (bidSize > 0) {
+      this.lastBestBidSize.set(tokenId, bidSize);
+    }
+    if (askSize > 0) {
+      this.lastBestAskSize.set(tokenId, askSize);
     }
     this.lastBestAt.set(tokenId, Date.now());
   }
@@ -473,21 +508,54 @@ export class MarketMaker {
     const holdMax = this.config.mmHoldNearTouchMaxBps ?? nearTouch;
     const aggressiveMove = this.config.mmAggressiveMoveBps ?? 0.002;
     const aggressiveWindow = this.config.mmAggressiveMoveWindowMs ?? 1500;
+    const hitWarnBps = Math.max(0, this.config.mmHitWarningBps ?? 0);
+    const hitWarn = hitWarnBps > 0 ? hitWarnBps / 10000 : 0;
+    const hitTopSizeMin = Math.max(0, this.config.mmHitTopSizeMinShares ?? 0);
+    const hitTopSizeFactor = Math.max(0, this.config.mmHitTopSizeFactor ?? 0);
+    const hitDepthLevels = Math.max(0, this.config.mmHitDepthLevels ?? 0);
+    const hitDepthMinShares = Math.max(0, this.config.mmHitDepthMinShares ?? 0);
+    const hitSpeedBps = Math.max(0, this.config.mmHitSpeedBps ?? 0);
+    const hitSpeedWindow = Math.max(0, this.config.mmHitSpeedWindowMs ?? 1200);
+    const orderShares = Number(order.shares);
 
-    const lastAt = this.lastBestAt.get(order.token_id) || 0;
-    if (Date.now() - lastAt <= aggressiveWindow) {
-      const lastBid = this.lastBestBid.get(order.token_id);
-      const lastAsk = this.lastBestAsk.get(order.token_id);
-      if (order.side === 'BUY' && lastAsk && bestAsk < lastAsk * (1 - aggressiveMove)) {
+    const prevAt = this.prevBestAt.get(order.token_id) || 0;
+    const prevBid = this.prevBestBid.get(order.token_id);
+    const prevAsk = this.prevBestAsk.get(order.token_id);
+    const elapsed = prevAt > 0 ? Date.now() - prevAt : 0;
+    if (elapsed > 0 && elapsed <= aggressiveWindow) {
+      if (order.side === 'BUY' && prevAsk && bestAsk < prevAsk * (1 - aggressiveMove)) {
         return { cancel: true, panic: true, reason: 'aggressive-move' };
       }
-      if (order.side === 'SELL' && lastBid && bestBid > lastBid * (1 + aggressiveMove)) {
+      if (order.side === 'SELL' && prevBid && bestBid > prevBid * (1 + aggressiveMove)) {
         return { cancel: true, panic: true, reason: 'aggressive-move' };
       }
     }
 
     if (order.side === 'BUY') {
       const distance = (bestAsk - price) / price;
+      if (hitSpeedBps > 0 && elapsed > 0 && elapsed <= hitSpeedWindow && prevAsk && bestAsk < prevAsk) {
+        const moveBps = ((prevAsk - bestAsk) / prevAsk) * 10000;
+        if (hitWarn > 0 && distance <= hitWarn && moveBps >= hitSpeedBps) {
+          return { cancel: true, panic: true, reason: 'hit-warning-speed' };
+        }
+      }
+      if (hitWarn > 0 && distance <= hitWarn) {
+        const topSize = this.lastBestBidSize.get(order.token_id) ?? this.parseShares(orderbook.bids?.[0]);
+        const relativeCap =
+          hitTopSizeFactor > 0 && Number.isFinite(orderShares) && orderShares > 0
+            ? orderShares * hitTopSizeFactor
+            : 0;
+        const sizeThreshold = Math.max(hitTopSizeMin, relativeCap);
+        if (sizeThreshold > 0 && topSize > 0 && topSize <= sizeThreshold) {
+          return { cancel: true, panic: true, reason: 'hit-warning-top' };
+        }
+        if (hitDepthLevels > 0 && hitDepthMinShares > 0) {
+          const depthShares = this.sumDepthLevels(orderbook.bids, hitDepthLevels);
+          if (depthShares > 0 && depthShares <= hitDepthMinShares) {
+            return { cancel: true, panic: true, reason: 'hit-warning-depth' };
+          }
+        }
+      }
       if (distance <= hardCancel || distance <= antiFill) {
         this.nearTouchHoldUntil.delete(order.order_hash);
         return { cancel: true, panic: true, reason: 'anti-fill' };
@@ -510,6 +578,29 @@ export class MarketMaker {
       }
     } else {
       const distance = (price - bestBid) / price;
+      if (hitSpeedBps > 0 && elapsed > 0 && elapsed <= hitSpeedWindow && prevBid && bestBid > prevBid) {
+        const moveBps = ((bestBid - prevBid) / prevBid) * 10000;
+        if (hitWarn > 0 && distance <= hitWarn && moveBps >= hitSpeedBps) {
+          return { cancel: true, panic: true, reason: 'hit-warning-speed' };
+        }
+      }
+      if (hitWarn > 0 && distance <= hitWarn) {
+        const topSize = this.lastBestAskSize.get(order.token_id) ?? this.parseShares(orderbook.asks?.[0]);
+        const relativeCap =
+          hitTopSizeFactor > 0 && Number.isFinite(orderShares) && orderShares > 0
+            ? orderShares * hitTopSizeFactor
+            : 0;
+        const sizeThreshold = Math.max(hitTopSizeMin, relativeCap);
+        if (sizeThreshold > 0 && topSize > 0 && topSize <= sizeThreshold) {
+          return { cancel: true, panic: true, reason: 'hit-warning-top' };
+        }
+        if (hitDepthLevels > 0 && hitDepthMinShares > 0) {
+          const depthShares = this.sumDepthLevels(orderbook.asks, hitDepthLevels);
+          if (depthShares > 0 && depthShares <= hitDepthMinShares) {
+            return { cancel: true, panic: true, reason: 'hit-warning-depth' };
+          }
+        }
+      }
       if (distance <= hardCancel || distance <= antiFill) {
         this.nearTouchHoldUntil.delete(order.order_hash);
         return { cancel: true, panic: true, reason: 'anti-fill' };
@@ -1555,7 +1646,10 @@ export class MarketMaker {
         }
       }
       if (risk.cancel || shouldReprice) {
-        if (risk.cancel && (risk.reason.startsWith('near-touch') || risk.reason === 'anti-fill')) {
+        if (
+          risk.cancel &&
+          (risk.reason.startsWith('near-touch') || risk.reason === 'anti-fill' || risk.reason.startsWith('hit-warning'))
+        ) {
           const intensity = risk.panic ? 1.5 : 1;
           this.applyNearTouchPenalty(tokenId, intensity);
           const sizePenalty = this.config.mmNearTouchSizePenalty ?? 0;
@@ -1605,7 +1699,10 @@ export class MarketMaker {
         }
       }
       if (risk.cancel || shouldReprice) {
-        if (risk.cancel && (risk.reason.startsWith('near-touch') || risk.reason === 'anti-fill')) {
+        if (
+          risk.cancel &&
+          (risk.reason.startsWith('near-touch') || risk.reason === 'anti-fill' || risk.reason.startsWith('hit-warning'))
+        ) {
           const intensity = risk.panic ? 1.5 : 1;
           this.applyNearTouchPenalty(tokenId, intensity);
           const sizePenalty = this.config.mmNearTouchSizePenalty ?? 0;

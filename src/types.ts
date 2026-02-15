@@ -109,6 +109,13 @@ export interface Config {
   mmNoFillCancelMaxBps?: number;
   mmAggressiveMoveBps?: number;
   mmAggressiveMoveWindowMs?: number;
+  mmHitWarningBps?: number;
+  mmHitTopSizeMinShares?: number;
+  mmHitTopSizeFactor?: number;
+  mmHitDepthLevels?: number;
+  mmHitDepthMinShares?: number;
+  mmHitSpeedBps?: number;
+  mmHitSpeedWindowMs?: number;
   mmVolatilityHighBps?: number;
   mmVolatilityLowBps?: number;
   mmIntervalProfileVolatileMultiplier?: number;

@@ -57,6 +57,13 @@
 - `MM_NO_FILL_CANCEL_MAX_BPS`：无成交撤单阈值上限（bps）。
 - `MM_AGGRESSIVE_MOVE_BPS`：盘口快速逼近时的撤单阈值。
 - `MM_AGGRESSIVE_MOVE_WINDOW_MS`：快速逼近检测窗口。
+- `MM_HIT_WARNING_BPS`：逼近成交预警阈值（bps）。
+- `MM_HIT_TOP_SIZE_MIN_SHARES`：逼近成交时，顶层深度低于该值触发撤单。
+- `MM_HIT_TOP_SIZE_FACTOR`：逼近成交时，顶层深度低于「挂单份额 × 该系数」触发撤单。
+- `MM_HIT_DEPTH_LEVELS`：逼近成交时，用于检测深度的盘口层数。
+- `MM_HIT_DEPTH_MIN_SHARES`：逼近成交时，深度低于该值触发撤单。
+- `MM_HIT_SPEED_BPS`：盘口向挂单方向逼近的速度阈值（bps）。
+- `MM_HIT_SPEED_WINDOW_MS`：盘口逼近速度检测窗口。
 - `MM_VOLATILITY_HIGH_BPS`：高波动阈值（触发“波动档”）。
 - `MM_VOLATILITY_LOW_BPS`：低波动阈值（触发“平稳档”）。
 - `MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER`：波动档下单间隔倍率。
