@@ -1581,6 +1581,7 @@ function generateMappingTemplate(missing) {
     predictMarketId: item.predictMarketId || '',
     predictQuestion: item.predictQuestion || item.question || '',
     predictScore: item.predictScore ?? undefined,
+    predictConfirmed: item.predictConfirmed ?? undefined,
     predictCandidates: item.predictCandidates || undefined,
     polymarketYesTokenId: item.platform === 'Polymarket' ? item.yesTokenId : '',
     polymarketNoTokenId: item.platform === 'Polymarket' ? item.noTokenId : '',
@@ -1612,7 +1613,8 @@ function renderMissingList(missing) {
     let suggestionText = '';
     if (itemData.predictMarketId || itemData.predictQuestion) {
       const score = Number.isFinite(itemData.predictScore) ? ` score=${itemData.predictScore}` : '';
-      suggestionText = `｜Predict: ${itemData.predictQuestion || itemData.predictMarketId}${score}`;
+      const confirmedTag = itemData.predictConfirmed ? '｜已确认' : '';
+      suggestionText = `｜Predict: ${itemData.predictQuestion || itemData.predictMarketId}${score}${confirmedTag}`;
     }
     if (Array.isArray(itemData.predictCandidates) && itemData.predictCandidates.length > 0) {
       const top = itemData.predictCandidates
@@ -1747,6 +1749,10 @@ async function suggestPredictMappings() {
   const env = parseEnv(envEditor.value || '');
   const minSimilarity = parseFloat(env.get('CROSS_PLATFORM_MIN_SIMILARITY') || '0.78');
   const topN = Math.max(1, parseInt(env.get('CROSS_PLATFORM_MAPPING_SUGGEST_TOP_N') || '3', 10));
+  const minScore = parseFloat(env.get('CROSS_PLATFORM_MAPPING_SUGGEST_MIN_SCORE') || '0.5');
+  const confirmScore = parseFloat(
+    env.get('CROSS_PLATFORM_MAPPING_SUGGEST_CONFIRM_SCORE') || String(minSimilarity + 0.08)
+  );
   const candidates = predictMarkets
     .map(parseMarketRow)
     .filter((row) => row && (row.marketId || row.question));
@@ -1756,7 +1762,7 @@ async function suggestPredictMappings() {
     const scored = [];
     for (const candidate of candidates) {
       const score = similarityScore(item.question, candidate.question);
-      if (score <= 0) continue;
+      if (score < minScore) continue;
       scored.push({
         marketId: candidate.marketId || '',
         question: candidate.question || '',
@@ -1777,6 +1783,7 @@ async function suggestPredictMappings() {
       updated.predictMarketId = best.marketId || '';
       updated.predictQuestion = best.question || '';
       updated.predictScore = best.score;
+      updated.predictConfirmed = best.score >= confirmScore;
     }
     return updated;
   });
