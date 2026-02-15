@@ -936,30 +936,16 @@ function recordHardGateEvent(reason) {
   });
   const env = parseEnv(envEditor.value || '');
   const autoFix = String(env.get('CROSS_PLATFORM_HARD_GATE_AUTO_APPLY_FIX') || '').toLowerCase() === 'true';
-  if (autoFix) {
-    const template = buildFixTemplate();
-    if (template.includes('硬门控')) {
-      let text = envEditor.value || '';
-      const lines = template.split('\n').filter(Boolean);
-      for (const line of lines) {
-        if (line.startsWith('#')) {
-          continue;
-        }
-        const idx = line.indexOf('=');
-        if (idx === -1) continue;
-        const key = line.slice(0, idx).trim();
-        const value = line.slice(idx + 1).trim();
-        text = setEnvValue(text, key, value);
-      }
-      envEditor.value = text;
-      detectTradingMode(text);
-      syncTogglesFromEnv(text);
-      updateMetricsPaths();
-      if (saveEnvButton) {
-        saveEnvButton.classList.add('attention');
-      }
-      pushLog({ type: 'system', level: 'system', message: '硬门控触发，已自动应用修复模板（请保存生效）' });
+  const autoUltra = String(env.get('CROSS_PLATFORM_HARD_GATE_AUTO_ULTRA') || '').toLowerCase() === 'true';
+  if (autoUltra) {
+    applyDowngradeProfile('ultra');
+    if (saveEnvButton) {
+      saveEnvButton.classList.add('attention');
     }
+    pushLog({ type: 'system', level: 'system', message: '硬门控触发，已自动切换为极保守模板（请保存生效）' });
+  }
+  if (autoFix) {
+    applyEnvLines(getHardGateFixLines(), '硬门控触发，已自动应用硬门控修复模板（请保存生效）');
   }
 }
 
@@ -1507,6 +1493,41 @@ function applyDowngradeProfile(level = 'safe') {
   syncTogglesFromEnv(text);
   updateMetricsPaths();
   pushLog({ type: 'system', level: 'system', message: `已应用${level === 'ultra' ? '极保守' : '保守'}参数（请保存生效）` });
+}
+
+function getHardGateFixLines() {
+  return [
+    'CROSS_PLATFORM_CONSISTENCY_PRESSURE_UP=0.2',
+    'CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_THRESHOLD=0.9',
+    'CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_FACTOR=0.4',
+    'CROSS_PLATFORM_WS_HEALTH_HARD_THRESHOLD=50',
+    'CROSS_PLATFORM_WS_HEALTH_HARD_FACTOR=0.6',
+    'CROSS_PLATFORM_HARD_GATE_RATE_LIMIT_MS=5000',
+  ];
+}
+
+function applyEnvLines(lines, message) {
+  if (!lines || !lines.length) return;
+  let text = envEditor.value || '';
+  lines.forEach((line) => {
+    if (!line || line.startsWith('#')) return;
+    const idx = line.indexOf('=');
+    if (idx === -1) return;
+    const key = line.slice(0, idx).trim();
+    const value = line.slice(idx + 1).trim();
+    if (!key) return;
+    text = setEnvValue(text, key, value);
+  });
+  envEditor.value = text;
+  detectTradingMode(text);
+  syncTogglesFromEnv(text);
+  updateMetricsPaths();
+  if (saveEnvButton) {
+    saveEnvButton.classList.add('attention');
+  }
+  if (message) {
+    pushLog({ type: 'system', level: 'system', message });
+  }
 }
 
 function parseFixTemplate(template) {
@@ -2157,14 +2178,7 @@ function buildFixTemplate() {
         'CROSS_PLATFORM_CHUNK_FACTOR_MIN=0.6',
       ]);
     } else if (category === '硬门控') {
-      appendLines(category, [
-        'CROSS_PLATFORM_CONSISTENCY_PRESSURE_UP=0.2',
-        'CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_THRESHOLD=0.9',
-        'CROSS_PLATFORM_CONSISTENCY_PRESSURE_HARD_FACTOR=0.4',
-        'CROSS_PLATFORM_WS_HEALTH_HARD_THRESHOLD=50',
-        'CROSS_PLATFORM_WS_HEALTH_HARD_FACTOR=0.6',
-        'CROSS_PLATFORM_HARD_GATE_RATE_LIMIT_MS=5000',
-      ]);
+      appendLines(category, getHardGateFixLines());
     } else if (category === '执行失败') {
       appendLines(category, [
         'CROSS_PLATFORM_MAX_RETRIES=1',

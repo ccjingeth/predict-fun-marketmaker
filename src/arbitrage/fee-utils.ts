@@ -2,7 +2,9 @@
  * Fee helpers
  *
  * Notes:
- * - Polymarket fee-enabled markets use a curve-based taker fee.
+ * - Polymarket fee-enabled markets use a fee-curve model:
+ *   fee = C × feeRate × (p × (1 - p))^exponent
+ *   (We approximate per-share fee as feeRate × (p × (1 - p))^exponent.)
  * - For other platforms or unknown fee models, we fall back to linear fee = price * feeRate.
  */
 
@@ -28,9 +30,9 @@ export function calcCurveFee(price: number, feeRateBps: number, curveRate: numbe
   if (feeRateBps <= 0 || curveRate <= 0 || curveExponent <= 0) return 0;
 
   const p = clampPrice(price);
-  const baseMultiplier = feeRateBps / 1000; // 1000 bps as baseline from Polymarket fee-rate endpoint
+  const baseMultiplier = feeRateBps / 1000;
   const curve = curveRate * Math.pow(p * (1 - p), curveExponent);
-  return p * baseMultiplier * curve;
+  return baseMultiplier * curve;
 }
 
 export function calcFeeCost(
