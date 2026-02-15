@@ -639,6 +639,7 @@ export class CrossPlatformExecutionRouter {
   private forceSequentialUntil = 0;
   private failureMinProfitUsdExtra = 0;
   private failureMinProfitBpsExtra = 0;
+  private failureNotionalUsdExtra = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -784,6 +785,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureCooldown(true);
         this.adjustFailureDepthExtra(true);
         this.adjustFailureMinProfitExtra(true);
+        this.adjustFailureNotionalExtra(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -855,6 +857,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureCooldown(false);
         this.adjustFailureDepthExtra(false);
         this.adjustFailureMinProfitExtra(false);
+        this.adjustFailureNotionalExtra(false);
         this.applyFailureForceSequential(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
@@ -1605,7 +1608,13 @@ export class CrossPlatformExecutionRouter {
       return this.config.crossPlatformSlippageBps || 0;
     }
     const floor = Math.max(0, this.config.crossPlatformSlippageFloorBps || 0);
-    const ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
+    let ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
+    if ((this.circuitFailures > 0 || this.isDegraded()) && this.config.crossPlatformFailureSlippageTightenBps) {
+      const tighten = Math.max(0, this.config.crossPlatformFailureSlippageTightenBps || 0);
+      if (tighten > 0) {
+        ceil = Math.max(floor, ceil - tighten);
+      }
+    }
     const base = this.config.crossPlatformSlippageBps || 0;
     if (ceil > 0) {
       return Math.max(floor, Math.min(ceil, base));
@@ -1618,7 +1627,13 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     const floor = Math.max(0, this.config.crossPlatformSlippageFloorBps || 0);
-    const ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
+    let ceil = Math.max(floor, this.config.crossPlatformSlippageCeilBps || 0);
+    if ((this.circuitFailures > 0 || this.isDegraded()) && this.config.crossPlatformFailureSlippageTightenBps) {
+      const tighten = Math.max(0, this.config.crossPlatformFailureSlippageTightenBps || 0);
+      if (tighten > 0) {
+        ceil = Math.max(floor, ceil - tighten);
+      }
+    }
     const stepUp = Math.max(0, this.config.crossPlatformFailureSlippageBumpBps || 0);
     const stepDown = Math.max(0, this.config.crossPlatformSuccessSlippageTightenBps || 0);
     if (success) {
@@ -1827,6 +1842,22 @@ export class CrossPlatformExecutionRouter {
     if (bpsBump > 0) {
       this.failureMinProfitBpsExtra = Math.min(bpsMax, this.failureMinProfitBpsExtra + bpsBump);
     }
+  }
+
+  private adjustFailureNotionalExtra(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureNotionalUsdBump || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureNotionalUsdBumpMax || bump * 5);
+    const recover = this.config.crossPlatformFailureNotionalUsdRecover ?? 0.7;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureNotionalUsdExtra = Math.max(0, this.failureNotionalUsdExtra * recover);
+      }
+      return;
+    }
+    this.failureNotionalUsdExtra = Math.min(maxBump, this.failureNotionalUsdExtra + bump);
   }
 
   private applyFailureForceSequential(success: boolean): void {
@@ -4049,6 +4080,9 @@ export class CrossPlatformExecutionRouter {
 
   private assertMinNotionalAndProfit(legs: PlatformLeg[]): void {
     let minNotional = Math.max(0, this.config.crossPlatformMinNotionalUsd || 0);
+    if (this.failureNotionalUsdExtra > 0) {
+      minNotional += this.failureNotionalUsdExtra;
+    }
     let baseProfit = Math.max(0, this.config.crossPlatformMinProfitUsd || 0);
     let baseBps = Math.max(0, this.config.crossPlatformMinProfitBps || 0);
     if (this.failureMinProfitUsdExtra > 0) {

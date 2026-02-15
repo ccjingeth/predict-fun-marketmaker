@@ -383,6 +383,10 @@ export interface Config {
   crossPlatformFailureMinProfitBpsBump?: number;
   crossPlatformFailureMinProfitBpsBumpMax?: number;
   crossPlatformFailureMinProfitBpsRecover?: number;
+  crossPlatformFailureSlippageTightenBps?: number;
+  crossPlatformFailureNotionalUsdBump?: number;
+  crossPlatformFailureNotionalUsdBumpMax?: number;
+  crossPlatformFailureNotionalUsdRecover?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;
