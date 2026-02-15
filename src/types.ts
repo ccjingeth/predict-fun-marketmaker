@@ -188,6 +188,7 @@ export interface Config {
   crossPlatformPreSubmitProfitBps?: number;
   crossPlatformPreSubmitProfitUsd?: number;
   crossPlatformPreSubmitLegVwapSpreadBps?: number;
+  crossPlatformPreSubmitTotalCostBps?: number;
   crossPlatformAdaptiveSize?: boolean;
   crossPlatformMinDepthShares?: number;
   crossPlatformMinNotionalUsd?: number;
@@ -350,6 +351,10 @@ export interface Config {
   crossPlatformBatchMax?: number;
   crossPlatformUseFok?: boolean;
   crossPlatformParallelSubmit?: boolean;
+  crossPlatformAutoSequentialDriftBps?: number;
+  crossPlatformAutoSequentialVwapBps?: number;
+  crossPlatformAutoFokDriftBps?: number;
+  crossPlatformAutoFokVwapBps?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;

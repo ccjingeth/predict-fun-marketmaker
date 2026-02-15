@@ -945,7 +945,8 @@ export class CrossPlatformExecutionRouter {
     const vwapBps = Math.max(0, this.config.crossPlatformPreSubmitVwapBps || 0);
     const minProfitBps = Math.max(0, this.config.crossPlatformPreSubmitProfitBps || 0);
     const minProfitUsd = Math.max(0, this.config.crossPlatformPreSubmitProfitUsd || 0);
-    if (!driftBps && !vwapBps && !minProfitBps && !minProfitUsd) {
+    const totalCostBps = Math.max(0, this.config.crossPlatformPreSubmitTotalCostBps || 0);
+    if (!driftBps && !vwapBps && !minProfitBps && !minProfitUsd && !totalCostBps) {
       return;
     }
     const slippageBps = this.getSlippageBps();
@@ -956,6 +957,12 @@ export class CrossPlatformExecutionRouter {
     let hasBuy = false;
     let hasSell = false;
     const legDeviationSamples: number[] = [];
+    const needsVwap =
+      vwapBps > 0 ||
+      minProfitBps > 0 ||
+      minProfitUsd > 0 ||
+      totalCostBps > 0 ||
+      Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0) > 0;
     for (const leg of legs) {
       const book = await this.fetchOrderbookInternal(leg);
       if (!book) {
@@ -971,7 +978,7 @@ export class CrossPlatformExecutionRouter {
           `Pre-submit failed: drift ${drift.toFixed(1)} bps (max ${driftBps}) for ${leg.platform}:${leg.tokenId}`
         );
       }
-      if (vwapBps > 0 || minProfitBps > 0 || minProfitUsd > 0) {
+      if (needsVwap) {
         const feeBps = this.getFeeBps(leg.platform);
         const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
         const vwap =
@@ -1009,6 +1016,22 @@ export class CrossPlatformExecutionRouter {
       if (spread > legSpreadBps) {
         throw new Error(
           `Pre-submit failed: leg VWAP spread ${spread.toFixed(1)} bps > max ${legSpreadBps}`
+        );
+      }
+    }
+    if (totalCostBps > 0 && (hasBuy || hasSell)) {
+      const buffer = totalCostBps / 10000;
+      let margin = 0;
+      if (hasBuy && !hasSell) {
+        margin = 1 - totalCostPerShare - transfer;
+      } else if (hasSell && !hasBuy) {
+        margin = totalProceedsPerShare - 1 - transfer;
+      } else {
+        margin = totalProceedsPerShare - totalCostPerShare - transfer;
+      }
+      if (margin < buffer) {
+        throw new Error(
+          `Pre-submit failed: total cost margin ${(margin * 10000).toFixed(1)} bps < min ${totalCostBps}`
         );
       }
     }
@@ -1840,6 +1863,10 @@ export class CrossPlatformExecutionRouter {
   }
 
   private shouldParallelSubmit(): boolean {
+    const auto = this.getAutoExecutionOverrides();
+    if (auto.forceSequential) {
+      return false;
+    }
     if (this.config.crossPlatformParallelSubmit === false) {
       return false;
     }
@@ -1850,6 +1877,27 @@ export class CrossPlatformExecutionRouter {
       return false;
     }
     return true;
+  }
+
+  private getAutoExecutionOverrides(): { forceSequential: boolean; forceFok: boolean } {
+    const preflight = this.lastBatchPreflight || this.lastPreflight;
+    if (!preflight) {
+      return { forceSequential: false, forceFok: false };
+    }
+    const drift = Math.max(0, preflight.maxDriftBps || 0);
+    const deviation = Math.max(0, preflight.maxDeviationBps || 0);
+
+    const seqDrift = Math.max(0, this.config.crossPlatformAutoSequentialDriftBps || 0);
+    const seqDev = Math.max(0, this.config.crossPlatformAutoSequentialVwapBps || 0);
+    const fokDrift = Math.max(0, this.config.crossPlatformAutoFokDriftBps || 0);
+    const fokDev = Math.max(0, this.config.crossPlatformAutoFokVwapBps || 0);
+
+    const forceSequential =
+      (seqDrift > 0 && drift >= seqDrift) || (seqDev > 0 && deviation >= seqDev);
+    const forceFok =
+      (fokDrift > 0 && drift >= fokDrift) || (fokDev > 0 && deviation >= fokDev);
+
+    return { forceSequential, forceFok };
   }
 
   private resolveExecutionOptions(attempt: number): PlatformExecuteOptions {
@@ -1870,6 +1918,10 @@ export class CrossPlatformExecutionRouter {
     if (this.isConsistencyTemplateActive() && this.config.crossPlatformConsistencyTemplateUseFok) {
       useFok = true;
     }
+    const auto = this.getAutoExecutionOverrides();
+    if (auto.forceFok) {
+      useFok = true;
+    }
 
     let useLimit = this.config.crossPlatformLimitOrders;
     if (this.isDegraded() && this.config.crossPlatformDegradeLimitOrders !== undefined) {
@@ -1887,10 +1939,11 @@ export class CrossPlatformExecutionRouter {
       batch = false;
     }
 
+    const finalOrderType = auto.forceFok ? 'FOK' : orderType;
     return {
       useFok,
       useLimit,
-      orderType,
+      orderType: finalOrderType,
       batch,
     };
   }
