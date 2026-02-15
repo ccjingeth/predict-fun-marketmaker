@@ -139,6 +139,11 @@ export interface Config {
   mmLayerDepthSpeedBps?: number;
   mmLayerSpeedCount?: number;
   mmLayerStepBpsSpeedAdd?: number;
+  mmLayerDepthSpeedRetreatBps?: number;
+  mmLayerRetreatCount?: number;
+  mmLayerSpeedSizeMinFactor?: number;
+  mmLayerRetreatSizeMinFactor?: number;
+  mmLayerPanicSizeMinFactor?: number;
   mmLayerPanicIntervalMult?: number;
   mmLayerSizeDecay?: number;
   mmLayerAllowBelowMinShares?: boolean;

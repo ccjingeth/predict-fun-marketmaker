@@ -1223,14 +1223,16 @@ export class MarketMaker {
     baseShares: number,
     minShares: number,
     allowBelowMin: boolean,
-    count: number
+    count: number,
+    minFactor: number
   ): number[] {
     const safeCount = Math.max(1, Math.floor(count || 1));
     const decay = this.clamp(this.config.mmLayerSizeDecay ?? 0.6, 0.1, 1);
+    const floor = this.clamp(minFactor || 1, 0.05, 1);
     const sizes: number[] = [];
     for (let i = 0; i < safeCount; i += 1) {
       const scaled = i === 0 ? baseShares : baseShares * Math.pow(decay, i);
-      let size = Math.max(1, Math.floor(scaled));
+      let size = Math.max(1, Math.floor(scaled * floor));
       if (minShares > 0 && size < minShares && !allowBelowMin) {
         size = 0;
       }
@@ -1286,6 +1288,13 @@ export class MarketMaker {
     const speedThreshold = Math.max(0, this.config.mmLayerDepthSpeedBps ?? 0);
     if (speedThreshold > 0 && depthSpeedBps >= speedThreshold) {
       const cap = Math.max(0, Math.floor(this.config.mmLayerSpeedCount ?? 0));
+      if (cap > 0) {
+        effective = Math.min(effective, cap);
+      }
+    }
+    const retreatThreshold = Math.max(0, this.config.mmLayerDepthSpeedRetreatBps ?? 0);
+    if (retreatThreshold > 0 && depthSpeedBps >= retreatThreshold) {
+      const cap = Math.max(0, Math.floor(this.config.mmLayerRetreatCount ?? 0));
       if (cap > 0) {
         effective = Math.min(effective, cap);
       }
@@ -2043,11 +2052,26 @@ export class MarketMaker {
 
     let placed = false;
     const allowBelowMin = this.config.mmLayerAllowBelowMinShares === true;
+    let sizeFloor = 1;
+    if (this.isLayerPanicActive(tokenId)) {
+      const floor = this.config.mmLayerPanicSizeMinFactor ?? 0;
+      if (floor > 0) {
+        sizeFloor = Math.min(sizeFloor, floor);
+      }
+    }
+    const speedFloor = this.config.mmLayerSpeedSizeMinFactor ?? 0;
+    const retreatFloor = this.config.mmLayerRetreatSizeMinFactor ?? 0;
+    if (speedFloor > 0 && metrics.depthSpeedBps >= (this.config.mmLayerDepthSpeedBps ?? 0)) {
+      sizeFloor = Math.min(sizeFloor, speedFloor);
+    }
+    if (retreatFloor > 0 && metrics.depthSpeedBps >= (this.config.mmLayerDepthSpeedRetreatBps ?? 0)) {
+      sizeFloor = Math.min(sizeFloor, retreatFloor);
+    }
     const minShares = market.liquidity_activation?.min_shares || 0;
     const targetBidShares = Math.max(1, Math.floor(bidOrderSize.shares * profileScale));
     const targetAskShares = Math.max(1, Math.floor(askOrderSize.shares * profileScale));
-    const bidSizes = this.buildLayerSizes(targetBidShares, minShares, allowBelowMin, layerCount).slice(0, bidLayers);
-    const askSizes = this.buildLayerSizes(targetAskShares, minShares, allowBelowMin, layerCount).slice(0, askLayers);
+    const bidSizes = this.buildLayerSizes(targetBidShares, minShares, allowBelowMin, layerCount, sizeFloor).slice(0, bidLayers);
+    const askSizes = this.buildLayerSizes(targetAskShares, minShares, allowBelowMin, layerCount, sizeFloor).slice(0, askLayers);
 
     if (!suppressBuy && bidOrderSize.shares > 0) {
       for (let i = 0; i < bidLayers; i += 1) {
