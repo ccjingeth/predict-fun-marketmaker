@@ -5,6 +5,7 @@ const mappingCheckMissingBtn = document.getElementById('mappingCheckMissing');
 const mappingGenerateTemplateBtn = document.getElementById('mappingGenerateTemplate');
 const mappingSuggestPredictBtn = document.getElementById('mappingSuggestPredict');
 const mappingAutoCleanupBtn = document.getElementById('mappingAutoCleanup');
+const mappingExportConfirmedBtn = document.getElementById('mappingExportConfirmed');
 const mappingCopyTemplateBtn = document.getElementById('mappingCopyTemplate');
 const mappingHideUnconfirmed = document.getElementById('mappingHideUnconfirmed');
 const mappingHideLowScore = document.getElementById('mappingHideLowScore');
@@ -1597,6 +1598,21 @@ function generateMappingTemplate(missing) {
   return JSON.stringify({ entries }, null, 2);
 }
 
+function generateConfirmedMapping(entries) {
+  const confirmed = entries
+    .filter((item) => item.predictConfirmed && item.predictMarketId)
+    .map((item) => ({
+      label: `${item.platform}:${item.marketId || item.question || ''}`.trim(),
+      predictMarketId: item.predictMarketId || '',
+      predictQuestion: item.predictQuestion || item.question || '',
+      polymarketYesTokenId: item.platform === 'Polymarket' ? item.yesTokenId : '',
+      polymarketNoTokenId: item.platform === 'Polymarket' ? item.noTokenId : '',
+      opinionYesTokenId: item.platform === 'Opinion' ? item.yesTokenId : '',
+      opinionNoTokenId: item.platform === 'Opinion' ? item.noTokenId : '',
+    }));
+  return JSON.stringify({ entries: confirmed }, null, 2);
+}
+
 function renderMissingList(missing) {
   if (!mappingMissingList) return;
   mappingMissingList.innerHTML = '';
@@ -1853,6 +1869,27 @@ function autoCleanupMappings() {
     level: 'system',
     message: `清理完成：确认 ${confirmed} 条，剔除 ${filtered} 条低分候选`,
   });
+}
+
+function exportConfirmedMappings() {
+  if (!mappingMissingList?.dataset.missing) {
+    pushLog({ type: 'system', level: 'system', message: '请先点击“检查缺失”。' });
+    return;
+  }
+  let missing = [];
+  try {
+    missing = JSON.parse(mappingMissingList.dataset.missing || '[]');
+  } catch {
+    pushLog({ type: 'system', level: 'stderr', message: '缺失映射数据解析失败。' });
+    return;
+  }
+  if (!missing.length) {
+    pushLog({ type: 'system', level: 'system', message: '没有可导出的确认项。' });
+    return;
+  }
+  const confirmedText = generateConfirmedMapping(missing);
+  mappingEditor.value = confirmedText;
+  pushLog({ type: 'system', level: 'system', message: '已导出确认映射，请保存。' });
 }
 
 async function suggestPredictMappings() {
@@ -3784,6 +3821,9 @@ if (mappingCopyTemplateBtn) {
 }
 if (mappingAutoCleanupBtn) {
   mappingAutoCleanupBtn.addEventListener('click', autoCleanupMappings);
+}
+if (mappingExportConfirmedBtn) {
+  mappingExportConfirmedBtn.addEventListener('click', exportConfirmedMappings);
 }
 if (mappingMissingList) {
   mappingMissingList.addEventListener('click', handleMissingListClick);
