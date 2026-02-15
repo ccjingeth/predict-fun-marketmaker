@@ -1580,12 +1580,54 @@ function generateMappingTemplate(missing) {
     label: `${item.platform}:${item.marketId || item.question || ''}`.trim(),
     predictMarketId: item.predictMarketId || '',
     predictQuestion: item.predictQuestion || item.question || '',
+    predictScore: item.predictScore ?? undefined,
+    predictCandidates: item.predictCandidates || undefined,
     polymarketYesTokenId: item.platform === 'Polymarket' ? item.yesTokenId : '',
     polymarketNoTokenId: item.platform === 'Polymarket' ? item.noTokenId : '',
     opinionYesTokenId: item.platform === 'Opinion' ? item.yesTokenId : '',
     opinionNoTokenId: item.platform === 'Opinion' ? item.noTokenId : '',
   }));
   return JSON.stringify({ entries }, null, 2);
+}
+
+function renderMissingList(missing) {
+  if (!mappingMissingList) return;
+  mappingMissingList.innerHTML = '';
+  if (!missing || missing.length === 0) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '未检测到缺失映射。';
+    mappingMissingList.appendChild(item);
+    return;
+  }
+  missing.slice(0, 20).forEach((itemData) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = `${itemData.platform} | ${itemData.question || itemData.marketId}`;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    const tokensText = `${itemData.yesTokenId || '-'} / ${itemData.noTokenId || '-'}`;
+    let suggestionText = '';
+    if (itemData.predictMarketId || itemData.predictQuestion) {
+      const score = Number.isFinite(itemData.predictScore) ? ` score=${itemData.predictScore}` : '';
+      suggestionText = `｜Predict: ${itemData.predictQuestion || itemData.predictMarketId}${score}`;
+    }
+    if (Array.isArray(itemData.predictCandidates) && itemData.predictCandidates.length > 0) {
+      const top = itemData.predictCandidates
+        .map((c) => `${c.question || c.marketId} (${c.score})`)
+        .slice(0, 3)
+        .join(' | ');
+      suggestionText = suggestionText
+        ? `${suggestionText}｜候选: ${top}`
+        : `｜候选: ${top}`;
+    }
+    hint.textContent = `${tokensText}${suggestionText}`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    mappingMissingList.appendChild(row);
+  });
 }
 
 async function checkMappingMissing() {
@@ -1642,26 +1684,7 @@ async function checkMappingMissing() {
       }
     });
   });
-  if (!missing.length) {
-    const item = document.createElement('div');
-    item.className = 'health-item ok';
-    item.textContent = '未检测到缺失映射。';
-    mappingMissingList.appendChild(item);
-    return;
-  }
-  missing.slice(0, 20).forEach((itemData) => {
-    const row = document.createElement('div');
-    row.className = 'health-item warn';
-    const label = document.createElement('div');
-    label.className = 'health-label';
-    label.textContent = `${itemData.platform} | ${itemData.question || itemData.marketId}`;
-    const hint = document.createElement('div');
-    hint.className = 'health-hint';
-    hint.textContent = `${itemData.yesTokenId || '-'} / ${itemData.noTokenId || '-'}`;
-    row.appendChild(label);
-    row.appendChild(hint);
-    mappingMissingList.appendChild(row);
-  });
+  renderMissingList(missing);
   mappingMissingList.dataset.template = generateMappingTemplate(missing);
   mappingMissingList.dataset.missing = JSON.stringify(missing);
   if (mappingMissingList.dataset.template && mappingMissingList.dataset.template.length > 0) {
@@ -1669,13 +1692,17 @@ async function checkMappingMissing() {
   }
 }
 
-function applyMappingTemplate() {
+function applyMappingTemplate(message) {
   if (!mappingMissingList?.dataset.template) {
     pushLog({ type: 'system', level: 'system', message: '暂无可用的映射模板。' });
     return;
   }
   mappingEditor.value = mappingMissingList.dataset.template;
-  pushLog({ type: 'system', level: 'system', message: '已生成映射模板，请补充 Predict 侧后保存。' });
+  pushLog({
+    type: 'system',
+    level: 'system',
+    message: message || '已生成映射模板，请补充 Predict 侧后保存。',
+  });
 }
 
 async function copyMappingTemplate() {
@@ -1719,35 +1746,44 @@ async function suggestPredictMappings() {
   }
   const env = parseEnv(envEditor.value || '');
   const minSimilarity = parseFloat(env.get('CROSS_PLATFORM_MIN_SIMILARITY') || '0.78');
+  const topN = Math.max(1, parseInt(env.get('CROSS_PLATFORM_MAPPING_SUGGEST_TOP_N') || '3', 10));
   const candidates = predictMarkets
     .map(parseMarketRow)
     .filter((row) => row && (row.marketId || row.question));
   let matched = 0;
   const nextMissing = missing.map((item) => {
     if (item.predictMarketId || item.predictQuestion) return item;
-    let best = null;
-    let bestScore = minSimilarity;
+    const scored = [];
     for (const candidate of candidates) {
       const score = similarityScore(item.question, candidate.question);
-      if (score > bestScore) {
-        bestScore = score;
-        best = candidate;
-      }
+      if (score <= 0) continue;
+      scored.push({
+        marketId: candidate.marketId || '',
+        question: candidate.question || '',
+        score: Number(score.toFixed(3)),
+      });
     }
-    if (best) {
+    scored.sort((a, b) => b.score - a.score);
+    const top = scored.slice(0, topN);
+    if (top.length === 0) return item;
+    const best = top[0];
+    const shouldFill = best.score >= minSimilarity;
+    const updated = {
+      ...item,
+      predictCandidates: top,
+    };
+    if (shouldFill) {
       matched += 1;
-      return {
-        ...item,
-        predictMarketId: best.marketId || '',
-        predictQuestion: best.question || '',
-        predictScore: Number(bestScore.toFixed(3)),
-      };
+      updated.predictMarketId = best.marketId || '';
+      updated.predictQuestion = best.question || '';
+      updated.predictScore = best.score;
     }
-    return item;
+    return updated;
   });
   mappingMissingList.dataset.missing = JSON.stringify(nextMissing);
   mappingMissingList.dataset.template = generateMappingTemplate(nextMissing);
-  applyMappingTemplate();
+  renderMissingList(nextMissing);
+  applyMappingTemplate('已生成模板并填充 Predict 建议，请确认后保存。');
   pushLog({ type: 'system', level: 'system', message: `自动匹配完成：${matched}/${missing.length}` });
 }
 
