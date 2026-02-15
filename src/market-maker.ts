@@ -82,6 +82,7 @@ export class MarketMaker {
   private cancelBoost: Map<string, { value: number; ts: number }> = new Map();
   private nearTouchPenalty: Map<string, { value: number; ts: number }> = new Map();
   private fillPenalty: Map<string, { value: number; ts: number }> = new Map();
+  private layerPanicUntil: Map<string, number> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -1109,16 +1110,16 @@ export class MarketMaker {
     return false;
   }
 
-  private buildLayerTargets(basePrice: number, side: 'BUY' | 'SELL'): number[] {
-    const count = Math.max(1, Math.floor(this.config.mmLayerCount ?? 1));
-    const stepBps = Math.max(0, this.config.mmLayerSpreadStepBps ?? 0);
+  private buildLayerTargets(basePrice: number, side: 'BUY' | 'SELL', count: number, stepBps: number): number[] {
+    const safeCount = Math.max(1, Math.floor(count || 1));
+    const safeStepBps = Math.max(0, stepBps || 0);
     if (count <= 1 || stepBps <= 0) {
       return [basePrice];
     }
-    const step = stepBps / 10000;
+    const step = safeStepBps / 10000;
     const targets: number[] = [];
     let last = basePrice;
-    for (let i = 0; i < count; i += 1) {
+    for (let i = 0; i < safeCount; i += 1) {
       let price =
         side === 'BUY'
           ? basePrice * (1 - step * i)
@@ -1138,11 +1139,16 @@ export class MarketMaker {
     return targets;
   }
 
-  private buildLayerSizes(baseShares: number, minShares: number, allowBelowMin: boolean): number[] {
-    const count = Math.max(1, Math.floor(this.config.mmLayerCount ?? 1));
+  private buildLayerSizes(
+    baseShares: number,
+    minShares: number,
+    allowBelowMin: boolean,
+    count: number
+  ): number[] {
+    const safeCount = Math.max(1, Math.floor(count || 1));
     const decay = this.clamp(this.config.mmLayerSizeDecay ?? 0.6, 0.1, 1);
     const sizes: number[] = [];
-    for (let i = 0; i < count; i += 1) {
+    for (let i = 0; i < safeCount; i += 1) {
       const scaled = i === 0 ? baseShares : baseShares * Math.pow(decay, i);
       let size = Math.max(1, Math.floor(scaled));
       if (minShares > 0 && size < minShares && !allowBelowMin) {
@@ -1151,6 +1157,67 @@ export class MarketMaker {
       sizes.push(size);
     }
     return sizes;
+  }
+
+  private applyLayerPanic(tokenId: string): void {
+    const holdMs = Math.max(0, this.config.mmLayerPanicHoldMs ?? 0);
+    if (!holdMs) {
+      return;
+    }
+    const now = Date.now();
+    const until = now + holdMs;
+    const current = this.layerPanicUntil.get(tokenId) || 0;
+    this.layerPanicUntil.set(tokenId, Math.max(current, until));
+  }
+
+  private isLayerPanicActive(tokenId: string): boolean {
+    const until = this.layerPanicUntil.get(tokenId) || 0;
+    return until > Date.now();
+  }
+
+  private getEffectiveLayerCount(tokenId: string, profile: 'CALM' | 'NORMAL' | 'VOLATILE', depthTrend: number): number {
+    const base = Math.max(1, Math.floor(this.config.mmLayerCount ?? 1));
+    const minCount = Math.max(1, Math.floor(this.config.mmLayerMinCount ?? 1));
+    let effective = base;
+    if (profile === 'VOLATILE') {
+      const cap = Math.max(0, Math.floor(this.config.mmLayerVolatileCount ?? 0));
+      if (cap > 0) {
+        effective = Math.min(effective, cap);
+      }
+    }
+    const depthDrop = Math.max(0, this.config.mmLayerDepthTrendDrop ?? 0);
+    if (depthDrop > 0 && depthTrend < -depthDrop) {
+      const cap = Math.max(0, Math.floor(this.config.mmLayerThinCount ?? 0));
+      if (cap > 0) {
+        effective = Math.min(effective, cap);
+      }
+    }
+    if (this.isLayerPanicActive(tokenId)) {
+      const cap = Math.max(0, Math.floor(this.config.mmLayerPanicCount ?? 0));
+      if (cap > 0) {
+        effective = Math.min(effective, cap);
+      }
+    }
+    return Math.max(minCount, effective);
+  }
+
+  private getEffectiveLayerStepBps(
+    tokenId: string,
+    profile: 'CALM' | 'NORMAL' | 'VOLATILE',
+    depthTrend: number
+  ): number {
+    let step = Math.max(0, this.config.mmLayerSpreadStepBps ?? 0);
+    if (profile === 'VOLATILE') {
+      step += Math.max(0, this.config.mmLayerStepBpsVolatileAdd ?? 0);
+    }
+    const depthDrop = Math.max(0, this.config.mmLayerDepthTrendDrop ?? 0);
+    if (depthDrop > 0 && depthTrend < -depthDrop) {
+      step += Math.max(0, this.config.mmLayerStepBpsThinAdd ?? 0);
+    }
+    if (this.isLayerPanicActive(tokenId)) {
+      step += Math.max(0, this.config.mmLayerStepBpsPanicAdd ?? 0);
+    }
+    return step;
   }
 
   private isLiquidityThin(metrics: { topDepth: number; topDepthUsd: number }): boolean {
@@ -1695,8 +1762,10 @@ export class MarketMaker {
       .filter((o) => o.side === 'SELL')
       .sort((a, b) => Number(a.price) - Number(b.price));
 
-    const bidTargets = this.buildLayerTargets(prices.bidPrice, 'BUY');
-    const askTargets = this.buildLayerTargets(prices.askPrice, 'SELL');
+    const layerCount = this.getEffectiveLayerCount(tokenId, profile, metrics.depthTrend);
+    const layerStepBps = this.getEffectiveLayerStepBps(tokenId, profile, metrics.depthTrend);
+    const bidTargets = this.buildLayerTargets(prices.bidPrice, 'BUY', layerCount, layerStepBps);
+    const askTargets = this.buildLayerTargets(prices.askPrice, 'SELL', layerCount, layerStepBps);
     const bidLayers = bidTargets.length;
     const askLayers = askTargets.length;
     const canceledOrders = new Set<string>();
@@ -1726,7 +1795,7 @@ export class MarketMaker {
             const freshPrices = this.calculatePrices(market, freshBook);
             if (freshPrices) {
               prices = freshPrices;
-              const refreshTargets = this.buildLayerTargets(prices.bidPrice, 'BUY');
+              const refreshTargets = this.buildLayerTargets(prices.bidPrice, 'BUY', layerCount, layerStepBps);
               const nextTarget = refreshTargets[i] ?? targetPrice;
               shouldReprice = this.shouldRepriceOrder(existingBid, nextTarget);
             }
@@ -1740,6 +1809,9 @@ export class MarketMaker {
         ) {
           const intensity = risk.panic ? 1.5 : 1;
           this.applyNearTouchPenalty(tokenId, intensity);
+          if (risk.panic) {
+            this.applyLayerPanic(tokenId);
+          }
           const sizePenalty = this.config.mmNearTouchSizePenalty ?? 0;
           if (sizePenalty > 0 && sizePenalty < 1) {
             this.applySizePenalty(tokenId, sizePenalty, true);
@@ -1785,7 +1857,7 @@ export class MarketMaker {
             const freshPrices = this.calculatePrices(market, freshBook);
             if (freshPrices) {
               prices = freshPrices;
-              const refreshTargets = this.buildLayerTargets(prices.askPrice, 'SELL');
+              const refreshTargets = this.buildLayerTargets(prices.askPrice, 'SELL', layerCount, layerStepBps);
               const nextTarget = refreshTargets[i] ?? targetPrice;
               shouldReprice = this.shouldRepriceOrder(existingAsk, nextTarget);
             }
@@ -1799,6 +1871,9 @@ export class MarketMaker {
         ) {
           const intensity = risk.panic ? 1.5 : 1;
           this.applyNearTouchPenalty(tokenId, intensity);
+          if (risk.panic) {
+            this.applyLayerPanic(tokenId);
+          }
           const sizePenalty = this.config.mmNearTouchSizePenalty ?? 0;
           if (sizePenalty > 0 && sizePenalty < 1) {
             this.applySizePenalty(tokenId, sizePenalty, true);
@@ -1864,8 +1939,8 @@ export class MarketMaker {
     const minShares = market.liquidity_activation?.min_shares || 0;
     const targetBidShares = Math.max(1, Math.floor(bidOrderSize.shares * profileScale));
     const targetAskShares = Math.max(1, Math.floor(askOrderSize.shares * profileScale));
-    const bidSizes = this.buildLayerSizes(targetBidShares, minShares, allowBelowMin).slice(0, bidLayers);
-    const askSizes = this.buildLayerSizes(targetAskShares, minShares, allowBelowMin).slice(0, askLayers);
+    const bidSizes = this.buildLayerSizes(targetBidShares, minShares, allowBelowMin, layerCount).slice(0, bidLayers);
+    const askSizes = this.buildLayerSizes(targetAskShares, minShares, allowBelowMin, layerCount).slice(0, askLayers);
 
     if (!suppressBuy && bidOrderSize.shares > 0) {
       for (let i = 0; i < bidLayers; i += 1) {

@@ -126,7 +126,16 @@ export interface Config {
   mmSpreadJumpWindowMs?: number;
   mmMaxSharesPerOrder?: number;
   mmLayerCount?: number;
+  mmLayerMinCount?: number;
+  mmLayerVolatileCount?: number;
+  mmLayerThinCount?: number;
+  mmLayerPanicCount?: number;
+  mmLayerPanicHoldMs?: number;
+  mmLayerDepthTrendDrop?: number;
   mmLayerSpreadStepBps?: number;
+  mmLayerStepBpsVolatileAdd?: number;
+  mmLayerStepBpsThinAdd?: number;
+  mmLayerStepBpsPanicAdd?: number;
   mmLayerSizeDecay?: number;
   mmLayerAllowBelowMinShares?: boolean;
   mmSizeInventoryWeight?: number;

@@ -74,7 +74,16 @@
 - `MM_SPREAD_JUMP_WINDOW_MS`：价差跳变检测窗口（毫秒）。
 - `MM_MAX_SHARES_PER_ORDER`：单笔挂单最大份额上限（0=不限制）。
 - `MM_LAYER_COUNT`：分层挂单数量（每侧）。
+- `MM_LAYER_MIN_COUNT`：最小保留层数。
+- `MM_LAYER_VOLATILE_COUNT`：高波动时分层上限（0=不启用）。
+- `MM_LAYER_THIN_COUNT`：深度下滑时分层上限（0=不启用）。
+- `MM_LAYER_PANIC_COUNT`：触发强撤单后短时分层上限（0=不启用）。
+- `MM_LAYER_PANIC_HOLD_MS`：强撤单后维持分层收缩的时间（毫秒）。
+- `MM_LAYER_DEPTH_TREND_DROP`：深度趋势下降阈值（例如 0.2 表示下降 20%）。
 - `MM_LAYER_SPREAD_STEP_BPS`：每一层相对基础报价的额外偏移（bps）。
+- `MM_LAYER_STEP_BPS_VOLATILE_ADD`：高波动时每层额外偏移（bps）。
+- `MM_LAYER_STEP_BPS_THIN_ADD`：深度下滑时每层额外偏移（bps）。
+- `MM_LAYER_STEP_BPS_PANIC_ADD`：强撤单后每层额外偏移（bps）。
 - `MM_LAYER_SIZE_DECAY`：层级挂单份额衰减系数（0-1）。
 - `MM_LAYER_ALLOW_BELOW_MIN_SHARES`：是否允许分层挂单低于 points 最小份额。
 - `MM_SIZE_INVENTORY_WEIGHT`：库存方向对“挂单份额”的影响权重。
