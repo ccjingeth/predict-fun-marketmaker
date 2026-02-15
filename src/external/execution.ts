@@ -942,9 +942,19 @@ export class CrossPlatformExecutionRouter {
 
   private async preSubmitCheck(legs: PlatformLeg[]): Promise<void> {
     const driftBps = Math.max(0, this.config.crossPlatformPreSubmitDriftBps || 0);
-    if (!driftBps) {
+    const vwapBps = Math.max(0, this.config.crossPlatformPreSubmitVwapBps || 0);
+    const minProfitBps = Math.max(0, this.config.crossPlatformPreSubmitProfitBps || 0);
+    const minProfitUsd = Math.max(0, this.config.crossPlatformPreSubmitProfitUsd || 0);
+    if (!driftBps && !vwapBps && !minProfitBps && !minProfitUsd) {
       return;
     }
+    const slippageBps = this.getSlippageBps();
+    const depthLevels = Math.max(0, this.config.crossPlatformDepthLevels || 0);
+    const transfer = Math.max(0, this.config.crossPlatformTransferCost || 0);
+    let totalCostPerShare = 0;
+    let totalProceedsPerShare = 0;
+    let hasBuy = false;
+    let hasSell = false;
     for (const leg of legs) {
       const book = await this.fetchOrderbookInternal(leg);
       if (!book) {
@@ -958,6 +968,67 @@ export class CrossPlatformExecutionRouter {
       if (drift > driftBps) {
         throw new Error(
           `Pre-submit failed: drift ${drift.toFixed(1)} bps (max ${driftBps}) for ${leg.platform}:${leg.tokenId}`
+        );
+      }
+      if (vwapBps > 0 || minProfitBps > 0 || minProfitUsd > 0) {
+        const feeBps = this.getFeeBps(leg.platform);
+        const { curveRate, curveExponent } = this.getFeeCurve(leg.platform);
+        const vwap =
+          leg.side === 'BUY'
+            ? estimateBuy(book.asks, leg.shares, feeBps, curveRate, curveExponent, slippageBps, depthLevels)
+            : estimateSell(book.bids, leg.shares, feeBps, curveRate, curveExponent, slippageBps, depthLevels);
+        if (!vwap) {
+          throw new Error(`Pre-submit failed: insufficient depth for ${leg.platform}:${leg.tokenId}`);
+        }
+        const vwapAllIn = Number.isFinite(vwap.avgAllIn) ? vwap.avgAllIn : vwap.avgPrice;
+        const deviationBps =
+          leg.side === 'BUY'
+            ? ((vwapAllIn - leg.price) / leg.price) * 10000
+            : ((leg.price - vwapAllIn) / leg.price) * 10000;
+        if (vwapBps > 0 && deviationBps > vwapBps) {
+          throw new Error(
+            `Pre-submit failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${vwapBps}) for ${leg.platform}:${leg.tokenId}`
+          );
+        }
+        if (leg.side === 'BUY') {
+          hasBuy = true;
+          totalCostPerShare += vwapAllIn;
+        } else {
+          hasSell = true;
+          totalProceedsPerShare += vwapAllIn;
+        }
+      }
+    }
+    if (!minProfitBps && !minProfitUsd) {
+      return;
+    }
+    if (!hasBuy && !hasSell) {
+      return;
+    }
+    const shares = Math.min(...legs.map((leg) => leg.shares));
+    if (!Number.isFinite(shares) || shares <= 0) {
+      return;
+    }
+    let notional = 0;
+    let profit = 0;
+    if (hasBuy && !hasSell) {
+      notional = totalCostPerShare * shares;
+      profit = (1 - totalCostPerShare - transfer) * shares;
+    } else if (hasSell && !hasBuy) {
+      notional = totalProceedsPerShare * shares;
+      profit = (totalProceedsPerShare - 1 - transfer) * shares;
+    } else {
+      notional = Math.max(totalCostPerShare, totalProceedsPerShare) * shares;
+      profit = (totalProceedsPerShare - totalCostPerShare - transfer) * shares;
+    }
+    if (minProfitUsd > 0 && profit < minProfitUsd) {
+      throw new Error(`Pre-submit failed: profit $${profit.toFixed(2)} < min $${minProfitUsd}`);
+    }
+    if (minProfitBps > 0 && notional > 0) {
+      const pct = (profit / notional) * 10000;
+      if (pct < minProfitBps) {
+        throw new Error(
+          `Pre-submit failed: profit ${pct.toFixed(1)} bps < min ${minProfitBps} bps`
         );
       }
     }
@@ -1330,6 +1401,11 @@ export class CrossPlatformExecutionRouter {
     const slippage = this.config.crossPlatformHedgeSlippageBps || this.getSlippageBps() || 400;
     const minProfitUsd = Math.max(0, this.config.crossPlatformHedgeMinProfitUsd || 0);
     const minEdge = Math.max(0, this.config.crossPlatformHedgeMinEdge || 0);
+    const hasSuccess = results.some((result) => result.status === 'fulfilled');
+    const hasFailure = results.some((result) => result.status === 'rejected');
+    const forcePartial = this.config.crossPlatformHedgeForceOnPartial === true && hasSuccess && hasFailure;
+    const forceSlippage = Math.max(0, this.config.crossPlatformHedgeForceSlippageBps || 0);
+    const hedgeSlippage = forcePartial ? Math.max(slippage, forceSlippage) : slippage;
 
     const hedgePromises: Promise<void>[] = [];
     for (const result of results) {
@@ -1339,12 +1415,12 @@ export class CrossPlatformExecutionRouter {
       if (this.config.crossPlatformHedgePredictOnly && platform !== 'Predict') {
         continue;
       }
-      if (!this.shouldHedgeLegs(legs, minProfitUsd, minEdge, slippage)) {
+      if (!forcePartial && !this.shouldHedgeLegs(legs, minProfitUsd, minEdge, hedgeSlippage)) {
         continue;
       }
       const executor = this.executors.get(platform);
       if (!executor || !executor.hedgeLegs) continue;
-      hedgePromises.push(executor.hedgeLegs(legs, slippage));
+      hedgePromises.push(executor.hedgeLegs(legs, hedgeSlippage));
     }
 
     if (hedgePromises.length > 0) {

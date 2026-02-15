@@ -184,6 +184,9 @@ export interface Config {
   crossPlatformExecutionVwapCheck?: boolean;
   crossPlatformPriceDriftBps?: number;
   crossPlatformPreSubmitDriftBps?: number;
+  crossPlatformPreSubmitVwapBps?: number;
+  crossPlatformPreSubmitProfitBps?: number;
+  crossPlatformPreSubmitProfitUsd?: number;
   crossPlatformAdaptiveSize?: boolean;
   crossPlatformMinDepthShares?: number;
   crossPlatformMinNotionalUsd?: number;
@@ -355,6 +358,8 @@ export interface Config {
   crossPlatformHedgeSlippageBps?: number;
   crossPlatformHedgeMinProfitUsd?: number;
   crossPlatformHedgeMinEdge?: number;
+  crossPlatformHedgeForceOnPartial?: boolean;
+  crossPlatformHedgeForceSlippageBps?: number;
   crossPlatformPostTradeHedge?: boolean;
   crossPlatformPostTradeHedgeMaxShares?: number;
   crossPlatformPostTradeHedgeForce?: boolean;
