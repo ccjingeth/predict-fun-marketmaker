@@ -86,6 +86,7 @@ export class MarketMaker {
   private fillPenalty: Map<string, { value: number; ts: number }> = new Map();
   private layerPanicUntil: Map<string, number> = new Map();
   private layerRetreatUntil: Map<string, number> = new Map();
+  private layerRestoreAt: Map<string, number> = new Map();
   private mmMetrics: Map<string, Record<string, unknown>> = new Map();
   private mmLastFlushAt = 0;
   private valueDetector?: ValueMismatchDetector;
@@ -1296,11 +1297,24 @@ export class MarketMaker {
     const until = now + holdMs;
     const current = this.layerRetreatUntil.get(tokenId) || 0;
     this.layerRetreatUntil.set(tokenId, Math.max(current, until));
+    this.layerRestoreAt.delete(tokenId);
   }
 
   private isLayerRetreatActive(tokenId: string): boolean {
     const until = this.layerRetreatUntil.get(tokenId) || 0;
     return until > Date.now();
+  }
+
+  private isLayerRestoreActive(tokenId: string): boolean {
+    const until = this.layerRestoreAt.get(tokenId) || 0;
+    return until > Date.now();
+  }
+
+  private shouldForceSingleLayer(tokenId: string): boolean {
+    if (this.config.mmLayerRetreatForceSingle !== true) {
+      return false;
+    }
+    return this.isLayerRetreatActive(tokenId);
   }
 
   private getEffectiveLayerCount(
@@ -1351,6 +1365,21 @@ export class MarketMaker {
     }
     if (this.isLayerRetreatActive(tokenId)) {
       const cap = Math.max(0, Math.floor(this.config.mmLayerRetreatCount ?? 0));
+      if (cap > 0) {
+        effective = Math.min(effective, cap);
+      }
+    } else if (this.config.mmLayerRestoreHoldMs && this.config.mmLayerRestoreCount) {
+      const holdMs = Math.max(0, this.config.mmLayerRestoreHoldMs ?? 0);
+      const now = Date.now();
+      if (holdMs > 0) {
+        const restoreUntil = this.layerRestoreAt.get(tokenId) || 0;
+        if (!restoreUntil || restoreUntil <= now) {
+          this.layerRestoreAt.set(tokenId, now + holdMs);
+        }
+      }
+    }
+    if (this.isLayerRestoreActive(tokenId)) {
+      const cap = Math.max(0, Math.floor(this.config.mmLayerRestoreCount ?? 0));
       if (cap > 0) {
         effective = Math.min(effective, cap);
       }
@@ -2143,6 +2172,7 @@ export class MarketMaker {
       (this.isLayerRetreatActive(tokenId) ||
         (this.config.mmLayerDepthSpeedRetreatBps &&
           metrics.depthSpeedBps >= this.config.mmLayerDepthSpeedRetreatBps));
+    const forceSingle = this.shouldForceSingleLayer(tokenId);
     const bidStart = retreatOnlyFar ? bidLayers - 1 : 0;
     const askStart = retreatOnlyFar ? askLayers - 1 : 0;
 
@@ -2158,6 +2188,9 @@ export class MarketMaker {
         const shares = this.applyIceberg(size);
         await this.placeLimitOrder(market, 'BUY', bidTargets[i], shares);
         placed = true;
+        if (forceSingle) {
+          break;
+        }
       }
       hasBid = hasBid || placed;
     }
@@ -2174,6 +2207,9 @@ export class MarketMaker {
         const shares = this.applyIceberg(size);
         await this.placeLimitOrder(market, 'SELL', askTargets[i], shares);
         placed = true;
+        if (forceSingle) {
+          break;
+        }
       }
       hasAsk = hasAsk || placed;
     }

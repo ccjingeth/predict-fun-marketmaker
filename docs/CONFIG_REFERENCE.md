@@ -96,6 +96,9 @@
 - `MM_LAYER_PANIC_INTERVAL_MULT`：强撤单保护期内，下单间隔倍数。
 - `MM_LAYER_RETREAT_ONLY_FAR`：撤退模式仅挂最远一层。
 - `MM_LAYER_RETREAT_HOLD_MS`：撤退模式持续时间（毫秒）。
+- `MM_LAYER_RETREAT_FORCE_SINGLE`：撤退模式强制只挂单层（无论层数配置）。
+- `MM_LAYER_RESTORE_HOLD_MS`：撤退后恢复期持续时间（毫秒）。
+- `MM_LAYER_RESTORE_COUNT`：恢复期分层上限（0=不启用）。
 - `MM_LAYER_SIZE_DECAY`：层级挂单份额衰减系数（0-1）。
 - `MM_LAYER_ALLOW_BELOW_MIN_SHARES`：是否允许分层挂单低于 points 最小份额。
 - `MM_DEPTH_SPEED_WINDOW_MS`：深度消耗速度检测窗口（毫秒）。

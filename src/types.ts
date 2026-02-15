@@ -148,6 +148,9 @@ export interface Config {
   mmLayerPanicIntervalMult?: number;
   mmLayerRetreatOnlyFar?: boolean;
   mmLayerRetreatHoldMs?: number;
+  mmLayerRetreatForceSingle?: boolean;
+  mmLayerRestoreHoldMs?: number;
+  mmLayerRestoreCount?: number;
   mmLayerSizeDecay?: number;
   mmLayerAllowBelowMinShares?: boolean;
   mmDepthSpeedWindowMs?: number;
