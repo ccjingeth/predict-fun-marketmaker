@@ -9,6 +9,8 @@ const mappingExportConfirmedBtn = document.getElementById('mappingExportConfirme
 const mappingCopyTemplateBtn = document.getElementById('mappingCopyTemplate');
 const mappingHideUnconfirmed = document.getElementById('mappingHideUnconfirmed');
 const mappingHideLowScore = document.getElementById('mappingHideLowScore');
+const mappingAutoSaveToggle = document.getElementById('mappingAutoSave');
+const mappingAutoReloadToggle = document.getElementById('mappingAutoReload');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
@@ -1745,6 +1747,20 @@ function applyMappingTemplate(message) {
     level: 'system',
     message: message || '已生成映射模板，请补充 Predict 侧后保存。',
   });
+  maybeAutoSaveMapping();
+}
+
+async function maybeAutoSaveMapping() {
+  if (!mappingAutoSaveToggle?.checked) return;
+  try {
+    await saveMapping();
+    if (mappingAutoReloadToggle?.checked) {
+      await loadMapping();
+      checkMappingMissing().catch(() => {});
+    }
+  } catch {
+    pushLog({ type: 'system', level: 'stderr', message: '自动保存映射失败' });
+  }
 }
 
 async function copyMappingTemplate() {
@@ -1890,6 +1906,7 @@ function exportConfirmedMappings() {
   const confirmedText = generateConfirmedMapping(missing);
   mappingEditor.value = confirmedText;
   pushLog({ type: 'system', level: 'system', message: '已导出确认映射，请保存。' });
+  maybeAutoSaveMapping();
 }
 
 async function suggestPredictMappings() {
@@ -3847,6 +3864,24 @@ if (mappingHideLowScore) {
       renderMissingList(missing);
     } catch {
       // ignore
+    }
+  });
+}
+if (mappingAutoSaveToggle) {
+  mappingAutoSaveToggle.addEventListener('change', () => {
+    if (mappingAutoSaveToggle.checked) {
+      pushLog({ type: 'system', level: 'system', message: '已启用映射自动保存' });
+    } else {
+      pushLog({ type: 'system', level: 'system', message: '已关闭映射自动保存' });
+    }
+  });
+}
+if (mappingAutoReloadToggle) {
+  mappingAutoReloadToggle.addEventListener('change', () => {
+    if (mappingAutoReloadToggle.checked) {
+      pushLog({ type: 'system', level: 'system', message: '保存后自动刷新已启用' });
+    } else {
+      pushLog({ type: 'system', level: 'system', message: '保存后自动刷新已关闭' });
     }
   });
 }
