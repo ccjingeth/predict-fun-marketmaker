@@ -521,6 +521,8 @@ export function loadConfig(): Config {
     crossPlatformFailureNotionalUsdBump: parseFloat(process.env.CROSS_PLATFORM_FAILURE_NOTIONAL_USD_BUMP || '0'),
     crossPlatformFailureNotionalUsdBumpMax: parseFloat(process.env.CROSS_PLATFORM_FAILURE_NOTIONAL_USD_BUMP_MAX || '0'),
     crossPlatformFailureNotionalUsdRecover: parseFloat(process.env.CROSS_PLATFORM_FAILURE_NOTIONAL_USD_RECOVER || '0.7'),
+    crossPlatformFailureDriftTightenBps: parseFloat(process.env.CROSS_PLATFORM_FAILURE_DRIFT_TIGHTEN_BPS || '0'),
+    crossPlatformFailureDepthUsageFactor: parseFloat(process.env.CROSS_PLATFORM_FAILURE_DEPTH_USAGE_FACTOR || '1'),
     crossPlatformLimitOrders: process.env.CROSS_PLATFORM_LIMIT_ORDERS !== 'false',
     crossPlatformCancelOpenMs: parseInt(process.env.CROSS_PLATFORM_CANCEL_OPEN_MS || '1500'),
     crossPlatformPostFillCheck: process.env.CROSS_PLATFORM_POST_FILL_CHECK !== 'false',

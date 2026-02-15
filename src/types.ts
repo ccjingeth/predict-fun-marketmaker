@@ -387,6 +387,8 @@ export interface Config {
   crossPlatformFailureNotionalUsdBump?: number;
   crossPlatformFailureNotionalUsdBumpMax?: number;
   crossPlatformFailureNotionalUsdRecover?: number;
+  crossPlatformFailureDriftTightenBps?: number;
+  crossPlatformFailureDepthUsageFactor?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;

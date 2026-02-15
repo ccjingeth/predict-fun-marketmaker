@@ -3563,7 +3563,13 @@ export class CrossPlatformExecutionRouter {
       }
 
       const driftBase = this.config.crossPlatformPriceDriftBps ?? 40;
-      const driftBps = Math.max(1, driftBase * this.getAutoTuneFactor());
+      let driftBps = Math.max(1, driftBase * this.getAutoTuneFactor());
+      if (this.circuitFailures > 0 || this.isDegraded()) {
+        const tighten = Math.max(0, this.config.crossPlatformFailureDriftTightenBps || 0);
+        if (tighten > 0) {
+          driftBps = Math.max(1, driftBps - tighten);
+        }
+      }
       const bestRef = leg.side === 'BUY' ? book.bestAsk : book.bestBid;
       if (bestRef && Number.isFinite(bestRef) && bestRef > 0) {
         const drift = Math.abs((bestRef - limit) / limit) * 10000;
@@ -3923,6 +3929,10 @@ export class CrossPlatformExecutionRouter {
     const maxDeviation = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor());
     const slippageBps = this.getSlippageBps();
     let usage = Math.max(0.05, Math.min(1, (this.config.crossPlatformDepthUsage ?? 0.5) * this.getAutoTuneFactor()));
+    if (this.circuitFailures > 0 || this.isDegraded()) {
+      const factor = Math.max(0.05, Math.min(1, this.config.crossPlatformFailureDepthUsageFactor || 1));
+      usage = Math.max(0.05, Math.min(1, usage * factor));
+    }
     if (this.isConsistencyTemplateActive()) {
       const templateUsage = Math.max(0, this.config.crossPlatformConsistencyTemplateDepthUsage || 0);
       if (templateUsage > 0) {
@@ -3980,7 +3990,11 @@ export class CrossPlatformExecutionRouter {
     if (!base) {
       return null;
     }
-    const maxUsage = Math.min(1, base * this.getAutoTuneFactor());
+    let maxUsage = Math.min(1, base * this.getAutoTuneFactor());
+    if (this.circuitFailures > 0 || this.isDegraded()) {
+      const factor = Math.max(0.05, Math.min(1, this.config.crossPlatformFailureDepthUsageFactor || 1));
+      maxUsage = Math.max(0.05, Math.min(1, maxUsage * factor));
+    }
     if (maxUsage <= 0) {
       return null;
     }
