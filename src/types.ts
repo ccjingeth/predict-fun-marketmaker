@@ -145,9 +145,14 @@ export interface Config {
   mmLayerRetreatSizeMinFactor?: number;
   mmLayerPanicSizeMinFactor?: number;
   mmLayerPanicIntervalMult?: number;
+  mmLayerRetreatOnlyFar?: boolean;
+  mmLayerRetreatHoldMs?: number;
   mmLayerSizeDecay?: number;
   mmLayerAllowBelowMinShares?: boolean;
   mmDepthSpeedWindowMs?: number;
+  mmActionBurstLimit?: number;
+  mmActionBurstWindowMs?: number;
+  mmActionBurstCooldownMs?: number;
   mmSizeInventoryWeight?: number;
   mmSizeImbalanceWeight?: number;
   mmSizeMinFactor?: number;

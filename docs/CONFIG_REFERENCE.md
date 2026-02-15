@@ -93,9 +93,14 @@
 - `MM_LAYER_RETREAT_SIZE_MIN_FACTOR`：撤退模式下，挂单份额最小系数（0-1）。
 - `MM_LAYER_PANIC_SIZE_MIN_FACTOR`：强撤单后，挂单份额最小系数（0-1）。
 - `MM_LAYER_PANIC_INTERVAL_MULT`：强撤单保护期内，下单间隔倍数。
+- `MM_LAYER_RETREAT_ONLY_FAR`：撤退模式仅挂最远一层。
+- `MM_LAYER_RETREAT_HOLD_MS`：撤退模式持续时间（毫秒）。
 - `MM_LAYER_SIZE_DECAY`：层级挂单份额衰减系数（0-1）。
 - `MM_LAYER_ALLOW_BELOW_MIN_SHARES`：是否允许分层挂单低于 points 最小份额。
 - `MM_DEPTH_SPEED_WINDOW_MS`：深度消耗速度检测窗口（毫秒）。
+- `MM_ACTION_BURST_LIMIT`：窗口内动作次数上限（超过进入保护冷却）。
+- `MM_ACTION_BURST_WINDOW_MS`：动作次数统计窗口（毫秒）。
+- `MM_ACTION_BURST_COOLDOWN_MS`：触发后保护冷却时间（毫秒）。
 - `MM_SIZE_INVENTORY_WEIGHT`：库存方向对“挂单份额”的影响权重。
 - `MM_SIZE_IMBALANCE_WEIGHT`：盘口不平衡对“挂单份额”的影响权重。
 - `MM_SIZE_MIN_FACTOR`：挂单份额缩放下限（防止缩得过小）。

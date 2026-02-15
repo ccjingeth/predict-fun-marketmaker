@@ -64,6 +64,8 @@ export class MarketMaker {
   private lastDepth: Map<string, number> = new Map();
   private lastImbalance: Map<string, number> = new Map();
   private lastActionAt: Map<string, number> = new Map();
+  private actionBurst: Map<string, { count: number; windowStart: number }> = new Map();
+  private actionLockUntil: Map<string, number> = new Map();
   private cooldownUntil: Map<string, number> = new Map();
   private pauseUntil: Map<string, number> = new Map();
   private lastNetShares: Map<string, number> = new Map();
@@ -269,6 +271,10 @@ export class MarketMaker {
 
   private canSendAction(tokenId: string): boolean {
     const now = Date.now();
+    const lockUntil = this.actionLockUntil.get(tokenId) || 0;
+    if (lockUntil > now) {
+      return false;
+    }
     const minInterval = this.getAdaptiveMinInterval(tokenId);
     const lastAt = this.lastActionAt.get(tokenId) || 0;
     const cooldownUntil = this.cooldownUntil.get(tokenId) || 0;
@@ -277,6 +283,29 @@ export class MarketMaker {
 
   private markAction(tokenId: string): void {
     this.lastActionAt.set(tokenId, Date.now());
+    if (this.config.mmActionBurstLimit) {
+      this.recordActionBurst(tokenId);
+    }
+  }
+
+  private recordActionBurst(tokenId: string): void {
+    const limit = Math.max(0, this.config.mmActionBurstLimit ?? 0);
+    if (!limit) {
+      return;
+    }
+    const windowMs = Math.max(1, this.config.mmActionBurstWindowMs ?? 10000);
+    const cooldownMs = Math.max(0, this.config.mmActionBurstCooldownMs ?? 0);
+    const now = Date.now();
+    const entry = this.actionBurst.get(tokenId) || { count: 0, windowStart: now };
+    if (now - entry.windowStart > windowMs) {
+      entry.count = 0;
+      entry.windowStart = now;
+    }
+    entry.count += 1;
+    this.actionBurst.set(tokenId, entry);
+    if (entry.count >= limit && cooldownMs > 0) {
+      this.actionLockUntil.set(tokenId, now + cooldownMs);
+    }
   }
 
   private markCooldown(tokenId: string, durationMs: number): void {
@@ -1295,6 +1324,9 @@ export class MarketMaker {
     const retreatThreshold = Math.max(0, this.config.mmLayerDepthSpeedRetreatBps ?? 0);
     if (retreatThreshold > 0 && depthSpeedBps >= retreatThreshold) {
       const cap = Math.max(0, Math.floor(this.config.mmLayerRetreatCount ?? 0));
+      if (this.config.mmLayerRetreatOnlyFar) {
+        this.actionLockUntil.set(tokenId, Date.now() + Math.max(0, this.config.mmLayerRetreatHoldMs ?? 0));
+      }
       if (cap > 0) {
         effective = Math.min(effective, cap);
       }
@@ -2073,8 +2105,15 @@ export class MarketMaker {
     const bidSizes = this.buildLayerSizes(targetBidShares, minShares, allowBelowMin, layerCount, sizeFloor).slice(0, bidLayers);
     const askSizes = this.buildLayerSizes(targetAskShares, minShares, allowBelowMin, layerCount, sizeFloor).slice(0, askLayers);
 
+    const retreatOnlyFar =
+      this.config.mmLayerRetreatOnlyFar === true &&
+      this.config.mmLayerDepthSpeedRetreatBps &&
+      metrics.depthSpeedBps >= this.config.mmLayerDepthSpeedRetreatBps;
+    const bidStart = retreatOnlyFar ? bidLayers - 1 : 0;
+    const askStart = retreatOnlyFar ? askLayers - 1 : 0;
+
     if (!suppressBuy && bidOrderSize.shares > 0) {
-      for (let i = 0; i < bidLayers; i += 1) {
+      for (let i = bidStart; i < bidLayers; i += 1) {
         if (remainingBids[i]) {
           continue;
         }
@@ -2090,7 +2129,7 @@ export class MarketMaker {
     }
 
     if (!suppressSell && askOrderSize.shares > 0) {
-      for (let i = 0; i < askLayers; i += 1) {
+      for (let i = askStart; i < askLayers; i += 1) {
         if (remainingAsks[i]) {
           continue;
         }
