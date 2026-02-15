@@ -13,6 +13,10 @@ const processes = new Map();
 let mainWindow = null;
 const logBuffer = [];
 const LOG_MAX = 2000;
+const rescanCooldownUntil = { value: 0 };
+const RESCAN_COOLDOWN_MS = 10000;
+const rescanCooldownUntil = { value: 0 };
+const RESCAN_COOLDOWN_MS = 10000;
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -501,6 +505,19 @@ function spawnBot(type) {
   return { ok: true };
 }
 
+function sendRescanSignal() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { ok: false, message: '主窗口未就绪' };
+  }
+  const now = Date.now();
+  if (now < rescanCooldownUntil.value) {
+    return { ok: false, message: '重扫触发过于频繁' };
+  }
+  rescanCooldownUntil.value = now + RESCAN_COOLDOWN_MS;
+  sendToRenderer('bot-status', { rescanRequested: true, ts: now });
+  return { ok: true };
+}
+
 function stopBot(type) {
   const child = processes.get(type);
   if (!child) {
@@ -787,6 +804,7 @@ ipcMain.handle('export-diagnostics', () => {
     return { ok: false, message: error?.message || String(error) };
   }
 });
+ipcMain.handle('trigger-rescan', () => sendRescanSignal());
 
 ipcMain.handle('start-bot', (_, type) => spawnBot(type));
 ipcMain.handle('stop-bot', (_, type) => stopBot(type));

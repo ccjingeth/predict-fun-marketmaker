@@ -11,6 +11,7 @@ const mappingHideUnconfirmed = document.getElementById('mappingHideUnconfirmed')
 const mappingHideLowScore = document.getElementById('mappingHideLowScore');
 const mappingAutoSaveToggle = document.getElementById('mappingAutoSave');
 const mappingAutoReloadToggle = document.getElementById('mappingAutoReload');
+const mappingAutoRescanToggle = document.getElementById('mappingAutoRescan');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
@@ -1758,9 +1759,25 @@ async function maybeAutoSaveMapping() {
       await loadMapping();
       checkMappingMissing().catch(() => {});
     }
+    if (mappingAutoRescanToggle?.checked) {
+      await requestMappingRescan();
+    }
   } catch {
     pushLog({ type: 'system', level: 'stderr', message: '自动保存映射失败' });
   }
+}
+
+async function requestMappingRescan() {
+  if (!window.predictBot?.triggerRescan) {
+    pushLog({ type: 'system', level: 'stderr', message: '当前版本不支持重扫指令' });
+    return;
+  }
+  const result = await window.predictBot.triggerRescan();
+  if (!result?.ok) {
+    pushLog({ type: 'system', level: 'stderr', message: result?.message || '重扫触发失败' });
+    return;
+  }
+  pushLog({ type: 'system', level: 'system', message: '已触发跨平台重扫' });
 }
 
 async function copyMappingTemplate() {
@@ -3744,6 +3761,10 @@ window.predictBot.onLog((payload) => {
 
 window.predictBot.onStatus((payload) => {
   updateStatusDisplay(payload);
+  if (payload?.rescanRequested) {
+    checkMappingMissing().catch(() => {});
+    pushLog({ type: 'system', level: 'system', message: '收到重扫指令，已刷新映射检查' });
+  }
 });
 
 logFilter.addEventListener('change', renderLogs);
@@ -3882,6 +3903,15 @@ if (mappingAutoReloadToggle) {
       pushLog({ type: 'system', level: 'system', message: '保存后自动刷新已启用' });
     } else {
       pushLog({ type: 'system', level: 'system', message: '保存后自动刷新已关闭' });
+    }
+  });
+}
+if (mappingAutoRescanToggle) {
+  mappingAutoRescanToggle.addEventListener('change', () => {
+    if (mappingAutoRescanToggle.checked) {
+      pushLog({ type: 'system', level: 'system', message: '保存后重扫已启用' });
+    } else {
+      pushLog({ type: 'system', level: 'system', message: '保存后重扫已关闭' });
     }
   });
 }
