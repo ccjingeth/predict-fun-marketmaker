@@ -177,6 +177,10 @@ export interface Config {
   crossPlatformWsRealtimeIntervalMs?: number;
   crossPlatformWsRealtimeMaxBatch?: number;
   crossPlatformWsRealtimeQuiet?: boolean;
+  crossPlatformWsRealtimeFallbackEnabled?: boolean;
+  crossPlatformWsRealtimeFallbackIntervalMs?: number;
+  crossPlatformWsRealtimeFallbackMaxMarkets?: number;
+  crossPlatformWsRealtimeFallbackStaleMs?: number;
   crossPlatformExecutionVwapCheck?: boolean;
   crossPlatformPriceDriftBps?: number;
   crossPlatformAdaptiveSize?: boolean;

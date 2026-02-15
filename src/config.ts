@@ -225,6 +225,16 @@ export function loadConfig(): Config {
     crossPlatformWsRealtimeIntervalMs: parseInt(process.env.CROSS_PLATFORM_WS_REALTIME_INTERVAL_MS || '600'),
     crossPlatformWsRealtimeMaxBatch: parseInt(process.env.CROSS_PLATFORM_WS_REALTIME_MAX_BATCH || '30'),
     crossPlatformWsRealtimeQuiet: process.env.CROSS_PLATFORM_WS_REALTIME_QUIET === 'true',
+    crossPlatformWsRealtimeFallbackEnabled: process.env.CROSS_PLATFORM_WS_REALTIME_FALLBACK_ENABLED === 'true',
+    crossPlatformWsRealtimeFallbackIntervalMs: parseInt(
+      process.env.CROSS_PLATFORM_WS_REALTIME_FALLBACK_INTERVAL_MS || '5000'
+    ),
+    crossPlatformWsRealtimeFallbackMaxMarkets: parseInt(
+      process.env.CROSS_PLATFORM_WS_REALTIME_FALLBACK_MAX_MARKETS || '80'
+    ),
+    crossPlatformWsRealtimeFallbackStaleMs: parseInt(
+      process.env.CROSS_PLATFORM_WS_REALTIME_FALLBACK_STALE_MS || '12000'
+    ),
     crossPlatformExecutionVwapCheck: process.env.CROSS_PLATFORM_EXECUTION_VWAP_CHECK !== 'false',
     crossPlatformPriceDriftBps: parseInt(process.env.CROSS_PLATFORM_PRICE_DRIFT_BPS || '40'),
     crossPlatformAdaptiveSize: process.env.CROSS_PLATFORM_ADAPTIVE_SIZE !== 'false',

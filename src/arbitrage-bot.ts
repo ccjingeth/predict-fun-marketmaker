@@ -17,6 +17,7 @@ import type { Market, Orderbook } from './types.js';
 import { CrossPlatformAggregator } from './external/aggregator.js';
 import { CrossPlatformExecutionRouter } from './external/execution.js';
 import type { PlatformLeg, PlatformMarket } from './external/types.js';
+import type { CrossPlatformMappingStore } from './external/mapping.js';
 import { PredictWebSocketFeed } from './external/predict-ws.js';
 
 class ArbitrageBot {
@@ -48,6 +49,8 @@ class ArbitrageBot {
   private crossRealtimeRunning = false;
   private crossRealtimeUnsub?: () => void;
   private crossDirtyTokens: Set<string> = new Set();
+  private crossFallbackRunning = false;
+  private lastCrossFallbackAt = 0;
   private arbPauseMs = 0;
   private arbDegradeLevel = 0;
   private arbRecheckBumpMs = 0;
@@ -588,7 +591,17 @@ class ArbitrageBot {
     if (this.crossRealtimeRunning) {
       return;
     }
+    const now = Date.now();
+    const wsStale = this.isCrossWsStale(now);
     if (this.crossDirtyTokens.size === 0) {
+      if (this.shouldRunCrossFallback(now, wsStale)) {
+        await this.runCrossFallback(now, wsStale);
+      }
+      return;
+    }
+    if (wsStale && this.shouldRunCrossFallback(now, true)) {
+      this.crossDirtyTokens.clear();
+      await this.runCrossFallback(now, true);
       return;
     }
     this.crossRealtimeRunning = true;
@@ -613,7 +626,13 @@ class ArbitrageBot {
       const orderbooks = await this.loadOrderbooks(sample, this.config.arbWsMaxAgeMs || 10000);
       const platformMarkets = await this.crossAggregator.getPlatformMarkets(sample, orderbooks);
       const dirtyMap = this.buildCrossDirtyMap(batch);
-      const filtered = this.filterCrossPlatformMarkets(platformMarkets, dirtyMap);
+      const mappingStore = this.crossAggregator.getMappingStore();
+      const filtered = this.filterCrossPlatformMarkets(
+        platformMarkets,
+        dirtyMap,
+        mappingStore,
+        this.config.crossPlatformUseMapping !== false
+      );
       const crossOps = await this.monitor.scanCrossPlatformWithPlatforms(filtered);
       if (this.config.arbAutoExecute) {
         await this.autoExecute({
@@ -653,7 +672,9 @@ class ArbitrageBot {
 
   private filterCrossPlatformMarkets(
     platformMarkets: Map<string, PlatformMarket[]>,
-    dirtyMap: Map<string, Set<string>>
+    dirtyMap: Map<string, Set<string>>,
+    mappingStore?: CrossPlatformMappingStore,
+    useMapping: boolean = true
   ): Map<string, PlatformMarket[]> {
     if (!dirtyMap || dirtyMap.size === 0) {
       return platformMarkets;
@@ -661,6 +682,26 @@ class ArbitrageBot {
     const filtered = new Map<string, PlatformMarket[]>();
     for (const [platform, markets] of platformMarkets.entries()) {
       if (platform === 'Predict') {
+        if (useMapping && mappingStore) {
+          const candidates: PlatformMarket[] = [];
+          const seen = new Set<string>();
+          for (const [extPlatform, tokenIds] of dirtyMap.entries()) {
+            if (extPlatform === 'Predict') continue;
+            const matched = mappingStore.filterPredictMarketsByExternalTokens(extPlatform, tokenIds, markets);
+            for (const market of matched) {
+              const key = market.marketId || market.question;
+              if (!key || seen.has(key)) continue;
+              seen.add(key);
+              candidates.push(market);
+            }
+          }
+          if (candidates.length > 0) {
+            filtered.set(platform, candidates);
+          } else {
+            filtered.set(platform, markets);
+          }
+          continue;
+        }
         filtered.set(platform, markets);
         continue;
       }
@@ -678,6 +719,77 @@ class ArbitrageBot {
       filtered.set(platform, subset);
     }
     return filtered;
+  }
+
+  private shouldRunCrossFallback(now: number, wsStale: boolean): boolean {
+    if (!this.config.crossPlatformWsRealtimeFallbackEnabled) {
+      return false;
+    }
+    if (!wsStale && this.crossDirtyTokens.size > 0) {
+      return false;
+    }
+    const interval = Math.max(500, this.config.crossPlatformWsRealtimeFallbackIntervalMs || 5000);
+    return now - this.lastCrossFallbackAt >= interval;
+  }
+
+  private isCrossWsStale(now: number): boolean {
+    if (!this.crossAggregator) {
+      return true;
+    }
+    const status = this.crossAggregator.getWsStatus();
+    const staleMs = Math.max(1000, this.config.crossPlatformWsRealtimeFallbackStaleMs || 12000);
+    const checks: Array<{ enabled: boolean; status?: { connected: boolean; lastMessageAt: number } }> = [
+      { enabled: this.config.polymarketWsEnabled === true, status: status.polymarket },
+      { enabled: this.config.opinionWsEnabled === true, status: status.opinion },
+    ];
+    for (const check of checks) {
+      if (!check.enabled) continue;
+      const s = check.status;
+      if (!s || !s.connected) {
+        return true;
+      }
+      if (!s.lastMessageAt || now - s.lastMessageAt > staleMs) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async runCrossFallback(now: number, wsStale: boolean): Promise<void> {
+    if (this.crossFallbackRunning) {
+      return;
+    }
+    if (!this.crossAggregator) {
+      return;
+    }
+    this.crossFallbackRunning = true;
+    try {
+      const markets = await this.getMarketsCached();
+      const fallbackMax = Math.max(10, this.config.crossPlatformWsRealtimeFallbackMaxMarkets || this.config.arbMaxMarkets || 80);
+      const sample = markets.slice(0, fallbackMax);
+      const orderbooks = await this.loadOrderbooks(sample, this.config.arbWsMaxAgeMs || 10000);
+      const crossOps = await this.monitor.scanCrossPlatform(sample, orderbooks);
+      this.lastCrossFallbackAt = now;
+      if (this.config.arbAutoExecute) {
+        await this.autoExecute({
+          valueMismatches: [],
+          inPlatform: [],
+          multiOutcome: [],
+          crossPlatform: crossOps,
+          dependency: [],
+        });
+      }
+      if (this.config.crossPlatformWsRealtimeQuiet !== true) {
+        if (wsStale) {
+          console.log('⚠️ Cross-platform WS stale, fallback scan executed.');
+        }
+        this.monitor.printCrossRealtimeReport(crossOps);
+      }
+    } catch (error) {
+      console.warn('Cross-platform fallback scan failed:', error);
+    } finally {
+      this.crossFallbackRunning = false;
+    }
   }
 
   private expandMarketsForTokens(markets: Market[], tokens: string[]): Market[] {

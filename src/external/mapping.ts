@@ -20,6 +20,9 @@ export interface CrossPlatformMappingFile {
 export class CrossPlatformMappingStore {
   private entries: CrossPlatformMappingEntry[] = [];
   private sourcePath?: string;
+  private tokenIndex: Map<string, CrossPlatformMappingEntry[]> = new Map();
+  private predictIdIndex: Map<string, CrossPlatformMappingEntry[]> = new Map();
+  private predictQuestionIndex: Map<string, CrossPlatformMappingEntry[]> = new Map();
 
   constructor(mappingPath?: string) {
     if (mappingPath) {
@@ -36,12 +39,14 @@ export class CrossPlatformMappingStore {
 
     if (!fs.existsSync(resolved)) {
       this.entries = [];
+      this.rebuildIndex();
       return;
     }
 
     const raw = fs.readFileSync(resolved, 'utf8');
     if (!raw.trim()) {
       this.entries = [];
+      this.rebuildIndex();
       return;
     }
 
@@ -51,6 +56,7 @@ export class CrossPlatformMappingStore {
     } else {
       this.entries = (parsed as CrossPlatformMappingFile).entries || [];
     }
+    this.rebuildIndex();
   }
 
   resolveMatches(
@@ -83,6 +89,54 @@ export class CrossPlatformMappingStore {
     }
 
     return results;
+  }
+
+  filterPredictMarketsByExternalTokens(
+    platform: string,
+    tokenIds: Set<string>,
+    predictMarkets: PlatformMarket[]
+  ): PlatformMarket[] {
+    if (!tokenIds || tokenIds.size === 0) {
+      return [];
+    }
+    const entries = new Set<CrossPlatformMappingEntry>();
+    for (const tokenId of tokenIds) {
+      const key = `${platform}:${tokenId}`;
+      const mapped = this.tokenIndex.get(key);
+      if (mapped) {
+        mapped.forEach((entry) => entries.add(entry));
+      }
+    }
+    if (entries.size === 0) {
+      return [];
+    }
+    const allowedIds = new Set<string>();
+    const allowedQuestions = new Set<string>();
+    for (const entry of entries) {
+      if (entry.predictMarketId) {
+        allowedIds.add(entry.predictMarketId);
+      }
+      if (entry.predictQuestion) {
+        allowedQuestions.add(normalizeQuestion(entry.predictQuestion));
+      }
+    }
+    if (allowedIds.size === 0 && allowedQuestions.size === 0) {
+      return [];
+    }
+    return predictMarkets.filter((market) => {
+      if (allowedIds.size > 0) {
+        if (market.marketId && allowedIds.has(market.marketId)) return true;
+        const conditionId = market.metadata?.conditionId;
+        const eventId = market.metadata?.eventId;
+        if (conditionId && allowedIds.has(conditionId)) return true;
+        if (eventId && allowedIds.has(eventId)) return true;
+      }
+      if (allowedQuestions.size > 0) {
+        const normalized = normalizeQuestion(market.question || '');
+        if (normalized && allowedQuestions.has(normalized)) return true;
+      }
+      return false;
+    });
   }
 
   private findEntryForPredict(predictMarket: PlatformMarket): CrossPlatformMappingEntry | null {
@@ -127,5 +181,47 @@ export class CrossPlatformMappingStore {
           m.noTokenId === noTokenId
       ) || null
     );
+  }
+
+  private rebuildIndex(): void {
+    this.tokenIndex.clear();
+    this.predictIdIndex.clear();
+    this.predictQuestionIndex.clear();
+    for (const entry of this.entries) {
+      if (entry.predictMarketId) {
+        this.addIndex(this.predictIdIndex, entry.predictMarketId, entry);
+      }
+      if (entry.predictQuestion) {
+        const normalized = normalizeQuestion(entry.predictQuestion);
+        if (normalized) {
+          this.addIndex(this.predictQuestionIndex, normalized, entry);
+        }
+      }
+      this.addTokenIndex('Polymarket', entry.polymarketYesTokenId, entry);
+      this.addTokenIndex('Polymarket', entry.polymarketNoTokenId, entry);
+      this.addTokenIndex('Opinion', entry.opinionYesTokenId, entry);
+      this.addTokenIndex('Opinion', entry.opinionNoTokenId, entry);
+    }
+  }
+
+  private addIndex(
+    index: Map<string, CrossPlatformMappingEntry[]>,
+    key: string,
+    entry: CrossPlatformMappingEntry
+  ): void {
+    if (!key) return;
+    if (!index.has(key)) {
+      index.set(key, []);
+    }
+    index.get(key)!.push(entry);
+  }
+
+  private addTokenIndex(
+    platform: string,
+    tokenId: string | undefined,
+    entry: CrossPlatformMappingEntry
+  ): void {
+    if (!tokenId) return;
+    this.addIndex(this.tokenIndex, `${platform}:${tokenId}`, entry);
   }
 }
