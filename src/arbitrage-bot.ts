@@ -49,6 +49,10 @@ class ArbitrageBot {
   private crossRealtimeRunning = false;
   private crossRealtimeUnsub?: () => void;
   private crossDirtyTokens: Set<string> = new Set();
+  private wsRealtimeIntervalMs = 0;
+  private crossRealtimeIntervalMs = 0;
+  private wsBoostUntil = 0;
+  private wsBoostTimer?: NodeJS.Timeout;
   private crossFallbackRunning = false;
   private lastCrossFallbackAt = 0;
   private arbPauseMs = 0;
@@ -125,6 +129,10 @@ class ArbitrageBot {
     console.log(`   Wallet: ${this.wallet.address}`);
     console.log(`   Scan Interval: 10s`);
     console.log(`   Min Profit: 2%\n`);
+
+    process.on('SIGUSR1', () => {
+      this.applyWsBoost();
+    });
   }
 
   async initialize(): Promise<void> {
@@ -524,9 +532,8 @@ class ArbitrageBot {
       return;
     }
     const interval = Math.max(100, this.config.arbWsRealtimeIntervalMs || 400);
-    this.wsRealtimeTimer = setInterval(() => {
-      void this.flushRealtime();
-    }, interval);
+    this.wsRealtimeIntervalMs = interval;
+    this.restartRealtimeLoop(interval);
   }
 
   private startCrossRealtimeLoop(): void {
@@ -540,9 +547,63 @@ class ArbitrageBot {
       return;
     }
     const interval = Math.max(200, this.config.crossPlatformWsRealtimeIntervalMs || 600);
+    this.crossRealtimeIntervalMs = interval;
+    this.restartCrossRealtimeLoop(interval);
+  }
+
+  private restartRealtimeLoop(interval: number): void {
+    if (this.wsRealtimeTimer) {
+      clearInterval(this.wsRealtimeTimer);
+    }
+    this.wsRealtimeTimer = setInterval(() => {
+      void this.flushRealtime();
+    }, interval);
+  }
+
+  private restartCrossRealtimeLoop(interval: number): void {
+    if (this.crossRealtimeTimer) {
+      clearInterval(this.crossRealtimeTimer);
+    }
     this.crossRealtimeTimer = setInterval(() => {
       void this.flushCrossRealtime();
     }, interval);
+  }
+
+  private applyWsBoost(): void {
+    const now = Date.now();
+    const arbBoostMs = Math.max(0, this.config.arbWsBoostMs || 0);
+    const crossBoostMs = Math.max(0, this.config.crossPlatformWsBoostMs || 0);
+    const boostMs = Math.max(arbBoostMs, crossBoostMs);
+    if (boostMs <= 0) {
+      return;
+    }
+    this.wsBoostUntil = Math.max(this.wsBoostUntil, now + boostMs);
+    if (this.config.arbWsRealtime === true && this.wsRealtimeIntervalMs > 0) {
+      const fastInterval = Math.max(80, this.config.arbWsBoostIntervalMs || 150);
+      this.restartRealtimeLoop(fastInterval);
+      void this.flushRealtime();
+    }
+    if (this.config.crossPlatformWsRealtime === true && this.crossRealtimeIntervalMs > 0) {
+      const fastInterval = Math.max(120, this.config.crossPlatformWsBoostIntervalMs || 250);
+      this.restartCrossRealtimeLoop(fastInterval);
+      void this.flushCrossRealtime();
+    }
+    if (this.wsBoostTimer) {
+      clearTimeout(this.wsBoostTimer);
+    }
+    this.wsBoostTimer = setTimeout(() => {
+      const nowRestore = Date.now();
+      if (nowRestore < this.wsBoostUntil) {
+        this.applyWsBoost();
+        return;
+      }
+      if (this.config.arbWsRealtime === true && this.wsRealtimeIntervalMs > 0) {
+        this.restartRealtimeLoop(this.wsRealtimeIntervalMs);
+      }
+      if (this.config.crossPlatformWsRealtime === true && this.crossRealtimeIntervalMs > 0) {
+        this.restartCrossRealtimeLoop(this.crossRealtimeIntervalMs);
+      }
+    }, boostMs + 50);
   }
 
   private async flushRealtime(): Promise<void> {

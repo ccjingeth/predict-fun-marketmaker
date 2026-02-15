@@ -480,6 +480,10 @@ export interface Config {
   arbWsRealtimeIntervalMs?: number;
   arbWsRealtimeMaxBatch?: number;
   arbWsRealtimeQuiet?: boolean;
+  arbWsBoostMs?: number;
+  arbWsBoostIntervalMs?: number;
+  crossPlatformWsBoostMs?: number;
+  crossPlatformWsBoostIntervalMs?: number;
   arbRequireWs?: boolean;
   arbWsHealthScoreMin?: number;
   arbMaxErrors?: number;

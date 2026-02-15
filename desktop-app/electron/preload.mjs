@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('predictBot', {
   restoreLatestMapping: () => ipcRenderer.invoke('restore-latest-mapping'),
   listMappingBackups: () => ipcRenderer.invoke('list-mapping-backups'),
   restoreMappingFromPath: (path) => ipcRenderer.invoke('restore-mapping-from-path', path),
+  triggerWsBoost: () => ipcRenderer.invoke('trigger-ws-boost'),
   runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
   exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
   startBot: (type) => ipcRenderer.invoke('start-bot', type),

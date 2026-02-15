@@ -14,6 +14,7 @@ const mappingAutoSaveToggle = document.getElementById('mappingAutoSave');
 const mappingAutoReloadToggle = document.getElementById('mappingAutoReload');
 const mappingAutoRescanToggle = document.getElementById('mappingAutoRescan');
 const mappingAutoBackupToggle = document.getElementById('mappingAutoBackup');
+const mappingAutoWsKickToggle = document.getElementById('mappingAutoWsKick');
 const mappingBackupList = document.getElementById('mappingBackupList');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
@@ -1785,8 +1786,23 @@ async function requestMappingRescan() {
     return;
   }
   pushLog({ type: 'system', level: 'system', message: '已触发跨平台重扫' });
+  if (mappingAutoWsKickToggle?.checked) {
+    await triggerWsBoost();
+  }
 }
 
+async function triggerWsBoost() {
+  if (!window.predictBot?.triggerWsBoost) {
+    pushLog({ type: 'system', level: 'stderr', message: '当前版本不支持 WS 加速' });
+    return;
+  }
+  const result = await window.predictBot.triggerWsBoost();
+  if (!result?.ok) {
+    pushLog({ type: 'system', level: 'stderr', message: result?.message || 'WS 加速触发失败' });
+    return;
+  }
+  pushLog({ type: 'system', level: 'system', message: '已触发 WS 加速扫描' });
+}
 async function backupMapping() {
   if (!window.predictBot?.backupMapping) {
     return;
@@ -3832,6 +3848,9 @@ window.predictBot.onStatus((payload) => {
     checkMappingMissing().catch(() => {});
     pushLog({ type: 'system', level: 'system', message: '收到重扫指令，已刷新映射检查' });
   }
+  if (payload?.wsBoostRequested) {
+    pushLog({ type: 'system', level: 'system', message: '收到 WS 加速指令，请留意实时扫描' });
+  }
 });
 
 logFilter.addEventListener('change', renderLogs);
@@ -4012,6 +4031,24 @@ if (mappingAutoBackupToggle) {
       pushLog({ type: 'system', level: 'system', message: '自动备份已启用' });
     } else {
       pushLog({ type: 'system', level: 'system', message: '自动备份已关闭' });
+    }
+  });
+}
+if (mappingAutoWsKickToggle) {
+  mappingAutoWsKickToggle.addEventListener('change', () => {
+    if (mappingAutoWsKickToggle.checked) {
+      pushLog({ type: 'system', level: 'system', message: '重扫后 WS 加速已启用' });
+    } else {
+      pushLog({ type: 'system', level: 'system', message: '重扫后 WS 加速已关闭' });
+    }
+  });
+}
+if (mappingAutoWsKickToggle) {
+  mappingAutoWsKickToggle.addEventListener('change', () => {
+    if (mappingAutoWsKickToggle.checked) {
+      pushLog({ type: 'system', level: 'system', message: '重扫后 WS 加速已启用' });
+    } else {
+      pushLog({ type: 'system', level: 'system', message: '重扫后 WS 加速已关闭' });
     }
   });
 }

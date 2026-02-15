@@ -575,6 +575,27 @@ function sendRescanSignal() {
   return { ok: true };
 }
 
+function sendWsBoostSignal() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return { ok: false, message: '主窗口未就绪' };
+  }
+  const now = Date.now();
+  if (now < rescanCooldownUntil.value) {
+    return { ok: false, message: '操作过于频繁' };
+  }
+  rescanCooldownUntil.value = now + RESCAN_COOLDOWN_MS;
+  const arb = processes.get('arb');
+  if (arb) {
+    try {
+      arb.kill('SIGUSR1');
+    } catch {
+      // ignore
+    }
+  }
+  sendToRenderer('bot-status', { wsBoostRequested: true, ts: now });
+  return { ok: true };
+}
+
 function stopBot(type) {
   const child = processes.get(type);
   if (!child) {
@@ -866,6 +887,7 @@ ipcMain.handle('backup-mapping', () => backupMappingFile());
 ipcMain.handle('restore-latest-mapping', () => restoreLatestMappingFile());
 ipcMain.handle('list-mapping-backups', () => listMappingBackups());
 ipcMain.handle('restore-mapping-from-path', (_, filePath) => restoreMappingFromPath(filePath));
+ipcMain.handle('trigger-ws-boost', () => sendWsBoostSignal());
 
 ipcMain.handle('start-bot', (_, type) => spawnBot(type));
 ipcMain.handle('stop-bot', (_, type) => stopBot(type));
