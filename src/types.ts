@@ -187,6 +187,7 @@ export interface Config {
   crossPlatformPreSubmitVwapBps?: number;
   crossPlatformPreSubmitProfitBps?: number;
   crossPlatformPreSubmitProfitUsd?: number;
+  crossPlatformPreSubmitLegVwapSpreadBps?: number;
   crossPlatformAdaptiveSize?: boolean;
   crossPlatformMinDepthShares?: number;
   crossPlatformMinNotionalUsd?: number;

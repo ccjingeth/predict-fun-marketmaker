@@ -955,6 +955,7 @@ export class CrossPlatformExecutionRouter {
     let totalProceedsPerShare = 0;
     let hasBuy = false;
     let hasSell = false;
+    const legDeviationSamples: number[] = [];
     for (const leg of legs) {
       const book = await this.fetchOrderbookInternal(leg);
       if (!book) {
@@ -990,6 +991,7 @@ export class CrossPlatformExecutionRouter {
             `Pre-submit failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${vwapBps}) for ${leg.platform}:${leg.tokenId}`
           );
         }
+        legDeviationSamples.push(deviationBps);
         if (leg.side === 'BUY') {
           hasBuy = true;
           totalCostPerShare += vwapAllIn;
@@ -997,6 +999,17 @@ export class CrossPlatformExecutionRouter {
           hasSell = true;
           totalProceedsPerShare += vwapAllIn;
         }
+      }
+    }
+    const legSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0);
+    if (legSpreadBps > 0 && legDeviationSamples.length >= 2) {
+      const minDev = Math.min(...legDeviationSamples);
+      const maxDev = Math.max(...legDeviationSamples);
+      const spread = maxDev - minDev;
+      if (spread > legSpreadBps) {
+        throw new Error(
+          `Pre-submit failed: leg VWAP spread ${spread.toFixed(1)} bps > max ${legSpreadBps}`
+        );
       }
     }
     if (!minProfitBps && !minProfitUsd) {
