@@ -64,6 +64,8 @@
 - `MM_HIT_DEPTH_MIN_SHARES`：逼近成交时，深度低于该值触发撤单。
 - `MM_HIT_SPEED_BPS`：盘口向挂单方向逼近的速度阈值（bps）。
 - `MM_HIT_SPEED_WINDOW_MS`：盘口逼近速度检测窗口。
+- `MM_HIT_SIZE_DROP_RATIO`：逼近成交时，顶层深度快速下降比例阈值（0-1）。
+- `MM_HIT_SIZE_DROP_WINDOW_MS`：顶层深度下降检测窗口。
 - `MM_VOLATILITY_HIGH_BPS`：高波动阈值（触发“波动档”）。
 - `MM_VOLATILITY_LOW_BPS`：低波动阈值（触发“平稳档”）。
 - `MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER`：波动档下单间隔倍率。

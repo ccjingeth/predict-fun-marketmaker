@@ -516,6 +516,8 @@ export class MarketMaker {
     const hitDepthMinShares = Math.max(0, this.config.mmHitDepthMinShares ?? 0);
     const hitSpeedBps = Math.max(0, this.config.mmHitSpeedBps ?? 0);
     const hitSpeedWindow = Math.max(0, this.config.mmHitSpeedWindowMs ?? 1200);
+    const hitSizeDropRatio = Math.max(0, this.config.mmHitSizeDropRatio ?? 0);
+    const hitSizeDropWindow = Math.max(0, this.config.mmHitSizeDropWindowMs ?? 1200);
     const orderShares = Number(order.shares);
 
     const prevAt = this.prevBestAt.get(order.token_id) || 0;
@@ -553,6 +555,15 @@ export class MarketMaker {
           const depthShares = this.sumDepthLevels(orderbook.bids, hitDepthLevels);
           if (depthShares > 0 && depthShares <= hitDepthMinShares) {
             return { cancel: true, panic: true, reason: 'hit-warning-depth' };
+          }
+        }
+        if (hitSizeDropRatio > 0 && elapsed > 0 && elapsed <= hitSizeDropWindow) {
+          const prevSize = this.prevBestBidSize.get(order.token_id) ?? 0;
+          if (prevSize > 0 && topSize > 0) {
+            const drop = (prevSize - topSize) / prevSize;
+            if (drop >= hitSizeDropRatio) {
+              return { cancel: true, panic: true, reason: 'hit-warning-size-drop' };
+            }
           }
         }
       }
@@ -598,6 +609,15 @@ export class MarketMaker {
           const depthShares = this.sumDepthLevels(orderbook.asks, hitDepthLevels);
           if (depthShares > 0 && depthShares <= hitDepthMinShares) {
             return { cancel: true, panic: true, reason: 'hit-warning-depth' };
+          }
+        }
+        if (hitSizeDropRatio > 0 && elapsed > 0 && elapsed <= hitSizeDropWindow) {
+          const prevSize = this.prevBestAskSize.get(order.token_id) ?? 0;
+          if (prevSize > 0 && topSize > 0) {
+            const drop = (prevSize - topSize) / prevSize;
+            if (drop >= hitSizeDropRatio) {
+              return { cancel: true, panic: true, reason: 'hit-warning-size-drop' };
+            }
           }
         }
       }

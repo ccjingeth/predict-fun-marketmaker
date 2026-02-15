@@ -116,6 +116,8 @@ export interface Config {
   mmHitDepthMinShares?: number;
   mmHitSpeedBps?: number;
   mmHitSpeedWindowMs?: number;
+  mmHitSizeDropRatio?: number;
+  mmHitSizeDropWindowMs?: number;
   mmVolatilityHighBps?: number;
   mmVolatilityLowBps?: number;
   mmIntervalProfileVolatileMultiplier?: number;

@@ -164,6 +164,8 @@ export function loadConfig(): Config {
     mmHitDepthMinShares: parseFloat(process.env.MM_HIT_DEPTH_MIN_SHARES || '0'),
     mmHitSpeedBps: parseFloat(process.env.MM_HIT_SPEED_BPS || '0'),
     mmHitSpeedWindowMs: parseInt(process.env.MM_HIT_SPEED_WINDOW_MS || '1200'),
+    mmHitSizeDropRatio: parseFloat(process.env.MM_HIT_SIZE_DROP_RATIO || '0'),
+    mmHitSizeDropWindowMs: parseInt(process.env.MM_HIT_SIZE_DROP_WINDOW_MS || '1200'),
     mmVolatilityHighBps: parseFloat(process.env.MM_VOLATILITY_HIGH_BPS || '0.006'),
     mmVolatilityLowBps: parseFloat(process.env.MM_VOLATILITY_LOW_BPS || '0.002'),
     mmIntervalProfileVolatileMultiplier: parseFloat(process.env.MM_INTERVAL_PROFILE_VOLATILE_MULTIPLIER || '1.3'),
