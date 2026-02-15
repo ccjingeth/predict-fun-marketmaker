@@ -3,6 +3,7 @@ const mappingEditor = document.getElementById('mappingEditor');
 const mappingMissingList = document.getElementById('mappingMissingList');
 const mappingCheckMissingBtn = document.getElementById('mappingCheckMissing');
 const mappingGenerateTemplateBtn = document.getElementById('mappingGenerateTemplate');
+const mappingSuggestPredictBtn = document.getElementById('mappingSuggestPredict');
 const mappingCopyTemplateBtn = document.getElementById('mappingCopyTemplate');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
@@ -1509,6 +1510,20 @@ function normalizeQuestionKey(text) {
     .trim();
 }
 
+function similarityScore(a, b) {
+  const s1 = normalizeQuestionKey(a);
+  const s2 = normalizeQuestionKey(b);
+  if (!s1 || !s2) return 0;
+  const words1 = new Set(s1.split(' '));
+  const words2 = new Set(s2.split(' '));
+  let intersection = 0;
+  for (const w of words1) {
+    if (words2.has(w)) intersection += 1;
+  }
+  const union = new Set([...words1, ...words2]);
+  return union.size > 0 ? intersection / union.size : 0;
+}
+
 function buildMappingIndex(entries) {
   const tokenIndex = new Map();
   const predictIndex = new Map();
@@ -1648,6 +1663,7 @@ async function checkMappingMissing() {
     mappingMissingList.appendChild(row);
   });
   mappingMissingList.dataset.template = generateMappingTemplate(missing);
+  mappingMissingList.dataset.missing = JSON.stringify(missing);
   if (mappingMissingList.dataset.template && mappingMissingList.dataset.template.length > 0) {
     pushLog({ type: 'system', level: 'system', message: `检测到 ${missing.length} 条缺失映射，可生成模板。` });
   }
@@ -1673,6 +1689,66 @@ async function copyMappingTemplate() {
   } catch {
     pushLog({ type: 'system', level: 'stderr', message: '复制映射模板失败，请手动复制。' });
   }
+}
+
+async function suggestPredictMappings() {
+  if (!mappingMissingList) return;
+  if (!mappingMissingList.dataset.missing) {
+    pushLog({ type: 'system', level: 'system', message: '请先点击“检查缺失”。' });
+    return;
+  }
+  let missing = [];
+  try {
+    missing = JSON.parse(mappingMissingList.dataset.missing || '[]');
+  } catch {
+    pushLog({ type: 'system', level: 'stderr', message: '缺失映射数据解析失败。' });
+    return;
+  }
+  if (!missing.length) {
+    pushLog({ type: 'system', level: 'system', message: '没有可匹配的缺失项。' });
+    return;
+  }
+  let predictMarkets = [];
+  try {
+    const raw = await window.predictBot.readPlatformMarkets('predict');
+    const parsed = JSON.parse(raw || '[]');
+    predictMarkets = Array.isArray(parsed) ? parsed : parsed?.result || parsed?.list || [];
+  } catch {
+    pushLog({ type: 'system', level: 'stderr', message: 'Predict 市场读取失败。' });
+    return;
+  }
+  const env = parseEnv(envEditor.value || '');
+  const minSimilarity = parseFloat(env.get('CROSS_PLATFORM_MIN_SIMILARITY') || '0.78');
+  const candidates = predictMarkets
+    .map(parseMarketRow)
+    .filter((row) => row && (row.marketId || row.question));
+  let matched = 0;
+  const nextMissing = missing.map((item) => {
+    if (item.predictMarketId || item.predictQuestion) return item;
+    let best = null;
+    let bestScore = minSimilarity;
+    for (const candidate of candidates) {
+      const score = similarityScore(item.question, candidate.question);
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+    if (best) {
+      matched += 1;
+      return {
+        ...item,
+        predictMarketId: best.marketId || '',
+        predictQuestion: best.question || '',
+        predictScore: Number(bestScore.toFixed(3)),
+      };
+    }
+    return item;
+  });
+  mappingMissingList.dataset.missing = JSON.stringify(nextMissing);
+  mappingMissingList.dataset.template = generateMappingTemplate(nextMissing);
+  applyMappingTemplate();
+  pushLog({ type: 'system', level: 'system', message: `自动匹配完成：${matched}/${missing.length}` });
 }
 
 function getHardGateFixLines() {
@@ -3517,6 +3593,11 @@ if (mappingCheckMissingBtn) {
 }
 if (mappingGenerateTemplateBtn) {
   mappingGenerateTemplateBtn.addEventListener('click', applyMappingTemplate);
+}
+if (mappingSuggestPredictBtn) {
+  mappingSuggestPredictBtn.addEventListener('click', () => {
+    suggestPredictMappings().catch(() => {});
+  });
 }
 if (mappingCopyTemplateBtn) {
   mappingCopyTemplateBtn.addEventListener('click', () => {

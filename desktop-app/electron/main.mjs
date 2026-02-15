@@ -301,6 +301,28 @@ async function readPlatformMarkets(platform) {
     }));
     return JSON.stringify(results);
   }
+  if (lower === 'predict') {
+    const apiBase = env.get('API_BASE_URL') || 'https://predict.fun/api';
+    const apiKey = env.get('API_KEY') || '';
+    const url = `${apiBase}/markets`;
+    const raw = await fetchJson(url, {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+    });
+    const list = Array.isArray(raw?.data)
+      ? raw.data
+      : Array.isArray(raw?.markets)
+      ? raw.markets
+      : Array.isArray(raw)
+      ? raw
+      : [];
+    const results = list.map((item) => ({
+      marketId: item.market_id || item.condition_id || item.token_id || item.id || '',
+      marketTitle: item.question || item.title || '',
+      yesTokenId: item.yes_token_id || '',
+      noTokenId: item.no_token_id || '',
+    }));
+    return JSON.stringify(results);
+  }
   return JSON.stringify([]);
 }
 

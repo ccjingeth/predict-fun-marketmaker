@@ -577,6 +577,7 @@
               <button class="btn primary" id="saveMapping">保存映射</button>
               <button class="btn ghost" id="mappingCheckMissing">检查缺失</button>
               <button class="btn ghost" id="mappingGenerateTemplate">生成模板</button>
+              <button class="btn ghost" id="mappingSuggestPredict">自动匹配 Predict</button>
               <button class="btn ghost" id="mappingCopyTemplate">复制模板</button>
             </div>
             <textarea id="mappingEditor" spellcheck="false"></textarea>
@@ -585,6 +586,7 @@
             <div class="health-list" id="mappingMissingList">
               <div class="health-item ok">未检测。</div>
             </div>
+            <p class="hint">自动匹配会使用文本相似度（CROSS_PLATFORM_MIN_SIMILARITY）生成 Predict 建议。</p>
           </div>
 
           <div class="tab-panel" data-tab="dependency">
