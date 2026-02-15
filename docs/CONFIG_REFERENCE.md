@@ -73,6 +73,10 @@
 - `MM_SPREAD_JUMP_BPS`：盘口价差跳变阈值（bps），超出则暂停挂单。
 - `MM_SPREAD_JUMP_WINDOW_MS`：价差跳变检测窗口（毫秒）。
 - `MM_MAX_SHARES_PER_ORDER`：单笔挂单最大份额上限（0=不限制）。
+- `MM_LAYER_COUNT`：分层挂单数量（每侧）。
+- `MM_LAYER_SPREAD_STEP_BPS`：每一层相对基础报价的额外偏移（bps）。
+- `MM_LAYER_SIZE_DECAY`：层级挂单份额衰减系数（0-1）。
+- `MM_LAYER_ALLOW_BELOW_MIN_SHARES`：是否允许分层挂单低于 points 最小份额。
 - `MM_SIZE_INVENTORY_WEIGHT`：库存方向对“挂单份额”的影响权重。
 - `MM_SIZE_IMBALANCE_WEIGHT`：盘口不平衡对“挂单份额”的影响权重。
 - `MM_SIZE_MIN_FACTOR`：挂单份额缩放下限（防止缩得过小）。

@@ -1109,6 +1109,50 @@ export class MarketMaker {
     return false;
   }
 
+  private buildLayerTargets(basePrice: number, side: 'BUY' | 'SELL'): number[] {
+    const count = Math.max(1, Math.floor(this.config.mmLayerCount ?? 1));
+    const stepBps = Math.max(0, this.config.mmLayerSpreadStepBps ?? 0);
+    if (count <= 1 || stepBps <= 0) {
+      return [basePrice];
+    }
+    const step = stepBps / 10000;
+    const targets: number[] = [];
+    let last = basePrice;
+    for (let i = 0; i < count; i += 1) {
+      let price =
+        side === 'BUY'
+          ? basePrice * (1 - step * i)
+          : basePrice * (1 + step * i);
+      price = this.clamp(price, 0.01, 0.99);
+      if (i > 0) {
+        if (side === 'BUY' && price >= last) {
+          price = Math.max(0.01, last - MarketMaker.MIN_TICK);
+        }
+        if (side === 'SELL' && price <= last) {
+          price = Math.min(0.99, last + MarketMaker.MIN_TICK);
+        }
+      }
+      targets.push(price);
+      last = price;
+    }
+    return targets;
+  }
+
+  private buildLayerSizes(baseShares: number, minShares: number, allowBelowMin: boolean): number[] {
+    const count = Math.max(1, Math.floor(this.config.mmLayerCount ?? 1));
+    const decay = this.clamp(this.config.mmLayerSizeDecay ?? 0.6, 0.1, 1);
+    const sizes: number[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const scaled = i === 0 ? baseShares : baseShares * Math.pow(decay, i);
+      let size = Math.max(1, Math.floor(scaled));
+      if (minShares > 0 && size < minShares && !allowBelowMin) {
+        size = 0;
+      }
+      sizes.push(size);
+    }
+    return sizes;
+  }
+
   private isLiquidityThin(metrics: { topDepth: number; topDepthUsd: number }): boolean {
     const minShares = this.config.mmMinTopDepthShares ?? 0;
     const minUsd = this.config.mmMinTopDepthUsd ?? 0;
@@ -1532,7 +1576,7 @@ export class MarketMaker {
   }
 
   private trimExcessOrders(tokenId: string, orders: Order[]): Order[] {
-    const maxOrders = this.config.maxOrdersPerMarket ?? 2;
+    const maxOrders = this.getEffectiveMaxOrdersPerMarket();
     if (orders.length <= maxOrders) {
       return orders;
     }
@@ -1546,6 +1590,15 @@ export class MarketMaker {
     }
 
     return keep;
+  }
+
+  private getEffectiveMaxOrdersPerMarket(): number {
+    const base = this.config.maxOrdersPerMarket ?? 2;
+    const layerCount = Math.max(1, Math.floor(this.config.mmLayerCount ?? 1));
+    if (layerCount <= 1) {
+      return base;
+    }
+    return Math.max(base, layerCount * 2);
   }
 
   async placeMMOrders(market: Market, orderbook: Orderbook): Promise<void> {
@@ -1635,12 +1688,29 @@ export class MarketMaker {
     );
     existingOrders = this.trimExcessOrders(tokenId, existingOrders);
 
-    const existingBid = existingOrders.find((o) => o.side === 'BUY');
-    const existingAsk = existingOrders.find((o) => o.side === 'SELL');
+    const existingBids = existingOrders
+      .filter((o) => o.side === 'BUY')
+      .sort((a, b) => Number(b.price) - Number(a.price));
+    const existingAsks = existingOrders
+      .filter((o) => o.side === 'SELL')
+      .sort((a, b) => Number(a.price) - Number(b.price));
 
-    if (existingBid) {
+    const bidTargets = this.buildLayerTargets(prices.bidPrice, 'BUY');
+    const askTargets = this.buildLayerTargets(prices.askPrice, 'SELL');
+    const bidLayers = bidTargets.length;
+    const askLayers = askTargets.length;
+    const canceledOrders = new Set<string>();
+
+    for (let i = 0; i < existingBids.length; i += 1) {
+      const existingBid = existingBids[i];
+      const targetPrice = bidTargets[i];
+      if (targetPrice === undefined) {
+        await this.cancelOrder(existingBid);
+        canceledOrders.add(existingBid.order_hash);
+        continue;
+      }
       let risk = this.evaluateOrderRisk(existingBid, orderbook);
-      let shouldReprice = this.shouldRepriceOrder(existingBid, prices.bidPrice);
+      let shouldReprice = this.shouldRepriceOrder(existingBid, targetPrice);
       if ((risk.cancel || shouldReprice) && this.canRecheck(tokenId)) {
         const delay = risk.cancel
           ? Math.max(0, this.config.mmCancelRecheckMs ?? 0)
@@ -1650,17 +1720,15 @@ export class MarketMaker {
           const freshBook = await this.api.getOrderbook(tokenId);
           if (risk.cancel) {
             const freshRisk = this.evaluateOrderRisk(existingBid, freshBook);
-            if (!freshRisk.cancel) {
-              risk = freshRisk;
-            } else {
-              risk = freshRisk;
-            }
+            risk = freshRisk;
           }
           if (shouldReprice) {
             const freshPrices = this.calculatePrices(market, freshBook);
             if (freshPrices) {
               prices = freshPrices;
-              shouldReprice = this.shouldRepriceOrder(existingBid, prices.bidPrice);
+              const refreshTargets = this.buildLayerTargets(prices.bidPrice, 'BUY');
+              const nextTarget = refreshTargets[i] ?? targetPrice;
+              shouldReprice = this.shouldRepriceOrder(existingBid, nextTarget);
             }
           }
         }
@@ -1678,6 +1746,7 @@ export class MarketMaker {
           }
         }
         await this.cancelOrder(existingBid);
+        canceledOrders.add(existingBid.order_hash);
         const softCooldown = this.config.mmSoftCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
         const hardCooldown = this.config.mmHardCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
         const baseCooldown = risk.panic ? hardCooldown : softCooldown;
@@ -1691,9 +1760,16 @@ export class MarketMaker {
       }
     }
 
-    if (existingAsk) {
+    for (let i = 0; i < existingAsks.length; i += 1) {
+      const existingAsk = existingAsks[i];
+      const targetPrice = askTargets[i];
+      if (targetPrice === undefined) {
+        await this.cancelOrder(existingAsk);
+        canceledOrders.add(existingAsk.order_hash);
+        continue;
+      }
       let risk = this.evaluateOrderRisk(existingAsk, orderbook);
-      let shouldReprice = this.shouldRepriceOrder(existingAsk, prices.askPrice);
+      let shouldReprice = this.shouldRepriceOrder(existingAsk, targetPrice);
       if ((risk.cancel || shouldReprice) && this.canRecheck(tokenId)) {
         const delay = risk.cancel
           ? Math.max(0, this.config.mmCancelRecheckMs ?? 0)
@@ -1703,17 +1779,15 @@ export class MarketMaker {
           const freshBook = await this.api.getOrderbook(tokenId);
           if (risk.cancel) {
             const freshRisk = this.evaluateOrderRisk(existingAsk, freshBook);
-            if (!freshRisk.cancel) {
-              risk = freshRisk;
-            } else {
-              risk = freshRisk;
-            }
+            risk = freshRisk;
           }
           if (shouldReprice) {
             const freshPrices = this.calculatePrices(market, freshBook);
             if (freshPrices) {
               prices = freshPrices;
-              shouldReprice = this.shouldRepriceOrder(existingAsk, prices.askPrice);
+              const refreshTargets = this.buildLayerTargets(prices.askPrice, 'SELL');
+              const nextTarget = refreshTargets[i] ?? targetPrice;
+              shouldReprice = this.shouldRepriceOrder(existingAsk, nextTarget);
             }
           }
         }
@@ -1731,6 +1805,7 @@ export class MarketMaker {
           }
         }
         await this.cancelOrder(existingAsk);
+        canceledOrders.add(existingAsk.order_hash);
         const softCooldown = this.config.mmSoftCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
         const hardCooldown = this.config.mmHardCancelCooldownMs ?? (this.config.cooldownAfterCancelMs ?? 4000);
         const baseCooldown = risk.panic ? hardCooldown : softCooldown;
@@ -1748,8 +1823,14 @@ export class MarketMaker {
       (o) => o.token_id === tokenId && o.status === 'OPEN'
     );
 
-    let hasBid = refreshedOrders.some((o) => o.side === 'BUY');
-    let hasAsk = refreshedOrders.some((o) => o.side === 'SELL');
+    const remainingBids = refreshedOrders
+      .filter((o) => o.side === 'BUY' && !canceledOrders.has(o.order_hash))
+      .sort((a, b) => Number(b.price) - Number(a.price));
+    const remainingAsks = refreshedOrders
+      .filter((o) => o.side === 'SELL' && !canceledOrders.has(o.order_hash))
+      .sort((a, b) => Number(a.price) - Number(b.price));
+    let hasBid = remainingBids.length > 0;
+    let hasAsk = remainingAsks.length > 0;
 
     const bidOrderSize = this.calculateOrderSize(market, orderbook, 'BUY', prices.bidPrice);
     const askOrderSize = this.calculateOrderSize(market, orderbook, 'SELL', prices.askPrice);
@@ -1779,18 +1860,43 @@ export class MarketMaker {
     const suppressSell = prices.inventoryBias < -0.85;
 
     let placed = false;
-    if (!hasBid && !suppressBuy && bidOrderSize.shares > 0) {
-      const targetShares = Math.max(1, Math.floor(bidOrderSize.shares * profileScale));
-      const shares = this.applyIceberg(targetShares);
-      await this.placeLimitOrder(market, 'BUY', prices.bidPrice, shares);
-      placed = true;
+    const allowBelowMin = this.config.mmLayerAllowBelowMinShares === true;
+    const minShares = market.liquidity_activation?.min_shares || 0;
+    const targetBidShares = Math.max(1, Math.floor(bidOrderSize.shares * profileScale));
+    const targetAskShares = Math.max(1, Math.floor(askOrderSize.shares * profileScale));
+    const bidSizes = this.buildLayerSizes(targetBidShares, minShares, allowBelowMin).slice(0, bidLayers);
+    const askSizes = this.buildLayerSizes(targetAskShares, minShares, allowBelowMin).slice(0, askLayers);
+
+    if (!suppressBuy && bidOrderSize.shares > 0) {
+      for (let i = 0; i < bidLayers; i += 1) {
+        if (remainingBids[i]) {
+          continue;
+        }
+        const size = bidSizes[i] ?? 0;
+        if (size <= 0) {
+          continue;
+        }
+        const shares = this.applyIceberg(size);
+        await this.placeLimitOrder(market, 'BUY', bidTargets[i], shares);
+        placed = true;
+      }
+      hasBid = hasBid || placed;
     }
 
-    if (!hasAsk && !suppressSell && askOrderSize.shares > 0) {
-      const targetShares = Math.max(1, Math.floor(askOrderSize.shares * profileScale));
-      const shares = this.applyIceberg(targetShares);
-      await this.placeLimitOrder(market, 'SELL', prices.askPrice, shares);
-      placed = true;
+    if (!suppressSell && askOrderSize.shares > 0) {
+      for (let i = 0; i < askLayers; i += 1) {
+        if (remainingAsks[i]) {
+          continue;
+        }
+        const size = askSizes[i] ?? 0;
+        if (size <= 0) {
+          continue;
+        }
+        const shares = this.applyIceberg(size);
+        await this.placeLimitOrder(market, 'SELL', askTargets[i], shares);
+        placed = true;
+      }
+      hasAsk = hasAsk || placed;
     }
 
     if (placed) {

@@ -125,6 +125,10 @@ export interface Config {
   mmSpreadJumpBps?: number;
   mmSpreadJumpWindowMs?: number;
   mmMaxSharesPerOrder?: number;
+  mmLayerCount?: number;
+  mmLayerSpreadStepBps?: number;
+  mmLayerSizeDecay?: number;
+  mmLayerAllowBelowMinShares?: boolean;
   mmSizeInventoryWeight?: number;
   mmSizeImbalanceWeight?: number;
   mmSizeMinFactor?: number;
