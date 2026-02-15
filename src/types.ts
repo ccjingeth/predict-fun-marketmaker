@@ -393,6 +393,9 @@ export interface Config {
   crossPlatformFailureMinDepthSharesBump?: number;
   crossPlatformFailureMinDepthSharesMax?: number;
   crossPlatformFailureMinDepthSharesRecover?: number;
+  crossPlatformFailureTotalCostBpsBump?: number;
+  crossPlatformFailureTotalCostBpsBumpMax?: number;
+  crossPlatformFailureTotalCostBpsRecover?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;

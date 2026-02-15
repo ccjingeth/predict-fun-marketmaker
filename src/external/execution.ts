@@ -642,6 +642,7 @@ export class CrossPlatformExecutionRouter {
   private failureNotionalUsdExtra = 0;
   private failureMinDepthSharesExtra = 0;
   private forceFokUntil = 0;
+  private failureTotalCostBpsExtra = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -789,6 +790,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureMinProfitExtra(true);
         this.adjustFailureNotionalExtra(true);
         this.adjustFailureMinDepthSharesExtra(true);
+        this.adjustFailureTotalCostExtra(true);
         this.applyFailureForceFok(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
@@ -863,6 +865,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureMinProfitExtra(false);
         this.adjustFailureNotionalExtra(false);
         this.adjustFailureMinDepthSharesExtra(false);
+        this.adjustFailureTotalCostExtra(false);
         this.applyFailureForceSequential(false);
         this.applyFailureForceFok(false);
         this.adjustChunkDelay(false);
@@ -982,13 +985,22 @@ export class CrossPlatformExecutionRouter {
   }
 
   private async preSubmitCheck(legs: PlatformLeg[]): Promise<void> {
-    const driftBps = Math.max(0, this.config.crossPlatformPreSubmitDriftBps || 0);
+    let driftBps = Math.max(0, this.config.crossPlatformPreSubmitDriftBps || 0);
     const vwapBps = Math.max(0, this.config.crossPlatformPreSubmitVwapBps || 0);
     const minProfitBps = Math.max(0, this.config.crossPlatformPreSubmitProfitBps || 0);
     const minProfitUsd = Math.max(0, this.config.crossPlatformPreSubmitProfitUsd || 0);
-    const totalCostBps = Math.max(0, this.config.crossPlatformPreSubmitTotalCostBps || 0);
+    let totalCostBps = Math.max(0, this.config.crossPlatformPreSubmitTotalCostBps || 0);
     const legSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0);
     const legCostSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegCostSpreadBps || 0);
+    if (this.failureTotalCostBpsExtra > 0) {
+      totalCostBps += this.failureTotalCostBpsExtra;
+    }
+    if (this.consecutiveFailures > 0) {
+      const tighten = Math.max(0, this.config.crossPlatformFailureDriftTightenBps || 0);
+      if (tighten > 0) {
+        driftBps = Math.max(0, driftBps - tighten);
+      }
+    }
     if (
       !driftBps &&
       !vwapBps &&
@@ -1880,6 +1892,22 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     this.failureMinDepthSharesExtra = Math.min(maxBump, this.failureMinDepthSharesExtra + bump);
+  }
+
+  private adjustFailureTotalCostExtra(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureTotalCostBpsBump || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureTotalCostBpsBumpMax || bump * 5);
+    const recover = this.config.crossPlatformFailureTotalCostBpsRecover ?? 0.7;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureTotalCostBpsExtra = Math.max(0, this.failureTotalCostBpsExtra * recover);
+      }
+      return;
+    }
+    this.failureTotalCostBpsExtra = Math.min(maxBump, this.failureTotalCostBpsExtra + bump);
   }
 
   private applyFailureForceSequential(success: boolean): void {
@@ -3601,7 +3629,7 @@ export class CrossPlatformExecutionRouter {
 
       const driftBase = this.config.crossPlatformPriceDriftBps ?? 40;
       let driftBps = Math.max(1, driftBase * this.getAutoTuneFactor());
-      if (this.circuitFailures > 0 || this.isDegraded()) {
+      if (this.circuitFailures > 0 || this.isDegraded() || this.consecutiveFailures > 0) {
         const tighten = Math.max(0, this.config.crossPlatformFailureDriftTightenBps || 0);
         if (tighten > 0) {
           driftBps = Math.max(1, driftBps - tighten);
