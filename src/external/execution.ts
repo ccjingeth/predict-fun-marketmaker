@@ -868,6 +868,7 @@ export class CrossPlatformExecutionRouter {
     }
 
     const runExecution = async (platform: ExternalPlatform, legsForPlatform: PlatformLeg[], options: PlatformExecuteOptions) => {
+      await this.preSubmitCheck(legsForPlatform);
       const executor = this.executors.get(platform);
       if (!executor) {
         throw new Error(`No executor configured for ${platform}`);
@@ -937,6 +938,29 @@ export class CrossPlatformExecutionRouter {
     }
 
     return results;
+  }
+
+  private async preSubmitCheck(legs: PlatformLeg[]): Promise<void> {
+    const driftBps = Math.max(0, this.config.crossPlatformPreSubmitDriftBps || 0);
+    if (!driftBps) {
+      return;
+    }
+    for (const leg of legs) {
+      const book = await this.fetchOrderbookInternal(leg);
+      if (!book) {
+        throw new Error(`Pre-submit failed: missing orderbook for ${leg.platform}:${leg.tokenId}`);
+      }
+      const ref = leg.side === 'BUY' ? book.bestAsk : book.bestBid;
+      if (!ref || !Number.isFinite(ref) || ref <= 0 || !Number.isFinite(leg.price) || leg.price <= 0) {
+        throw new Error(`Pre-submit failed: invalid price for ${leg.platform}:${leg.tokenId}`);
+      }
+      const drift = Math.abs((ref - leg.price) / leg.price) * 10000;
+      if (drift > driftBps) {
+        throw new Error(
+          `Pre-submit failed: drift ${drift.toFixed(1)} bps (max ${driftBps}) for ${leg.platform}:${leg.tokenId}`
+        );
+      }
+    }
   }
 
   private selectBestLegs(legs: PlatformLeg[], maxLegs: number): PlatformLeg[] {
@@ -3751,6 +3775,10 @@ export class CrossPlatformExecutionRouter {
       this.failureProfitUsdBump +
       notional * (requiredBps / 10000) +
       notional * (impactBps / 10000) * impactMult;
+    const minProfitPct = Math.max(0, this.config.crossPlatformMinProfit || 0);
+    if (minProfitPct > 0) {
+      required = Math.max(required, notional * minProfitPct);
+    }
     if (qualityFactor > 1) {
       required *= qualityFactor;
     }

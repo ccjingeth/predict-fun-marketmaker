@@ -183,6 +183,7 @@ export interface Config {
   crossPlatformWsRealtimeFallbackStaleMs?: number;
   crossPlatformExecutionVwapCheck?: boolean;
   crossPlatformPriceDriftBps?: number;
+  crossPlatformPreSubmitDriftBps?: number;
   crossPlatformAdaptiveSize?: boolean;
   crossPlatformMinDepthShares?: number;
   crossPlatformMinNotionalUsd?: number;
@@ -507,6 +508,7 @@ export interface Config {
   arbPreflightEnabled?: boolean;
   arbPreflightMaxAgeMs?: number;
   arbDepthUsage?: number;
+  arbDepthLevels?: number;
   arbMinDepthUsd?: number;
   arbMinNotionalUsd?: number;
   arbMinProfitUsd?: number;

@@ -21,6 +21,7 @@ export class InPlatformArbitrageDetector {
   private maxVwapDeviationBps: number;
   private recheckDeviationBps: number;
   private maxVwapLevels: number;
+  private depthLevels: number;
 
   constructor(
     minProfitThreshold: number = 0.02,
@@ -34,7 +35,8 @@ export class InPlatformArbitrageDetector {
     minDepthUsd: number = 0,
     maxVwapDeviationBps: number = 0,
     recheckDeviationBps: number = 60,
-    maxVwapLevels: number = 0
+    maxVwapLevels: number = 0,
+    depthLevels: number = 0
   ) {
     this.minProfitThreshold = minProfitThreshold;
     this.estimatedFee = estimatedFee;
@@ -48,6 +50,7 @@ export class InPlatformArbitrageDetector {
     this.maxVwapDeviationBps = Math.max(0, maxVwapDeviationBps);
     this.recheckDeviationBps = Math.max(0, recheckDeviationBps);
     this.maxVwapLevels = Math.max(0, Math.floor(maxVwapLevels));
+    this.depthLevels = Math.max(0, Math.floor(depthLevels));
   }
 
   setMinProfitThreshold(value: number): void {
@@ -99,15 +102,21 @@ export class InPlatformArbitrageDetector {
     const slippageBps = this.estimatedSlippage * 10000;
 
     if (this.minDepthUsd > 0) {
-      const yesDepthUsd = sumDepth(yesBook.asks) * yesTop.ask;
-      const noDepthUsd = sumDepth(noBook.asks) * noTop.ask;
+      const yesDepthUsd = sumDepth(yesBook.asks, this.depthLevels) * yesTop.ask;
+      const noDepthUsd = sumDepth(noBook.asks, this.depthLevels) * noTop.ask;
       if (yesDepthUsd < this.minDepthUsd || noDepthUsd < this.minDepthUsd) {
         return null;
       }
     }
 
-    const buyDepth = Math.min(sumDepth(yesBook.asks), sumDepth(noBook.asks));
-    const sellDepth = Math.min(sumDepth(yesBook.bids), sumDepth(noBook.bids));
+    const buyDepth = Math.min(
+      sumDepth(yesBook.asks, this.depthLevels),
+      sumDepth(noBook.asks, this.depthLevels)
+    );
+    const sellDepth = Math.min(
+      sumDepth(yesBook.bids, this.depthLevels),
+      sumDepth(noBook.bids, this.depthLevels)
+    );
 
     let buySize = Math.floor(Math.min(buyDepth * this.depthUsage, this.maxRecommendedShares));
     let sellSize = Math.floor(Math.min(sellDepth * this.depthUsage, this.maxRecommendedShares));
@@ -120,7 +129,8 @@ export class InPlatformArbitrageDetector {
         yesFeeBps,
         undefined,
         undefined,
-        slippageBps
+        slippageBps,
+        this.depthLevels
       );
       const maxNo = maxBuySharesForLimit(
         noBook.asks,
@@ -129,7 +139,8 @@ export class InPlatformArbitrageDetector {
         noFeeBps,
         undefined,
         undefined,
-        slippageBps
+        slippageBps,
+        this.depthLevels
       );
       buySize = Math.min(buySize, Math.floor(Math.min(maxYes, maxNo)));
 
@@ -140,7 +151,8 @@ export class InPlatformArbitrageDetector {
         yesFeeBps,
         undefined,
         undefined,
-        slippageBps
+        slippageBps,
+        this.depthLevels
       );
       const maxNoSell = maxSellSharesForLimit(
         noBook.bids,
@@ -149,7 +161,8 @@ export class InPlatformArbitrageDetector {
         noFeeBps,
         undefined,
         undefined,
-        slippageBps
+        slippageBps,
+        this.depthLevels
       );
       sellSize = Math.min(sellSize, Math.floor(Math.min(maxYesSell, maxNoSell)));
     }
@@ -318,8 +331,8 @@ export class InPlatformArbitrageDetector {
     let size = startSize;
     let best: { size: number; edge: number; yes: NonNullable<ReturnType<typeof estimateBuy>>; no: NonNullable<ReturnType<typeof estimateBuy>> } | null = null;
     for (let i = 0; i < 4 && size >= 1; i += 1) {
-      const yes = estimateBuy(yesBook.asks, size, yesFeeBps, undefined, undefined, slippageBps);
-      const no = estimateBuy(noBook.asks, size, noFeeBps, undefined, undefined, slippageBps);
+      const yes = estimateBuy(yesBook.asks, size, yesFeeBps, undefined, undefined, slippageBps, this.depthLevels);
+      const no = estimateBuy(noBook.asks, size, noFeeBps, undefined, undefined, slippageBps, this.depthLevels);
       if (yes && no) {
         const costPerShare = (yes.totalAllIn + no.totalAllIn) / size;
         const edge = 1 - costPerShare;
@@ -349,8 +362,8 @@ export class InPlatformArbitrageDetector {
     let size = startSize;
     let best: { size: number; edge: number; yes: NonNullable<ReturnType<typeof estimateSell>>; no: NonNullable<ReturnType<typeof estimateSell>> } | null = null;
     for (let i = 0; i < 4 && size >= 1; i += 1) {
-      const yes = estimateSell(yesBook.bids, size, yesFeeBps, undefined, undefined, slippageBps);
-      const no = estimateSell(noBook.bids, size, noFeeBps, undefined, undefined, slippageBps);
+      const yes = estimateSell(yesBook.bids, size, yesFeeBps, undefined, undefined, slippageBps, this.depthLevels);
+      const no = estimateSell(noBook.bids, size, noFeeBps, undefined, undefined, slippageBps, this.depthLevels);
       if (yes && no) {
         const revenuePerShare = (yes.totalAllIn + no.totalAllIn) / size;
         const edge = revenuePerShare - 1;

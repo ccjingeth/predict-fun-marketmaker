@@ -109,6 +109,7 @@ class ArbitrageBot {
       alertMinIntervalMs: this.config.alertMinIntervalMs,
       alertOnNewOpportunity: true,
       arbDepthUsage: this.config.arbDepthUsage || 0.6,
+      arbDepthLevels: this.config.arbDepthLevels || 0,
       arbMinNotionalUsd: this.config.arbMinNotionalUsd || 0,
       arbMinProfitUsd: this.config.arbMinProfitUsd || 0,
       arbMaxVwapLevels: this.config.arbMaxVwapLevels || 0,
@@ -948,7 +949,8 @@ class ArbitrageBot {
       this.config.arbMinDepthUsd || 0,
       this.config.arbMaxVwapDeviationBps || 0,
       this.getEffectiveRecheckDeviationBps(),
-      this.config.arbMaxVwapLevels || 0
+      this.config.arbMaxVwapLevels || 0,
+      this.config.arbDepthLevels || 0
     );
     const refreshed = detector.scanMarkets([yesMarket, noMarket], orderbooks);
     if (refreshed.length === 0) {
@@ -990,6 +992,7 @@ class ArbitrageBot {
       maxRecommendedShares: this.config.multiOutcomeMaxShares || 500,
       feeBps: this.config.predictFeeBps || 100,
       depthUsage: this.getEffectiveDepthUsage(this.config.arbDepthUsage || 0.6),
+      depthLevels: this.config.arbDepthLevels || 0,
       minNotionalUsd: this.config.arbMinNotionalUsd || 0,
       minProfitUsd: this.config.arbMinProfitUsd || 0,
       minDepthUsd: this.config.arbMinDepthUsd || 0,

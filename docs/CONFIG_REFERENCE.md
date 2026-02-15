@@ -218,6 +218,7 @@
 - `ARB_PREFLIGHT_ENABLED`：自动执行前二次确认机会是否仍有效。
 - `ARB_PREFLIGHT_MAX_AGE_MS`：预检时允许的 WS 最大延迟。
 - `ARB_DEPTH_USAGE`：套利计算使用的深度比例（降低吃深度滑点）。
+- `ARB_DEPTH_LEVELS`：套利深度/VWAP 仅使用的盘口档位数（0=不限制）。
 - `ARB_MIN_DEPTH_USD`：盘口最小深度（USD），低于则跳过。
 - `ARB_MIN_NOTIONAL_USD`：套利最小成交金额过滤。
 - `ARB_MIN_PROFIT_USD`：套利最小收益金额过滤。
@@ -298,6 +299,7 @@
 - `CROSS_PLATFORM_WS_REALTIME_FALLBACK_STALE_MS`：WS 判定为陈旧的超时（毫秒）。
 - `CROSS_PLATFORM_EXECUTION_VWAP_CHECK`：跨平台执行前 VWAP 预检（更稳健）。
 - `CROSS_PLATFORM_PRICE_DRIFT_BPS`：预检时允许的最优价漂移上限（bps）。
+- `CROSS_PLATFORM_PRE_SUBMIT_DRIFT_BPS`：提交前“最后一眼”漂移阈值（bps，0=关闭）。
 - `CROSS_PLATFORM_ADAPTIVE_SIZE`：执行前根据订单簿深度自动缩小下单份额。
 - `CROSS_PLATFORM_MIN_DEPTH_SHARES`：深度不足时的最小下单份额门槛。
 - `CROSS_PLATFORM_MIN_NOTIONAL_USD`：跨平台机会的最小成交金额过滤。

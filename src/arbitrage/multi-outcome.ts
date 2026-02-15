@@ -36,6 +36,7 @@ export interface MultiOutcomeConfig {
   maxVwapDeviationBps: number;
   recheckDeviationBps: number;
   maxVwapLevels: number;
+  depthLevels: number;
 }
 
 export class MultiOutcomeArbitrageDetector {
@@ -55,6 +56,7 @@ export class MultiOutcomeArbitrageDetector {
       maxVwapDeviationBps: 0,
       recheckDeviationBps: 60,
       maxVwapLevels: 0,
+      depthLevels: 0,
       ...config,
     };
     this.config.depthUsage = Math.max(0.05, Math.min(1, this.config.depthUsage));
@@ -89,7 +91,7 @@ export class MultiOutcomeArbitrageDetector {
           break;
         }
 
-        const depth = Math.max(sumDepth(book?.asks), askSize);
+        const depth = Math.max(sumDepth(book?.asks, this.config.depthLevels), askSize);
         minDepth = Math.min(minDepth, depth > 0 ? depth : minDepth);
         const depthUsd = depth * ask;
         if (Number.isFinite(depthUsd) && depthUsd > 0) {
@@ -190,7 +192,8 @@ export class MultiOutcomeArbitrageDetector {
           market.fee_rate_bps || this.config.feeBps,
           undefined,
           undefined,
-          this.config.slippageBps
+          this.config.slippageBps,
+          this.config.depthLevels
         );
         cap = Math.min(cap, Math.floor(maxShares));
         if (cap <= 0) {
@@ -210,7 +213,15 @@ export class MultiOutcomeArbitrageDetector {
       for (const market of group) {
         const book = orderbooks.get(market.token_id);
         const feeBps = market.fee_rate_bps || this.config.feeBps;
-        const fill = estimateBuy(book?.asks, size, feeBps, undefined, undefined, this.config.slippageBps);
+        const fill = estimateBuy(
+          book?.asks,
+          size,
+          feeBps,
+          undefined,
+          undefined,
+          this.config.slippageBps,
+          this.config.depthLevels
+        );
         if (!fill) {
           usable = false;
           break;

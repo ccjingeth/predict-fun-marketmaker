@@ -56,6 +56,7 @@ export interface ArbitrageConfig {
   alertMinIntervalMs?: number;
   alertOnNewOpportunity: boolean;
   arbDepthUsage: number;
+  arbDepthLevels: number;
   arbMinDepthUsd: number;
   arbMinNotionalUsd: number;
   arbMinProfitUsd: number;
@@ -119,6 +120,7 @@ export class ArbitrageMonitor {
       alertMinIntervalMs: 60000,
       alertOnNewOpportunity: true,
       arbDepthUsage: 0.6,
+      arbDepthLevels: 0,
       arbMinDepthUsd: 0,
       arbMinNotionalUsd: 0,
       arbMinProfitUsd: 0,
@@ -141,7 +143,8 @@ export class ArbitrageMonitor {
       this.config.arbMinDepthUsd,
       this.config.arbMaxVwapDeviationBps,
       this.config.arbRecheckDeviationBps,
-      this.config.arbMaxVwapLevels
+      this.config.arbMaxVwapLevels,
+      this.config.arbDepthLevels
     );
     this.multiOutcomeDetector = new MultiOutcomeArbitrageDetector({
       minProfitThreshold: this.config.minProfitThreshold,
@@ -149,6 +152,7 @@ export class ArbitrageMonitor {
       maxRecommendedShares: this.config.multiOutcomeMaxShares,
       feeBps: this.config.predictFeeBps,
       depthUsage: this.config.arbDepthUsage,
+      depthLevels: this.config.arbDepthLevels,
       minNotionalUsd: this.config.arbMinNotionalUsd,
       minProfitUsd: this.config.arbMinProfitUsd,
       minDepthUsd: this.config.arbMinDepthUsd,

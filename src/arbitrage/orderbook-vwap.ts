@@ -16,7 +16,11 @@ export interface VwapResult {
   levelsUsed: number;
 }
 
-function normalizeLevels(entries: OrderbookEntry[] | undefined, side: 'ASK' | 'BID'): { price: number; shares: number }[] {
+function normalizeLevels(
+  entries: OrderbookEntry[] | undefined,
+  side: 'ASK' | 'BID',
+  maxLevels?: number
+): { price: number; shares: number }[] {
   if (!entries || entries.length === 0) {
     return [];
   }
@@ -28,14 +32,18 @@ function normalizeLevels(entries: OrderbookEntry[] | undefined, side: 'ASK' | 'B
     .filter((level) => Number.isFinite(level.price) && level.price > 0 && Number.isFinite(level.shares) && level.shares > 0);
 
   levels.sort((a, b) => (side === 'ASK' ? a.price - b.price : b.price - a.price));
+  if (maxLevels && maxLevels > 0) {
+    return levels.slice(0, maxLevels);
+  }
   return levels;
 }
 
-export function sumDepth(entries: OrderbookEntry[] | undefined): number {
+export function sumDepth(entries: OrderbookEntry[] | undefined, maxLevels?: number): number {
   if (!entries) {
     return 0;
   }
-  return entries.reduce((sum, entry) => {
+  const capped = maxLevels && maxLevels > 0 ? entries.slice(0, maxLevels) : entries;
+  return capped.reduce((sum, entry) => {
     const shares = Number(entry.shares);
     return sum + (Number.isFinite(shares) && shares > 0 ? shares : 0);
   }, 0);
@@ -47,9 +55,10 @@ export function estimateBuy(
   feeBps: number,
   feeCurveRate?: number,
   feeCurveExponent?: number,
-  slippageBps: number = 0
+  slippageBps: number = 0,
+  maxLevels?: number
 ): VwapResult | null {
-  const levels = normalizeLevels(asks, 'ASK');
+  const levels = normalizeLevels(asks, 'ASK', maxLevels);
   if (levels.length === 0 || targetShares <= 0) {
     return null;
   }
@@ -94,9 +103,10 @@ export function estimateSell(
   feeBps: number,
   feeCurveRate?: number,
   feeCurveExponent?: number,
-  slippageBps: number = 0
+  slippageBps: number = 0,
+  maxLevels?: number
 ): VwapResult | null {
-  const levels = normalizeLevels(bids, 'BID');
+  const levels = normalizeLevels(bids, 'BID', maxLevels);
   if (levels.length === 0 || targetShares <= 0) {
     return null;
   }
@@ -142,9 +152,10 @@ export function maxBuySharesForLimit(
   feeBps: number,
   feeCurveRate?: number,
   feeCurveExponent?: number,
-  slippageBps: number = 0
+  slippageBps: number = 0,
+  maxLevels?: number
 ): number {
-  const levels = normalizeLevels(asks, 'ASK');
+  const levels = normalizeLevels(asks, 'ASK', maxLevels);
   if (levels.length === 0 || limitPrice <= 0) {
     return 0;
   }
@@ -190,9 +201,10 @@ export function maxSellSharesForLimit(
   feeBps: number,
   feeCurveRate?: number,
   feeCurveExponent?: number,
-  slippageBps: number = 0
+  slippageBps: number = 0,
+  maxLevels?: number
 ): number {
-  const levels = normalizeLevels(bids, 'BID');
+  const levels = normalizeLevels(bids, 'BID', maxLevels);
   if (levels.length === 0 || limitPrice <= 0) {
     return 0;
   }
