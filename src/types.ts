@@ -364,6 +364,11 @@ export interface Config {
   crossPlatformFailureSizeFactorUp?: number;
   crossPlatformFailureSizeFactorMin?: number;
   crossPlatformFailureSizeFactorMax?: number;
+  crossPlatformFailureProfitMultDown?: number;
+  crossPlatformFailureProfitMultUp?: number;
+  crossPlatformFailureProfitMultMin?: number;
+  crossPlatformFailureProfitMultMax?: number;
+  crossPlatformFailureAutoSafeOnLosses?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;

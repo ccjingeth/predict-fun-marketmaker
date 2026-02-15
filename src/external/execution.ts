@@ -632,6 +632,8 @@ export class CrossPlatformExecutionRouter {
   private failureDepthUsdBump = 0;
   private failureMinNotionalUsdBump = 0;
   private failureSizeFactor = 1;
+  private failureProfitMult = 1;
+  private consecutiveFailures = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -772,6 +774,8 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureDepthUsd(true);
         this.adjustFailureMinNotionalUsd(true);
         this.adjustFailureSizeFactor(true);
+        this.adjustFailureProfitMultiplier(true);
+        this.onFailureStreak(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -838,6 +842,8 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureDepthUsd(false);
         this.adjustFailureMinNotionalUsd(false);
         this.adjustFailureSizeFactor(false);
+        this.adjustFailureProfitMultiplier(false);
+        this.onFailureStreak(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -1734,6 +1740,42 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     this.failureSizeFactor = Math.max(min, this.failureSizeFactor * down);
+  }
+
+  private adjustFailureProfitMultiplier(success: boolean): void {
+    const min = Math.max(1, this.config.crossPlatformFailureProfitMultMin || 1);
+    const max = Math.max(min, this.config.crossPlatformFailureProfitMultMax || 3);
+    const down = Math.max(1, this.config.crossPlatformFailureProfitMultDown || 1.1);
+    const up = Math.max(0, this.config.crossPlatformFailureProfitMultUp || 0.05);
+    if (success) {
+      this.failureProfitMult = Math.max(min, this.failureProfitMult - up);
+      return;
+    }
+    this.failureProfitMult = Math.min(max, this.failureProfitMult * down);
+  }
+
+  private onFailureStreak(success: boolean): void {
+    const threshold = Math.max(0, this.config.crossPlatformFailureAutoSafeOnLosses || 0);
+    if (success) {
+      this.consecutiveFailures = 0;
+      return;
+    }
+    this.consecutiveFailures += 1;
+    if (threshold > 0 && this.consecutiveFailures >= threshold) {
+      const duration = Math.max(0, this.config.crossPlatformDegradeMs || 0);
+      const now = Date.now();
+      if (duration > 0) {
+        this.consistencyOverrideUntil = Math.max(this.consistencyOverrideUntil, now + duration);
+        if (this.config.crossPlatformConsistencyTemplateEnabled) {
+          this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, now + duration);
+        }
+      } else {
+        this.consistencyOverrideUntil = Math.max(this.consistencyOverrideUntil, now + 60000);
+        if (this.config.crossPlatformConsistencyTemplateEnabled) {
+          this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, now + 60000);
+        }
+      }
+    }
   }
 
   private getStabilityBps(): number {
@@ -4002,6 +4044,9 @@ export class CrossPlatformExecutionRouter {
       this.failureProfitUsdBump +
       notional * (requiredBps / 10000) +
       notional * (impactBps / 10000) * impactMult;
+    if (this.failureProfitMult > 1) {
+      required *= this.failureProfitMult;
+    }
     const minProfitPct = Math.max(0, this.config.crossPlatformMinProfit || 0);
     if (minProfitPct > 0) {
       required = Math.max(required, notional * minProfitPct);
