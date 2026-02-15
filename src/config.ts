@@ -510,6 +510,7 @@ export function loadConfig(): Config {
     crossPlatformFailureDepthUsdBumpMax: parseFloat(process.env.CROSS_PLATFORM_FAILURE_DEPTH_USD_BUMP_MAX || '0'),
     crossPlatformFailureDepthUsdRecover: parseFloat(process.env.CROSS_PLATFORM_FAILURE_DEPTH_USD_RECOVER || '0.7'),
     crossPlatformFailureForceSequentialMs: parseInt(process.env.CROSS_PLATFORM_FAILURE_FORCE_SEQUENTIAL_MS || '0'),
+    crossPlatformFailureVwapTightenBps: parseFloat(process.env.CROSS_PLATFORM_FAILURE_VWAP_TIGHTEN_BPS || '0'),
     crossPlatformLimitOrders: process.env.CROSS_PLATFORM_LIMIT_ORDERS !== 'false',
     crossPlatformCancelOpenMs: parseInt(process.env.CROSS_PLATFORM_CANCEL_OPEN_MS || '1500'),
     crossPlatformPostFillCheck: process.env.CROSS_PLATFORM_POST_FILL_CHECK !== 'false',

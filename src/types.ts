@@ -376,6 +376,7 @@ export interface Config {
   crossPlatformFailureDepthUsdBumpMax?: number;
   crossPlatformFailureDepthUsdRecover?: number;
   crossPlatformFailureForceSequentialMs?: number;
+  crossPlatformFailureVwapTightenBps?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;

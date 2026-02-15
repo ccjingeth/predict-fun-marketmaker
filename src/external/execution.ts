@@ -3386,7 +3386,12 @@ export class CrossPlatformExecutionRouter {
       this.circuitFailures > 0 || this.isDegraded()
         ? Math.max(0, this.config.crossPlatformFailureVwapDeviationBps || 0)
         : 0;
-    const deviationCap = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor() + extraDeviation);
+    const tightenBps =
+      this.circuitFailures > 0 || this.isDegraded()
+        ? Math.max(0, this.config.crossPlatformFailureVwapTightenBps || 0)
+        : 0;
+    const baseDeviation = this.getSlippageBps() * this.getAutoTuneFactor() + extraDeviation - tightenBps;
+    const deviationCap = Math.max(1, baseDeviation);
     const depthRatioPenaltyFactor = this.getDepthRatioPenaltyFactor();
     const depthRatioSoftBase = Math.max(0, this.config.crossPlatformLegDepthRatioSoft || 0);
     const depthRatioSoft = Math.min(1, depthRatioSoftBase * depthRatioPenaltyFactor);
@@ -3521,7 +3526,7 @@ export class CrossPlatformExecutionRouter {
         );
       }
 
-      const maxDeviation = Math.max(1, this.getSlippageBps() * this.getAutoTuneFactor() + extraDeviation);
+      const maxDeviation = Math.max(1, baseDeviation);
       if (deviationBps > maxDeviation) {
         throw new Error(
           `Preflight failed: VWAP deviates ${deviationBps.toFixed(1)} bps (max ${maxDeviation}) for ${leg.platform}:${leg.tokenId}`
