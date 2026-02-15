@@ -635,6 +635,8 @@ export class CrossPlatformExecutionRouter {
   private failureProfitMult = 1;
   private consecutiveFailures = 0;
   private failureCooldownBumpMs = 0;
+  private failureDepthUsdExtra = 0;
+  private forceSequentialUntil = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -778,6 +780,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureProfitMultiplier(true);
         this.onFailureStreak(true);
         this.adjustFailureCooldown(true);
+        this.adjustFailureDepthExtra(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -847,6 +850,8 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureProfitMultiplier(false);
         this.onFailureStreak(false);
         this.adjustFailureCooldown(false);
+        this.adjustFailureDepthExtra(false);
+        this.applyFailureForceSequential(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -896,6 +901,9 @@ export class CrossPlatformExecutionRouter {
       if (failureMode !== 'AUTO') {
         fallbackMode = failureMode;
       }
+    }
+    if (this.forceSequentialUntil > Date.now()) {
+      fallbackMode = 'SEQUENTIAL';
     }
 
     const taskDefs: Array<{ platform: ExternalPlatform; legs: PlatformLeg[]; options: PlatformExecuteOptions }> = [];
@@ -1772,6 +1780,34 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     this.failureCooldownBumpMs = Math.min(maxBump, this.failureCooldownBumpMs + bump);
+  }
+
+  private adjustFailureDepthExtra(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureDepthUsdBump || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureDepthUsdBumpMax || bump * 5);
+    const recover = this.config.crossPlatformFailureDepthUsdRecover ?? 0.7;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureDepthUsdExtra = Math.max(0, this.failureDepthUsdExtra * recover);
+      }
+      return;
+    }
+    this.failureDepthUsdExtra = Math.min(maxBump, this.failureDepthUsdExtra + bump);
+  }
+
+  private applyFailureForceSequential(success: boolean): void {
+    const duration = Math.max(0, this.config.crossPlatformFailureForceSequentialMs || 0);
+    if (!duration) {
+      return;
+    }
+    if (success) {
+      return;
+    }
+    const now = Date.now();
+    this.forceSequentialUntil = Math.max(this.forceSequentialUntil, now + duration);
   }
 
   private onFailureStreak(success: boolean): void {
@@ -3388,6 +3424,9 @@ export class CrossPlatformExecutionRouter {
       }
       if (this.failureDepthUsdBump > 0) {
         minDepthUsd += this.failureDepthUsdBump;
+      }
+      if (this.failureDepthUsdExtra > 0) {
+        minDepthUsd += this.failureDepthUsdExtra;
       }
       if (minDepthUsd > 0 && depth.depthUsd < minDepthUsd) {
         throw new Error(
