@@ -259,6 +259,10 @@ export class MarketMaker {
         multiplier *= mult;
       }
     }
+    if (this.isLayerPanicActive(tokenId)) {
+      const panicMult = Math.max(1, this.config.mmLayerPanicIntervalMult ?? 1);
+      multiplier *= panicMult;
+    }
     multiplier *= this.getFillSlowdownMultiplier(tokenId);
     return Math.max(500, Math.round(base * multiplier));
   }
@@ -319,6 +323,9 @@ export class MarketMaker {
     askDepth: number;
     imbalance: number;
     depthTrend: number;
+    depthSpeedBps: number;
+    bidDepthSpeedBps: number;
+    askDepthSpeedBps: number;
   } {
     const levels = this.config.mmDepthLevels ?? 3;
     const bidDepth = this.sumDepthLevels(orderbook.bids, levels);
@@ -337,12 +344,37 @@ export class MarketMaker {
     const imbalance = denom > 0 ? (bidDepth - askDepth) / denom : 0;
     this.lastImbalance.set(tokenId, this.clamp(imbalance, -1, 1));
 
+    const speedWindow = Math.max(0, this.config.mmDepthSpeedWindowMs ?? 0);
+    let depthSpeedBps = 0;
+    let bidSpeedBps = 0;
+    let askSpeedBps = 0;
+    if (speedWindow > 0) {
+      const prevAt = this.prevBestAt.get(tokenId) || 0;
+      if (prevAt > 0 && Date.now() - prevAt <= speedWindow) {
+        const prevBidDepth = this.prevBestBidSize.get(tokenId) ?? 0;
+        const prevAskDepth = this.prevBestAskSize.get(tokenId) ?? 0;
+        const prevTotal = prevBidDepth + prevAskDepth;
+        if (prevTotal > 0 && totalDepth > 0) {
+          depthSpeedBps = ((prevTotal - totalDepth) / prevTotal) * 10000;
+        }
+        if (prevBidDepth > 0 && bidDepth > 0) {
+          bidSpeedBps = ((prevBidDepth - bidDepth) / prevBidDepth) * 10000;
+        }
+        if (prevAskDepth > 0 && askDepth > 0) {
+          askSpeedBps = ((prevAskDepth - askDepth) / prevAskDepth) * 10000;
+        }
+      }
+    }
+
     return {
       totalDepth,
       bidDepth,
       askDepth,
       imbalance,
       depthTrend,
+      depthSpeedBps,
+      bidDepthSpeedBps: bidSpeedBps,
+      askDepthSpeedBps: askSpeedBps,
     };
   }
 
@@ -724,7 +756,16 @@ export class MarketMaker {
   private updateMarketMetrics(
     tokenId: string,
     orderbook: Orderbook
-  ): { volEma: number; depthEma: number; topDepth: number; topDepthUsd: number; depthTrend: number } {
+  ): {
+    volEma: number;
+    depthEma: number;
+    topDepth: number;
+    topDepthUsd: number;
+    depthTrend: number;
+    depthSpeedBps: number;
+    bidDepthSpeedBps: number;
+    askDepthSpeedBps: number;
+  } {
     const micro = this.calculateMicroPrice(orderbook);
     if (micro && micro > 0) {
       const lastMid = this.lastPrices.get(tokenId);
@@ -745,6 +786,30 @@ export class MarketMaker {
     this.lastDepth.set(tokenId, depth.shares);
 
     const depthTrend = nextDepth > 0 ? depth.shares / nextDepth : 1;
+    const speedWindow = Math.max(0, this.config.mmDepthSpeedWindowMs ?? 0);
+    let depthSpeedBps = 0;
+    let bidSpeedBps = 0;
+    let askSpeedBps = 0;
+    if (speedWindow > 0) {
+      const prevAt = this.prevBestAt.get(tokenId) || 0;
+      if (prevAt > 0 && Date.now() - prevAt <= speedWindow) {
+        const prevBid = this.prevBestBidSize.get(tokenId) ?? 0;
+        const prevAsk = this.prevBestAskSize.get(tokenId) ?? 0;
+        const curBid = this.parseShares(orderbook.bids?.[0]);
+        const curAsk = this.parseShares(orderbook.asks?.[0]);
+        const prevTotal = prevBid + prevAsk;
+        const curTotal = curBid + curAsk;
+        if (prevTotal > 0 && curTotal > 0) {
+          depthSpeedBps = ((prevTotal - curTotal) / prevTotal) * 10000;
+        }
+        if (prevBid > 0 && curBid > 0) {
+          bidSpeedBps = ((prevBid - curBid) / prevBid) * 10000;
+        }
+        if (prevAsk > 0 && curAsk > 0) {
+          askSpeedBps = ((prevAsk - curAsk) / prevAsk) * 10000;
+        }
+      }
+    }
 
     return {
       volEma: this.volatilityEma.get(tokenId) ?? 0,
@@ -752,6 +817,9 @@ export class MarketMaker {
       topDepth: depth.shares,
       topDepthUsd: depth.usd,
       depthTrend,
+      depthSpeedBps,
+      bidDepthSpeedBps: bidSpeedBps,
+      askDepthSpeedBps: askSpeedBps,
     };
   }
 
@@ -1071,7 +1139,16 @@ export class MarketMaker {
     orderbook: Orderbook,
     prices: QuotePrices,
     profile: 'CALM' | 'NORMAL' | 'VOLATILE',
-    metrics: { volEma: number; depthEma: number; topDepth: number; topDepthUsd: number; depthTrend: number }
+    metrics: {
+      volEma: number;
+      depthEma: number;
+      topDepth: number;
+      topDepthUsd: number;
+      depthTrend: number;
+      depthSpeedBps: number;
+      bidDepthSpeedBps: number;
+      askDepthSpeedBps: number;
+    }
   ): void {
     const imbalance = this.calculateOrderbookImbalance(orderbook);
     const entry = {
@@ -1084,6 +1161,9 @@ export class MarketMaker {
       volEma: metrics.volEma,
       depthEma: metrics.depthEma,
       depthTrend: metrics.depthTrend,
+      depthSpeedBps: metrics.depthSpeedBps,
+      bidDepthSpeedBps: metrics.bidDepthSpeedBps,
+      askDepthSpeedBps: metrics.askDepthSpeedBps,
       topDepth: metrics.topDepth,
       topDepthUsd: metrics.topDepthUsd,
       imbalance,
@@ -1175,7 +1255,12 @@ export class MarketMaker {
     return until > Date.now();
   }
 
-  private getEffectiveLayerCount(tokenId: string, profile: 'CALM' | 'NORMAL' | 'VOLATILE', depthTrend: number): number {
+  private getEffectiveLayerCount(
+    tokenId: string,
+    profile: 'CALM' | 'NORMAL' | 'VOLATILE',
+    depthTrend: number,
+    depthSpeedBps: number
+  ): number {
     const base = Math.max(1, Math.floor(this.config.mmLayerCount ?? 1));
     const minCount = Math.max(1, Math.floor(this.config.mmLayerMinCount ?? 1));
     let effective = base;
@@ -1198,13 +1283,21 @@ export class MarketMaker {
         effective = Math.min(effective, cap);
       }
     }
+    const speedThreshold = Math.max(0, this.config.mmLayerDepthSpeedBps ?? 0);
+    if (speedThreshold > 0 && depthSpeedBps >= speedThreshold) {
+      const cap = Math.max(0, Math.floor(this.config.mmLayerSpeedCount ?? 0));
+      if (cap > 0) {
+        effective = Math.min(effective, cap);
+      }
+    }
     return Math.max(minCount, effective);
   }
 
   private getEffectiveLayerStepBps(
     tokenId: string,
     profile: 'CALM' | 'NORMAL' | 'VOLATILE',
-    depthTrend: number
+    depthTrend: number,
+    depthSpeedBps: number
   ): number {
     let step = Math.max(0, this.config.mmLayerSpreadStepBps ?? 0);
     if (profile === 'VOLATILE') {
@@ -1216,6 +1309,10 @@ export class MarketMaker {
     }
     if (this.isLayerPanicActive(tokenId)) {
       step += Math.max(0, this.config.mmLayerStepBpsPanicAdd ?? 0);
+    }
+    const speedThreshold = Math.max(0, this.config.mmLayerDepthSpeedBps ?? 0);
+    if (speedThreshold > 0 && depthSpeedBps >= speedThreshold) {
+      step += Math.max(0, this.config.mmLayerStepBpsSpeedAdd ?? 0);
     }
     return step;
   }
@@ -1762,8 +1859,18 @@ export class MarketMaker {
       .filter((o) => o.side === 'SELL')
       .sort((a, b) => Number(a.price) - Number(b.price));
 
-    const layerCount = this.getEffectiveLayerCount(tokenId, profile, metrics.depthTrend);
-    const layerStepBps = this.getEffectiveLayerStepBps(tokenId, profile, metrics.depthTrend);
+    const layerCount = this.getEffectiveLayerCount(
+      tokenId,
+      profile,
+      metrics.depthTrend,
+      metrics.depthSpeedBps
+    );
+    const layerStepBps = this.getEffectiveLayerStepBps(
+      tokenId,
+      profile,
+      metrics.depthTrend,
+      metrics.depthSpeedBps
+    );
     const bidTargets = this.buildLayerTargets(prices.bidPrice, 'BUY', layerCount, layerStepBps);
     const askTargets = this.buildLayerTargets(prices.askPrice, 'SELL', layerCount, layerStepBps);
     const bidLayers = bidTargets.length;

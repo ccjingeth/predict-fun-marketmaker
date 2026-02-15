@@ -136,8 +136,13 @@ export interface Config {
   mmLayerStepBpsVolatileAdd?: number;
   mmLayerStepBpsThinAdd?: number;
   mmLayerStepBpsPanicAdd?: number;
+  mmLayerDepthSpeedBps?: number;
+  mmLayerSpeedCount?: number;
+  mmLayerStepBpsSpeedAdd?: number;
+  mmLayerPanicIntervalMult?: number;
   mmLayerSizeDecay?: number;
   mmLayerAllowBelowMinShares?: boolean;
+  mmDepthSpeedWindowMs?: number;
   mmSizeInventoryWeight?: number;
   mmSizeImbalanceWeight?: number;
   mmSizeMinFactor?: number;
