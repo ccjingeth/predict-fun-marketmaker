@@ -51,6 +51,9 @@ class ArbitrageBot {
   private crossDirtyTokens: Set<string> = new Set();
   private wsRealtimeIntervalMs = 0;
   private crossRealtimeIntervalMs = 0;
+  private wsRealtimeMaxBatch = 0;
+  private crossRealtimeMaxBatch = 0;
+  private boostBatchActive = false;
   private wsBoostUntil = 0;
   private wsBoostTimer?: NodeJS.Timeout;
   private crossFallbackRunning = false;
@@ -533,6 +536,7 @@ class ArbitrageBot {
     }
     const interval = Math.max(100, this.config.arbWsRealtimeIntervalMs || 400);
     this.wsRealtimeIntervalMs = interval;
+    this.wsRealtimeMaxBatch = Math.max(1, this.config.arbWsRealtimeMaxBatch || 40);
     this.restartRealtimeLoop(interval);
   }
 
@@ -548,6 +552,7 @@ class ArbitrageBot {
     }
     const interval = Math.max(200, this.config.crossPlatformWsRealtimeIntervalMs || 600);
     this.crossRealtimeIntervalMs = interval;
+    this.crossRealtimeMaxBatch = Math.max(1, this.config.crossPlatformWsRealtimeMaxBatch || 30);
     this.restartCrossRealtimeLoop(interval);
   }
 
@@ -578,6 +583,7 @@ class ArbitrageBot {
       return;
     }
     this.wsBoostUntil = Math.max(this.wsBoostUntil, now + boostMs);
+    this.boostBatchActive = true;
     if (this.config.arbWsRealtime === true && this.wsRealtimeIntervalMs > 0) {
       const fastInterval = Math.max(80, this.config.arbWsBoostIntervalMs || 150);
       this.restartRealtimeLoop(fastInterval);
@@ -597,6 +603,7 @@ class ArbitrageBot {
         this.applyWsBoost();
         return;
       }
+      this.boostBatchActive = false;
       if (this.config.arbWsRealtime === true && this.wsRealtimeIntervalMs > 0) {
         this.restartRealtimeLoop(this.wsRealtimeIntervalMs);
       }
@@ -615,7 +622,10 @@ class ArbitrageBot {
     }
     this.wsRealtimeRunning = true;
     try {
-      const maxBatch = Math.max(1, this.config.arbWsRealtimeMaxBatch || 40);
+      const maxBatch = Math.max(
+        1,
+        this.boostBatchActive ? this.config.arbWsBoostMaxBatch || 80 : this.wsRealtimeMaxBatch || 40
+      );
       const tokens = Array.from(this.wsDirtyTokens);
       this.wsDirtyTokens.clear();
       const batch = tokens.slice(0, maxBatch);
@@ -667,7 +677,10 @@ class ArbitrageBot {
     }
     this.crossRealtimeRunning = true;
     try {
-      const maxBatch = Math.max(1, this.config.crossPlatformWsRealtimeMaxBatch || 30);
+      const maxBatch = Math.max(
+        1,
+        this.boostBatchActive ? this.config.crossPlatformWsBoostMaxBatch || 60 : this.crossRealtimeMaxBatch || 30
+      );
       const tokens = Array.from(this.crossDirtyTokens);
       this.crossDirtyTokens.clear();
       const batch = tokens.slice(0, maxBatch);

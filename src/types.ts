@@ -482,8 +482,10 @@ export interface Config {
   arbWsRealtimeQuiet?: boolean;
   arbWsBoostMs?: number;
   arbWsBoostIntervalMs?: number;
+  arbWsBoostMaxBatch?: number;
   crossPlatformWsBoostMs?: number;
   crossPlatformWsBoostIntervalMs?: number;
+  crossPlatformWsBoostMaxBatch?: number;
   arbRequireWs?: boolean;
   arbWsHealthScoreMin?: number;
   arbMaxErrors?: number;
