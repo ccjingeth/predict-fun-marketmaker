@@ -1808,6 +1808,10 @@ export class CrossPlatformExecutionRouter {
     }
     const now = Date.now();
     this.forceSequentialUntil = Math.max(this.forceSequentialUntil, now + duration);
+    this.consistencyOverrideUntil = Math.max(this.consistencyOverrideUntil, now + duration);
+    if (this.config.crossPlatformConsistencyTemplateEnabled) {
+      this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, now + duration);
+    }
   }
 
   private onFailureStreak(success: boolean): void {
