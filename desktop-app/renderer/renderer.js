@@ -4,6 +4,7 @@ const mappingMissingList = document.getElementById('mappingMissingList');
 const mappingCheckMissingBtn = document.getElementById('mappingCheckMissing');
 const mappingGenerateTemplateBtn = document.getElementById('mappingGenerateTemplate');
 const mappingSuggestPredictBtn = document.getElementById('mappingSuggestPredict');
+const mappingAutoCleanupBtn = document.getElementById('mappingAutoCleanup');
 const mappingCopyTemplateBtn = document.getElementById('mappingCopyTemplate');
 const mappingHideUnconfirmed = document.getElementById('mappingHideUnconfirmed');
 const mappingHideLowScore = document.getElementById('mappingHideLowScore');
@@ -1578,18 +1579,21 @@ function parseMarketRow(row) {
 }
 
 function generateMappingTemplate(missing) {
-  const entries = missing.map((item) => ({
-    label: `${item.platform}:${item.marketId || item.question || ''}`.trim(),
-    predictMarketId: item.predictMarketId || '',
-    predictQuestion: item.predictQuestion || item.question || '',
-    predictScore: item.predictScore ?? undefined,
-    predictConfirmed: item.predictConfirmed ?? undefined,
-    predictCandidates: item.predictCandidates || undefined,
-    polymarketYesTokenId: item.platform === 'Polymarket' ? item.yesTokenId : '',
-    polymarketNoTokenId: item.platform === 'Polymarket' ? item.noTokenId : '',
-    opinionYesTokenId: item.platform === 'Opinion' ? item.yesTokenId : '',
-    opinionNoTokenId: item.platform === 'Opinion' ? item.noTokenId : '',
-  }));
+  const entries = missing
+    .slice()
+    .sort((a, b) => (Number(b.predictScore || 0) || 0) - (Number(a.predictScore || 0) || 0))
+    .map((item) => ({
+      label: `${item.platform}:${item.marketId || item.question || ''}`.trim(),
+      predictMarketId: item.predictMarketId || '',
+      predictQuestion: item.predictQuestion || item.question || '',
+      predictScore: item.predictScore ?? undefined,
+      predictConfirmed: item.predictConfirmed ?? undefined,
+      predictCandidates: item.predictCandidates || undefined,
+      polymarketYesTokenId: item.platform === 'Polymarket' ? item.yesTokenId : '',
+      polymarketNoTokenId: item.platform === 'Polymarket' ? item.noTokenId : '',
+      opinionYesTokenId: item.platform === 'Opinion' ? item.yesTokenId : '',
+      opinionNoTokenId: item.platform === 'Opinion' ? item.noTokenId : '',
+    }));
   return JSON.stringify({ entries }, null, 2);
 }
 
@@ -1794,6 +1798,61 @@ function handleMissingListClick(event) {
   };
   replaceMissingItem(updated);
   applyMappingTemplate('已应用候选到模板，请确认后保存。');
+}
+
+function autoCleanupMappings() {
+  if (!mappingMissingList?.dataset.missing) {
+    pushLog({ type: 'system', level: 'system', message: '请先点击“检查缺失”。' });
+    return;
+  }
+  let missing = [];
+  try {
+    missing = JSON.parse(mappingMissingList.dataset.missing || '[]');
+  } catch {
+    pushLog({ type: 'system', level: 'stderr', message: '缺失映射数据解析失败。' });
+    return;
+  }
+  if (!missing.length) {
+    pushLog({ type: 'system', level: 'system', message: '没有可清理的缺失项。' });
+    return;
+  }
+  const env = parseEnv(envEditor.value || '');
+  const minScore = parseFloat(env.get('CROSS_PLATFORM_MAPPING_SUGGEST_MIN_SCORE') || '0.5');
+  const confirmScore = parseFloat(
+    env.get('CROSS_PLATFORM_MAPPING_SUGGEST_CONFIRM_SCORE') || '0.86'
+  );
+  let confirmed = 0;
+  let filtered = 0;
+  const cleaned = missing
+    .map((item) => {
+      if (!item.predictMarketId || !Number.isFinite(item.predictScore)) {
+        return item;
+      }
+      if (item.predictScore < minScore) {
+        filtered += 1;
+        return { ...item, predictCandidates: [] };
+      }
+      if (item.predictScore >= confirmScore) {
+        confirmed += 1;
+        return { ...item, predictConfirmed: true };
+      }
+      return item;
+    })
+    .filter((item) => {
+      if (!item.predictMarketId && (!item.predictCandidates || item.predictCandidates.length === 0)) {
+        return false;
+      }
+      return true;
+    });
+  mappingMissingList.dataset.missing = JSON.stringify(cleaned);
+  mappingMissingList.dataset.template = generateMappingTemplate(cleaned);
+  renderMissingList(cleaned);
+  applyMappingTemplate('已清理低分并确认高分条目，请保存。');
+  pushLog({
+    type: 'system',
+    level: 'system',
+    message: `清理完成：确认 ${confirmed} 条，剔除 ${filtered} 条低分候选`,
+  });
 }
 
 async function suggestPredictMappings() {
@@ -3722,6 +3781,9 @@ if (mappingCopyTemplateBtn) {
   mappingCopyTemplateBtn.addEventListener('click', () => {
     copyMappingTemplate().catch(() => {});
   });
+}
+if (mappingAutoCleanupBtn) {
+  mappingAutoCleanupBtn.addEventListener('click', autoCleanupMappings);
 }
 if (mappingMissingList) {
   mappingMissingList.addEventListener('click', handleMissingListClick);
