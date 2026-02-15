@@ -409,6 +409,19 @@ function writeTextFile(filePath, text) {
   fs.writeFileSync(filePath, text.endsWith('\n') ? text : `${text}\n`, 'utf8');
 }
 
+function backupMappingFile() {
+  const mappingPath = resolveMappingPath();
+  if (!fs.existsSync(mappingPath)) {
+    return { ok: false, message: '映射文件不存在' };
+  }
+  const backupDir = path.join(getUserDataRoot(), 'mapping-backups');
+  fs.mkdirSync(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = path.join(backupDir, `cross-platform-mapping.${stamp}.json`);
+  fs.copyFileSync(mappingPath, backupPath);
+  return { ok: true, path: backupPath };
+}
+
 function getStatus() {
   return {
     marketMaker: processes.has('mm'),
@@ -805,6 +818,7 @@ ipcMain.handle('export-diagnostics', () => {
   }
 });
 ipcMain.handle('trigger-rescan', () => sendRescanSignal());
+ipcMain.handle('backup-mapping', () => backupMappingFile());
 
 ipcMain.handle('start-bot', (_, type) => spawnBot(type));
 ipcMain.handle('stop-bot', (_, type) => stopBot(type));

@@ -12,6 +12,7 @@ const mappingHideLowScore = document.getElementById('mappingHideLowScore');
 const mappingAutoSaveToggle = document.getElementById('mappingAutoSave');
 const mappingAutoReloadToggle = document.getElementById('mappingAutoReload');
 const mappingAutoRescanToggle = document.getElementById('mappingAutoRescan');
+const mappingAutoBackupToggle = document.getElementById('mappingAutoBackup');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
@@ -1754,6 +1755,9 @@ function applyMappingTemplate(message) {
 async function maybeAutoSaveMapping() {
   if (!mappingAutoSaveToggle?.checked) return;
   try {
+    if (mappingAutoBackupToggle?.checked) {
+      await backupMapping();
+    }
     await saveMapping();
     if (mappingAutoReloadToggle?.checked) {
       await loadMapping();
@@ -1778,6 +1782,18 @@ async function requestMappingRescan() {
     return;
   }
   pushLog({ type: 'system', level: 'system', message: '已触发跨平台重扫' });
+}
+
+async function backupMapping() {
+  if (!window.predictBot?.backupMapping) {
+    return;
+  }
+  const result = await window.predictBot.backupMapping();
+  if (result?.ok) {
+    pushLog({ type: 'system', level: 'system', message: `映射已备份：${result.path || ''}`.trim() });
+  } else {
+    pushLog({ type: 'system', level: 'stderr', message: result?.message || '映射备份失败' });
+  }
 }
 
 async function copyMappingTemplate() {
@@ -3912,6 +3928,15 @@ if (mappingAutoRescanToggle) {
       pushLog({ type: 'system', level: 'system', message: '保存后重扫已启用' });
     } else {
       pushLog({ type: 'system', level: 'system', message: '保存后重扫已关闭' });
+    }
+  });
+}
+if (mappingAutoBackupToggle) {
+  mappingAutoBackupToggle.addEventListener('change', () => {
+    if (mappingAutoBackupToggle.checked) {
+      pushLog({ type: 'system', level: 'system', message: '自动备份已启用' });
+    } else {
+      pushLog({ type: 'system', level: 'system', message: '自动备份已关闭' });
     }
   });
 }

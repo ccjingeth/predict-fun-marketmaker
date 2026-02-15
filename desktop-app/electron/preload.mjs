@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('predictBot', {
   readMmMetrics: () => ipcRenderer.invoke('read-mm-metrics'),
   readPlatformMarkets: (platform) => ipcRenderer.invoke('read-platform-markets', platform),
   triggerRescan: () => ipcRenderer.invoke('trigger-rescan'),
+  backupMapping: () => ipcRenderer.invoke('backup-mapping'),
   runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
   exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
   startBot: (type) => ipcRenderer.invoke('start-bot', type),
