@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('predictBot', {
   readPlatformMarkets: (platform) => ipcRenderer.invoke('read-platform-markets', platform),
   triggerRescan: () => ipcRenderer.invoke('trigger-rescan'),
   backupMapping: () => ipcRenderer.invoke('backup-mapping'),
+  restoreLatestMapping: () => ipcRenderer.invoke('restore-latest-mapping'),
   runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
   exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
   startBot: (type) => ipcRenderer.invoke('start-bot', type),

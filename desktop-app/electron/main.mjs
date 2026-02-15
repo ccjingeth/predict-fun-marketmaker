@@ -422,6 +422,25 @@ function backupMappingFile() {
   return { ok: true, path: backupPath };
 }
 
+function restoreLatestMappingFile() {
+  const backupDir = path.join(getUserDataRoot(), 'mapping-backups');
+  if (!fs.existsSync(backupDir)) {
+    return { ok: false, message: '未找到备份目录' };
+  }
+  const files = fs
+    .readdirSync(backupDir)
+    .filter((name) => name.startsWith('cross-platform-mapping.'))
+    .map((name) => path.join(backupDir, name))
+    .sort();
+  if (files.length === 0) {
+    return { ok: false, message: '没有可用的备份文件' };
+  }
+  const latest = files[files.length - 1];
+  const mappingPath = resolveMappingPath();
+  fs.copyFileSync(latest, mappingPath);
+  return { ok: true, path: latest };
+}
+
 function getStatus() {
   return {
     marketMaker: processes.has('mm'),
@@ -819,6 +838,7 @@ ipcMain.handle('export-diagnostics', () => {
 });
 ipcMain.handle('trigger-rescan', () => sendRescanSignal());
 ipcMain.handle('backup-mapping', () => backupMappingFile());
+ipcMain.handle('restore-latest-mapping', () => restoreLatestMappingFile());
 
 ipcMain.handle('start-bot', (_, type) => spawnBot(type));
 ipcMain.handle('stop-bot', (_, type) => stopBot(type));

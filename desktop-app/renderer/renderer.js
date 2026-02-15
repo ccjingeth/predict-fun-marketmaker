@@ -7,6 +7,7 @@ const mappingSuggestPredictBtn = document.getElementById('mappingSuggestPredict'
 const mappingAutoCleanupBtn = document.getElementById('mappingAutoCleanup');
 const mappingExportConfirmedBtn = document.getElementById('mappingExportConfirmed');
 const mappingCopyTemplateBtn = document.getElementById('mappingCopyTemplate');
+const mappingRestoreLatestBtn = document.getElementById('mappingRestoreLatest');
 const mappingHideUnconfirmed = document.getElementById('mappingHideUnconfirmed');
 const mappingHideLowScore = document.getElementById('mappingHideLowScore');
 const mappingAutoSaveToggle = document.getElementById('mappingAutoSave');
@@ -1794,6 +1795,21 @@ async function backupMapping() {
   } else {
     pushLog({ type: 'system', level: 'stderr', message: result?.message || '映射备份失败' });
   }
+}
+
+async function restoreLatestBackup() {
+  if (!window.predictBot?.restoreLatestMapping) {
+    pushLog({ type: 'system', level: 'stderr', message: '当前版本不支持恢复备份' });
+    return;
+  }
+  const result = await window.predictBot.restoreLatestMapping();
+  if (!result?.ok) {
+    pushLog({ type: 'system', level: 'stderr', message: result?.message || '恢复备份失败' });
+    return;
+  }
+  await loadMapping();
+  checkMappingMissing().catch(() => {});
+  pushLog({ type: 'system', level: 'system', message: `已恢复备份：${result.path || ''}`.trim() });
 }
 
 async function copyMappingTemplate() {
@@ -3878,6 +3894,11 @@ if (mappingAutoCleanupBtn) {
 }
 if (mappingExportConfirmedBtn) {
   mappingExportConfirmedBtn.addEventListener('click', exportConfirmedMappings);
+}
+if (mappingRestoreLatestBtn) {
+  mappingRestoreLatestBtn.addEventListener('click', () => {
+    restoreLatestBackup().catch(() => {});
+  });
 }
 if (mappingMissingList) {
   mappingMissingList.addEventListener('click', handleMissingListClick);
