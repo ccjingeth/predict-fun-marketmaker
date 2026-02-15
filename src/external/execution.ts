@@ -877,7 +877,13 @@ export class CrossPlatformExecutionRouter {
     };
 
     let execOptions = this.resolveExecutionOptions(attempt);
-    const fallbackMode = this.resolveFallbackMode(attempt);
+    let fallbackMode = this.resolveFallbackMode(attempt);
+    if (attempt > 0) {
+      const failureMode = this.resolveFailureFallbackMode(attempt);
+      if (failureMode !== 'AUTO') {
+        fallbackMode = failureMode;
+      }
+    }
 
     const taskDefs: Array<{ platform: ExternalPlatform; legs: PlatformLeg[]; options: PlatformExecuteOptions }> = [];
     const prepared = attempt > 0 ? this.shrinkFallbackLegs(legs, attempt) : legs;
@@ -1098,6 +1104,23 @@ export class CrossPlatformExecutionRouter {
     if (this.circuitFailures > 0) {
       return 'SEQUENTIAL';
     }
+    return 'AUTO';
+  }
+
+  private resolveFailureFallbackMode(attempt: number): 'AUTO' | 'SEQUENTIAL' | 'SINGLE_LEG' {
+    if (!this.config.crossPlatformAutoFallbackOnFailure) {
+      return 'AUTO';
+    }
+    const steps = (this.config.crossPlatformAutoFallbackSteps || [])
+      .map((step) => String(step).toUpperCase())
+      .filter(Boolean);
+    if (steps.length === 0) {
+      return 'AUTO';
+    }
+    const index = Math.min(Math.max(0, attempt - 1), steps.length - 1);
+    const step = steps[index];
+    if (step === 'SEQUENTIAL') return 'SEQUENTIAL';
+    if (step === 'SINGLE_LEG') return 'SINGLE_LEG';
     return 'AUTO';
   }
 
@@ -1941,6 +1964,11 @@ export class CrossPlatformExecutionRouter {
       batch = false;
     }
     if (this.isConsistencyTemplateActive() && this.config.crossPlatformConsistencyTemplateDisableBatch) {
+      batch = false;
+    }
+
+    const fallbackMode = attempt > 0 ? this.resolveFailureFallbackMode(attempt) : 'AUTO';
+    if (fallbackMode === 'SEQUENTIAL') {
       batch = false;
     }
 
