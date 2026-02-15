@@ -575,9 +575,16 @@
             <div class="button-row">
               <button class="btn ghost" id="reloadMapping">重新加载</button>
               <button class="btn primary" id="saveMapping">保存映射</button>
+              <button class="btn ghost" id="mappingCheckMissing">检查缺失</button>
+              <button class="btn ghost" id="mappingGenerateTemplate">生成模板</button>
+              <button class="btn ghost" id="mappingCopyTemplate">复制模板</button>
             </div>
             <textarea id="mappingEditor" spellcheck="false"></textarea>
             <p class="hint">跨平台套利映射文件，JSON 格式。</p>
+            <div class="health-subtitle">缺失映射提示</div>
+            <div class="health-list" id="mappingMissingList">
+              <div class="health-item ok">未检测。</div>
+            </div>
           </div>
 
           <div class="tab-panel" data-tab="dependency">

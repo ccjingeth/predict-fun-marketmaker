@@ -235,6 +235,75 @@ function resolveConfigPath(value, fallbackPath) {
   return path.join(getProjectRoot(), value);
 }
 
+async function readPlatformMarkets(platform) {
+  const envText = readEnvFile();
+  const env = parseEnv(envText);
+  const lower = String(platform || '').toLowerCase();
+  if (lower === 'polymarket') {
+    const gammaUrl = env.get('POLYMARKET_GAMMA_URL') || 'https://gamma-api.polymarket.com';
+    const limit = Math.max(1, parseInt(env.get('POLYMARKET_MAX_MARKETS') || '30', 10));
+    const url = `${gammaUrl}/markets?active=true&closed=false&limit=${limit}`;
+    const raw = await fetchJson(url, { method: 'GET' });
+    const markets = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw?.markets)
+      ? raw.markets
+      : Array.isArray(raw?.data)
+      ? raw.data
+      : [];
+    const flattened = [];
+    for (const entry of markets) {
+      const nested = entry?.markets;
+      if (Array.isArray(nested)) {
+        for (const m of nested) {
+          flattened.push({ ...m, question: m.question || entry.question || entry.title });
+        }
+      } else {
+        flattened.push(entry);
+      }
+    }
+    const results = [];
+    for (const market of flattened) {
+      if (market?.active === false || market?.closed === true) continue;
+      const outcomes = toArray(market?.outcomes);
+      const tokens = toArray(market?.clobTokenIds);
+      if (outcomes.length < 2 || tokens.length < 2) continue;
+      const yesIndex = outcomes.findIndex((o) => String(o).toUpperCase() === 'YES');
+      const noIndex = outcomes.findIndex((o) => String(o).toUpperCase() === 'NO');
+      if (yesIndex < 0 || noIndex < 0) continue;
+      const yesTokenId = tokens[yesIndex];
+      const noTokenId = tokens[noIndex];
+      if (!yesTokenId || !noTokenId) continue;
+      results.push({
+        marketId: market.id || market.marketId || `${yesTokenId}-${noTokenId}`,
+        marketTitle: market.question || market.title || '',
+        yesTokenId,
+        noTokenId,
+      });
+    }
+    return JSON.stringify(results);
+  }
+  if (lower === 'opinion') {
+    const openApiUrl = env.get('OPINION_OPENAPI_URL') || 'https://proxy.opinion.trade:8443/openapi';
+    const apiKey = env.get('OPINION_API_KEY') || '';
+    const limit = Math.max(1, parseInt(env.get('OPINION_MAX_MARKETS') || '30', 10));
+    if (!apiKey) {
+      return JSON.stringify([]);
+    }
+    const url = `${openApiUrl}/market?status=activated&marketType=0&limit=${limit}`;
+    const raw = await fetchJson(url, { headers: { apikey: apiKey } });
+    const list = raw?.result?.list || raw?.list || [];
+    const results = list.map((item) => ({
+      marketId: item.marketId || item.id || '',
+      marketTitle: item.marketTitle || item.title || '',
+      yesTokenId: item.yesTokenId || item.yes_token_id || '',
+      noTokenId: item.noTokenId || item.no_token_id || '',
+    }));
+    return JSON.stringify(results);
+  }
+  return JSON.stringify([]);
+}
+
 function resolveMappingPath() {
   const envText = readEnvFile();
   const env = parseEnv(envText);
@@ -287,6 +356,26 @@ function readJsonFile(filePath) {
   } catch {
     return null;
   }
+}
+
+function toArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Fetch failed ${response.status}: ${text}`);
+  }
+  return response.json();
 }
 
 function writeTextFile(filePath, text) {
@@ -643,6 +732,13 @@ ipcMain.handle('read-mapping', () => readTextFile(resolveMappingPath(), '{\"entr
 ipcMain.handle('write-mapping', (_, text) => {
   writeTextFile(resolveMappingPath(), text);
   return { ok: true };
+});
+ipcMain.handle('read-platform-markets', async (_, platform) => {
+  try {
+    return await readPlatformMarkets(platform);
+  } catch (error) {
+    return JSON.stringify([]);
+  }
 });
 ipcMain.handle('read-dependency', () =>
   readTextFile(resolveDependencyPath(), '{\"conditions\":[],\"groups\":[],\"relations\":[]}\n')

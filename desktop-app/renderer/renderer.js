@@ -1,5 +1,9 @@
 const envEditor = document.getElementById('envEditor');
 const mappingEditor = document.getElementById('mappingEditor');
+const mappingMissingList = document.getElementById('mappingMissingList');
+const mappingCheckMissingBtn = document.getElementById('mappingCheckMissing');
+const mappingGenerateTemplateBtn = document.getElementById('mappingGenerateTemplate');
+const mappingCopyTemplateBtn = document.getElementById('mappingCopyTemplate');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
@@ -1410,6 +1414,7 @@ async function saveMapping() {
   }
   await window.predictBot.writeMapping(mappingEditor.value);
   pushLog({ type: 'system', level: 'system', message: '跨平台映射已保存' });
+  checkMappingMissing().catch(() => {});
 }
 
 async function loadDependency() {
@@ -1493,6 +1498,181 @@ function applyDowngradeProfile(level = 'safe') {
   syncTogglesFromEnv(text);
   updateMetricsPaths();
   pushLog({ type: 'system', level: 'system', message: `已应用${level === 'ultra' ? '极保守' : '保守'}参数（请保存生效）` });
+}
+
+function normalizeQuestionKey(text) {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/[^\w\u4e00-\u9fa5]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildMappingIndex(entries) {
+  const tokenIndex = new Map();
+  const predictIndex = new Map();
+  const questionIndex = new Map();
+  entries.forEach((entry) => {
+    if (!entry) return;
+    const predictId = entry.predictMarketId || '';
+    const predictQuestion = normalizeQuestionKey(entry.predictQuestion || '');
+    if (predictId) {
+      if (!predictIndex.has(predictId)) predictIndex.set(predictId, []);
+      predictIndex.get(predictId).push(entry);
+    }
+    if (predictQuestion) {
+      if (!questionIndex.has(predictQuestion)) questionIndex.set(predictQuestion, []);
+      questionIndex.get(predictQuestion).push(entry);
+    }
+    const addToken = (platform, tokenId) => {
+      if (!tokenId) return;
+      const key = `${platform}:${tokenId}`;
+      if (!tokenIndex.has(key)) tokenIndex.set(key, []);
+      tokenIndex.get(key).push(entry);
+    };
+    addToken('Polymarket', entry.polymarketYesTokenId);
+    addToken('Polymarket', entry.polymarketNoTokenId);
+    addToken('Opinion', entry.opinionYesTokenId);
+    addToken('Opinion', entry.opinionNoTokenId);
+  });
+  return { tokenIndex, predictIndex, questionIndex };
+}
+
+function parseMappingEntries(raw) {
+  const parsed = JSON.parse(raw || '{}');
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && Array.isArray(parsed.entries)) return parsed.entries;
+  return [];
+}
+
+function parseMarketRow(row) {
+  if (!row || typeof row !== 'object') return null;
+  const yesTokenId = row.yesTokenId || row.yes_token_id || row.yesToken || row.yes;
+  const noTokenId = row.noTokenId || row.no_token_id || row.noToken || row.no;
+  const question = row.question || row.marketTitle || row.title || '';
+  const marketId = row.marketId || row.id || row.market_id || '';
+  return {
+    marketId,
+    question,
+    yesTokenId,
+    noTokenId,
+  };
+}
+
+function generateMappingTemplate(missing) {
+  const entries = missing.map((item) => ({
+    label: `${item.platform}:${item.marketId || item.question || ''}`.trim(),
+    predictMarketId: item.predictMarketId || '',
+    predictQuestion: item.predictQuestion || item.question || '',
+    polymarketYesTokenId: item.platform === 'Polymarket' ? item.yesTokenId : '',
+    polymarketNoTokenId: item.platform === 'Polymarket' ? item.noTokenId : '',
+    opinionYesTokenId: item.platform === 'Opinion' ? item.yesTokenId : '',
+    opinionNoTokenId: item.platform === 'Opinion' ? item.noTokenId : '',
+  }));
+  return JSON.stringify({ entries }, null, 2);
+}
+
+async function checkMappingMissing() {
+  if (!mappingMissingList) return;
+  mappingMissingList.innerHTML = '';
+  let mappingRaw = mappingEditor.value || '';
+  let mappingEntries = [];
+  try {
+    mappingEntries = parseMappingEntries(mappingRaw);
+  } catch (error) {
+    const item = document.createElement('div');
+    item.className = 'health-item warn';
+    item.textContent = '映射 JSON 解析失败，请先修复格式。';
+    mappingMissingList.appendChild(item);
+    return;
+  }
+  const { tokenIndex, questionIndex } = buildMappingIndex(mappingEntries);
+  const platforms = [];
+  const loadPlatform = async (platform) => {
+    try {
+      const text = await window.predictBot.readPlatformMarkets(platform);
+      const parsed = JSON.parse(text || '{}');
+      const list = Array.isArray(parsed) ? parsed : parsed?.result || parsed?.list || [];
+      return { platform, list };
+    } catch {
+      return { platform, list: [] };
+    }
+  };
+  platforms.push(await loadPlatform('polymarket'));
+  platforms.push(await loadPlatform('opinion'));
+  const missing = [];
+  platforms.forEach((platformData) => {
+    const platformName = platformData.platform === 'polymarket' ? 'Polymarket' : 'Opinion';
+    platformData.list.forEach((row) => {
+      const market = parseMarketRow(row);
+      if (!market || !market.yesTokenId || !market.noTokenId) return;
+      const keyYes = `${platformName}:${market.yesTokenId}`;
+      const keyNo = `${platformName}:${market.noTokenId}`;
+      const mapped = tokenIndex.has(keyYes) || tokenIndex.has(keyNo);
+      if (!mapped) {
+        const questionKey = normalizeQuestionKey(market.question);
+        const maybePredict = questionIndex.get(questionKey);
+        const predictMarketId = maybePredict?.[0]?.predictMarketId || '';
+        const predictQuestion = maybePredict?.[0]?.predictQuestion || market.question;
+        missing.push({
+          platform: platformName,
+          marketId: market.marketId,
+          question: market.question,
+          yesTokenId: market.yesTokenId,
+          noTokenId: market.noTokenId,
+          predictMarketId,
+          predictQuestion,
+        });
+      }
+    });
+  });
+  if (!missing.length) {
+    const item = document.createElement('div');
+    item.className = 'health-item ok';
+    item.textContent = '未检测到缺失映射。';
+    mappingMissingList.appendChild(item);
+    return;
+  }
+  missing.slice(0, 20).forEach((itemData) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = `${itemData.platform} | ${itemData.question || itemData.marketId}`;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.textContent = `${itemData.yesTokenId || '-'} / ${itemData.noTokenId || '-'}`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    mappingMissingList.appendChild(row);
+  });
+  mappingMissingList.dataset.template = generateMappingTemplate(missing);
+  if (mappingMissingList.dataset.template && mappingMissingList.dataset.template.length > 0) {
+    pushLog({ type: 'system', level: 'system', message: `检测到 ${missing.length} 条缺失映射，可生成模板。` });
+  }
+}
+
+function applyMappingTemplate() {
+  if (!mappingMissingList?.dataset.template) {
+    pushLog({ type: 'system', level: 'system', message: '暂无可用的映射模板。' });
+    return;
+  }
+  mappingEditor.value = mappingMissingList.dataset.template;
+  pushLog({ type: 'system', level: 'system', message: '已生成映射模板，请补充 Predict 侧后保存。' });
+}
+
+async function copyMappingTemplate() {
+  if (!mappingMissingList?.dataset.template) {
+    pushLog({ type: 'system', level: 'system', message: '暂无可复制的映射模板。' });
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(mappingMissingList.dataset.template);
+    pushLog({ type: 'system', level: 'system', message: '映射模板已复制到剪贴板。' });
+  } catch {
+    pushLog({ type: 'system', level: 'stderr', message: '复制映射模板失败，请手动复制。' });
+  }
 }
 
 function getHardGateFixLines() {
@@ -3329,6 +3509,19 @@ if (applyMmPassiveBtn) {
 }
 if (applyArbSafeBtn) {
   applyArbSafeBtn.addEventListener('click', applyArbSafeTemplate);
+}
+if (mappingCheckMissingBtn) {
+  mappingCheckMissingBtn.addEventListener('click', () => {
+    checkMappingMissing().catch(() => {});
+  });
+}
+if (mappingGenerateTemplateBtn) {
+  mappingGenerateTemplateBtn.addEventListener('click', applyMappingTemplate);
+}
+if (mappingCopyTemplateBtn) {
+  mappingCopyTemplateBtn.addEventListener('click', () => {
+    copyMappingTemplate().catch(() => {});
+  });
 }
 
 init().catch((err) => {
