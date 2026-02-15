@@ -11,6 +11,7 @@ import { DependencyArbitrageDetector } from './dependency-arb.js';
 import type { Market, Orderbook } from '../types.js';
 import type { ArbitrageOpportunity } from './types.js';
 import type { CrossPlatformAggregator } from '../external/aggregator.js';
+import type { PlatformMarket } from '../external/types.js';
 import { sendAlert } from '../utils/alert.js';
 
 export interface ArbitrageConfig {
@@ -312,6 +313,18 @@ export class ArbitrageMonitor {
       return [];
     }
     const platformMarkets = await this.crossPlatformAggregator.getPlatformMarkets(markets, orderbooks);
+    return this.scanCrossPlatformWithPlatforms(platformMarkets);
+  }
+
+  async scanCrossPlatformWithPlatforms(
+    platformMarkets: Map<string, PlatformMarket[]>
+  ): Promise<ArbitrageOpportunity[]> {
+    if (!this.config.enableCrossPlatform) {
+      return [];
+    }
+    if (!this.crossPlatformAggregator) {
+      return [];
+    }
     const mappingStore = this.crossPlatformAggregator.getMappingStore();
     const cross = this.crossArbDetector.scanMarkets(
       platformMarkets,

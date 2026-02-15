@@ -16,7 +16,7 @@ import { OrderManager } from './order-manager.js';
 import type { Market, Orderbook } from './types.js';
 import { CrossPlatformAggregator } from './external/aggregator.js';
 import { CrossPlatformExecutionRouter } from './external/execution.js';
-import type { PlatformLeg } from './external/types.js';
+import type { PlatformLeg, PlatformMarket } from './external/types.js';
 import { PredictWebSocketFeed } from './external/predict-ws.js';
 
 class ArbitrageBot {
@@ -605,10 +605,16 @@ class ArbitrageBot {
       if (batch.length === 0) {
         return;
       }
+      if (!this.crossAggregator) {
+        return;
+      }
       const markets = await this.getMarketsCached();
       const sample = markets.slice(0, this.config.arbMaxMarkets || 80);
       const orderbooks = await this.loadOrderbooks(sample, this.config.arbWsMaxAgeMs || 10000);
-      const crossOps = await this.monitor.scanCrossPlatform(sample, orderbooks);
+      const platformMarkets = await this.crossAggregator.getPlatformMarkets(sample, orderbooks);
+      const dirtyMap = this.buildCrossDirtyMap(batch);
+      const filtered = this.filterCrossPlatformMarkets(platformMarkets, dirtyMap);
+      const crossOps = await this.monitor.scanCrossPlatformWithPlatforms(filtered);
       if (this.config.arbAutoExecute) {
         await this.autoExecute({
           valueMismatches: [],
@@ -626,6 +632,52 @@ class ArbitrageBot {
     } finally {
       this.crossRealtimeRunning = false;
     }
+  }
+
+  private buildCrossDirtyMap(entries: string[]): Map<string, Set<string>> {
+    const map = new Map<string, Set<string>>();
+    for (const entry of entries) {
+      if (!entry) continue;
+      const idx = entry.indexOf(':');
+      if (idx <= 0) continue;
+      const platform = entry.slice(0, idx);
+      const tokenId = entry.slice(idx + 1);
+      if (!platform || !tokenId) continue;
+      if (!map.has(platform)) {
+        map.set(platform, new Set());
+      }
+      map.get(platform)!.add(tokenId);
+    }
+    return map;
+  }
+
+  private filterCrossPlatformMarkets(
+    platformMarkets: Map<string, PlatformMarket[]>,
+    dirtyMap: Map<string, Set<string>>
+  ): Map<string, PlatformMarket[]> {
+    if (!dirtyMap || dirtyMap.size === 0) {
+      return platformMarkets;
+    }
+    const filtered = new Map<string, PlatformMarket[]>();
+    for (const [platform, markets] of platformMarkets.entries()) {
+      if (platform === 'Predict') {
+        filtered.set(platform, markets);
+        continue;
+      }
+      const tokens = dirtyMap.get(platform);
+      if (!tokens || tokens.size === 0) {
+        filtered.set(platform, []);
+        continue;
+      }
+      const subset = markets.filter((market) => {
+        const yes = market.yesTokenId;
+        const no = market.noTokenId;
+        const marketId = market.marketId;
+        return (yes && tokens.has(yes)) || (no && tokens.has(no)) || (marketId && tokens.has(marketId));
+      });
+      filtered.set(platform, subset);
+    }
+    return filtered;
   }
 
   private expandMarketsForTokens(markets: Market[], tokens: string[]): Market[] {
