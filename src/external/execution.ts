@@ -631,6 +631,7 @@ export class CrossPlatformExecutionRouter {
   private failureProfitUsdBump = 0;
   private failureDepthUsdBump = 0;
   private failureMinNotionalUsdBump = 0;
+  private failureSizeFactor = 1;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -770,6 +771,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureProfitUsd(true);
         this.adjustFailureDepthUsd(true);
         this.adjustFailureMinNotionalUsd(true);
+        this.adjustFailureSizeFactor(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -835,6 +837,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureProfitUsd(false);
         this.adjustFailureDepthUsd(false);
         this.adjustFailureMinNotionalUsd(false);
+        this.adjustFailureSizeFactor(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -954,7 +957,16 @@ export class CrossPlatformExecutionRouter {
     const minProfitUsd = Math.max(0, this.config.crossPlatformPreSubmitProfitUsd || 0);
     const totalCostBps = Math.max(0, this.config.crossPlatformPreSubmitTotalCostBps || 0);
     const legSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0);
-    if (!driftBps && !vwapBps && !minProfitBps && !minProfitUsd && !totalCostBps && !legSpreadBps) {
+    const legCostSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegCostSpreadBps || 0);
+    if (
+      !driftBps &&
+      !vwapBps &&
+      !minProfitBps &&
+      !minProfitUsd &&
+      !totalCostBps &&
+      !legSpreadBps &&
+      !legCostSpreadBps
+    ) {
       return;
     }
     const slippageBps = this.getSlippageBps();
@@ -965,12 +977,15 @@ export class CrossPlatformExecutionRouter {
     let hasBuy = false;
     let hasSell = false;
     const legDeviationSamples: number[] = [];
+    const buyCosts: number[] = [];
+    const sellProceeds: number[] = [];
     const needsVwap =
       vwapBps > 0 ||
       minProfitBps > 0 ||
       minProfitUsd > 0 ||
       totalCostBps > 0 ||
-      legSpreadBps > 0;
+      legSpreadBps > 0 ||
+      legCostSpreadBps > 0;
     for (const leg of legs) {
       const book = await this.fetchOrderbookInternal(leg);
       if (!book) {
@@ -1010,9 +1025,11 @@ export class CrossPlatformExecutionRouter {
         if (leg.side === 'BUY') {
           hasBuy = true;
           totalCostPerShare += vwapAllIn;
+          buyCosts.push(vwapAllIn);
         } else {
           hasSell = true;
           totalProceedsPerShare += vwapAllIn;
+          sellProceeds.push(vwapAllIn);
         }
       }
     }
@@ -1024,6 +1041,28 @@ export class CrossPlatformExecutionRouter {
         throw new Error(
           `Pre-submit failed: leg VWAP spread ${spread.toFixed(1)} bps > max ${legSpreadBps}`
         );
+      }
+    }
+    if (legCostSpreadBps > 0) {
+      if (buyCosts.length >= 2) {
+        const minCost = Math.min(...buyCosts);
+        const maxCost = Math.max(...buyCosts);
+        const spread = minCost > 0 ? ((maxCost - minCost) / minCost) * 10000 : 0;
+        if (spread > legCostSpreadBps) {
+          throw new Error(
+            `Pre-submit failed: buy VWAP cost spread ${spread.toFixed(1)} bps > max ${legCostSpreadBps}`
+          );
+        }
+      }
+      if (sellProceeds.length >= 2) {
+        const minProceeds = Math.min(...sellProceeds);
+        const maxProceeds = Math.max(...sellProceeds);
+        const spread = minProceeds > 0 ? ((maxProceeds - minProceeds) / minProceeds) * 10000 : 0;
+        if (spread > legCostSpreadBps) {
+          throw new Error(
+            `Pre-submit failed: sell VWAP proceeds spread ${spread.toFixed(1)} bps > max ${legCostSpreadBps}`
+          );
+        }
       }
     }
     if (totalCostBps > 0 && (hasBuy || hasSell)) {
@@ -1496,18 +1535,19 @@ export class CrossPlatformExecutionRouter {
   }
 
   private adjustLegsForAttempt(legs: PlatformLeg[], attempt: number): PlatformLeg[] {
-    if (attempt <= 0) {
-      return legs;
-    }
-
     const factor = this.config.crossPlatformRetrySizeFactor ?? 0.6;
     const aggressiveBps = (this.config.crossPlatformRetryAggressiveBps ?? 0) * attempt;
     const maxBps = this.getSlippageBps() || 250;
-    const adjBps = Math.min(Math.max(0, aggressiveBps), maxBps);
+    const adjBps = attempt > 0 ? Math.min(Math.max(0, aggressiveBps), maxBps) : 0;
+    const attemptScale = attempt > 0 ? Math.pow(factor, attempt) * this.retryFactor : 1;
+    const scale = attemptScale * this.failureSizeFactor;
+    if (attempt <= 0 && Math.abs(scale - 1) < 1e-6) {
+      return legs;
+    }
 
     return legs
       .map((leg) => {
-        const scaledShares = leg.shares * Math.pow(factor, attempt) * this.retryFactor;
+        const scaledShares = leg.shares * scale;
         if (scaledShares <= 0.0001) {
           return null;
         }
@@ -1682,6 +1722,18 @@ export class CrossPlatformExecutionRouter {
     } else {
       this.failureMinNotionalUsdBump = Math.min(maxBump, this.failureMinNotionalUsdBump + bump);
     }
+  }
+
+  private adjustFailureSizeFactor(success: boolean): void {
+    const min = Math.max(0.05, this.config.crossPlatformFailureSizeFactorMin || 0.2);
+    const max = Math.max(min, this.config.crossPlatformFailureSizeFactorMax || 1);
+    const down = Math.max(0.01, Math.min(1, this.config.crossPlatformFailureSizeFactorDown || 0.85));
+    const up = Math.max(0, this.config.crossPlatformFailureSizeFactorUp || 0.05);
+    if (success) {
+      this.failureSizeFactor = Math.min(max, this.failureSizeFactor + up);
+      return;
+    }
+    this.failureSizeFactor = Math.max(min, this.failureSizeFactor * down);
   }
 
   private getStabilityBps(): number {

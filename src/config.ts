@@ -243,6 +243,7 @@ export function loadConfig(): Config {
     crossPlatformPreSubmitProfitUsd: parseFloat(process.env.CROSS_PLATFORM_PRE_SUBMIT_PROFIT_USD || '0'),
     crossPlatformPreSubmitLegVwapSpreadBps: parseFloat(process.env.CROSS_PLATFORM_PRE_SUBMIT_LEG_VWAP_SPREAD_BPS || '0'),
     crossPlatformPreSubmitTotalCostBps: parseFloat(process.env.CROSS_PLATFORM_PRE_SUBMIT_TOTAL_COST_BPS || '0'),
+    crossPlatformPreSubmitLegCostSpreadBps: parseFloat(process.env.CROSS_PLATFORM_PRE_SUBMIT_LEG_COST_SPREAD_BPS || '0'),
     crossPlatformAdaptiveSize: process.env.CROSS_PLATFORM_ADAPTIVE_SIZE !== 'false',
     crossPlatformMinDepthShares: parseFloat(process.env.CROSS_PLATFORM_MIN_DEPTH_SHARES || '1'),
     crossPlatformMinNotionalUsd: parseFloat(process.env.CROSS_PLATFORM_MIN_NOTIONAL_USD || '0'),
@@ -493,6 +494,10 @@ export function loadConfig(): Config {
     crossPlatformAutoFallbackSteps: process.env.CROSS_PLATFORM_AUTO_FALLBACK_STEPS
       ? process.env.CROSS_PLATFORM_AUTO_FALLBACK_STEPS.split(',').map((s) => s.trim()).filter(Boolean)
       : [],
+    crossPlatformFailureSizeFactorDown: parseFloat(process.env.CROSS_PLATFORM_FAILURE_SIZE_FACTOR_DOWN || '0.85'),
+    crossPlatformFailureSizeFactorUp: parseFloat(process.env.CROSS_PLATFORM_FAILURE_SIZE_FACTOR_UP || '0.05'),
+    crossPlatformFailureSizeFactorMin: parseFloat(process.env.CROSS_PLATFORM_FAILURE_SIZE_FACTOR_MIN || '0.2'),
+    crossPlatformFailureSizeFactorMax: parseFloat(process.env.CROSS_PLATFORM_FAILURE_SIZE_FACTOR_MAX || '1'),
     crossPlatformLimitOrders: process.env.CROSS_PLATFORM_LIMIT_ORDERS !== 'false',
     crossPlatformCancelOpenMs: parseInt(process.env.CROSS_PLATFORM_CANCEL_OPEN_MS || '1500'),
     crossPlatformPostFillCheck: process.env.CROSS_PLATFORM_POST_FILL_CHECK !== 'false',

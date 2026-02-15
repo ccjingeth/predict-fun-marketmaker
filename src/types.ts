@@ -189,6 +189,7 @@ export interface Config {
   crossPlatformPreSubmitProfitUsd?: number;
   crossPlatformPreSubmitLegVwapSpreadBps?: number;
   crossPlatformPreSubmitTotalCostBps?: number;
+  crossPlatformPreSubmitLegCostSpreadBps?: number;
   crossPlatformAdaptiveSize?: boolean;
   crossPlatformMinDepthShares?: number;
   crossPlatformMinNotionalUsd?: number;
@@ -359,6 +360,10 @@ export interface Config {
   crossPlatformAutoSingleLegVwapBps?: number;
   crossPlatformAutoFallbackOnFailure?: boolean;
   crossPlatformAutoFallbackSteps?: string[];
+  crossPlatformFailureSizeFactorDown?: number;
+  crossPlatformFailureSizeFactorUp?: number;
+  crossPlatformFailureSizeFactorMin?: number;
+  crossPlatformFailureSizeFactorMax?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;
