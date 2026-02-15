@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('predictBot', {
   triggerRescan: () => ipcRenderer.invoke('trigger-rescan'),
   backupMapping: () => ipcRenderer.invoke('backup-mapping'),
   restoreLatestMapping: () => ipcRenderer.invoke('restore-latest-mapping'),
+  listMappingBackups: () => ipcRenderer.invoke('list-mapping-backups'),
+  restoreMappingFromPath: (path) => ipcRenderer.invoke('restore-mapping-from-path', path),
   runDiagnostics: () => ipcRenderer.invoke('run-diagnostics'),
   exportDiagnostics: () => ipcRenderer.invoke('export-diagnostics'),
   startBot: (type) => ipcRenderer.invoke('start-bot', type),

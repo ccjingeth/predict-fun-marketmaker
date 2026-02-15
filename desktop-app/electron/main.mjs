@@ -441,6 +441,31 @@ function restoreLatestMappingFile() {
   return { ok: true, path: latest };
 }
 
+function listMappingBackups() {
+  const backupDir = path.join(getUserDataRoot(), 'mapping-backups');
+  if (!fs.existsSync(backupDir)) {
+    return { ok: true, items: [] };
+  }
+  const items = fs
+    .readdirSync(backupDir)
+    .filter((name) => name.startsWith('cross-platform-mapping.'))
+    .map((name) => ({
+      path: path.join(backupDir, name),
+      label: name.replace('cross-platform-mapping.', '').replace('.json', ''),
+    }))
+    .sort((a, b) => (a.path > b.path ? -1 : 1));
+  return { ok: true, items };
+}
+
+function restoreMappingFromPath(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) {
+    return { ok: false, message: '备份文件不存在' };
+  }
+  const mappingPath = resolveMappingPath();
+  fs.copyFileSync(filePath, mappingPath);
+  return { ok: true, path: filePath };
+}
+
 function getStatus() {
   return {
     marketMaker: processes.has('mm'),
@@ -839,6 +864,8 @@ ipcMain.handle('export-diagnostics', () => {
 ipcMain.handle('trigger-rescan', () => sendRescanSignal());
 ipcMain.handle('backup-mapping', () => backupMappingFile());
 ipcMain.handle('restore-latest-mapping', () => restoreLatestMappingFile());
+ipcMain.handle('list-mapping-backups', () => listMappingBackups());
+ipcMain.handle('restore-mapping-from-path', (_, filePath) => restoreMappingFromPath(filePath));
 
 ipcMain.handle('start-bot', (_, type) => spawnBot(type));
 ipcMain.handle('stop-bot', (_, type) => stopBot(type));

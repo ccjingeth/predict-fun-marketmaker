@@ -14,6 +14,7 @@ const mappingAutoSaveToggle = document.getElementById('mappingAutoSave');
 const mappingAutoReloadToggle = document.getElementById('mappingAutoReload');
 const mappingAutoRescanToggle = document.getElementById('mappingAutoRescan');
 const mappingAutoBackupToggle = document.getElementById('mappingAutoBackup');
+const mappingBackupList = document.getElementById('mappingBackupList');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
@@ -1413,6 +1414,7 @@ async function saveEnv() {
 async function loadMapping() {
   const text = await window.predictBot.readMapping();
   mappingEditor.value = text;
+  loadMappingBackups().catch(() => {});
 }
 
 async function saveMapping() {
@@ -1809,7 +1811,40 @@ async function restoreLatestBackup() {
   }
   await loadMapping();
   checkMappingMissing().catch(() => {});
+  await loadMappingBackups();
   pushLog({ type: 'system', level: 'system', message: `已恢复备份：${result.path || ''}`.trim() });
+}
+
+async function loadMappingBackups() {
+  if (!mappingBackupList) return;
+  if (!window.predictBot?.listMappingBackups) {
+    mappingBackupList.innerHTML = '<div class="health-item ok">当前版本不支持备份列表。</div>';
+    return;
+  }
+  const result = await window.predictBot.listMappingBackups();
+  if (!result?.ok) {
+    mappingBackupList.innerHTML = '<div class="health-item warn">备份列表读取失败。</div>';
+    return;
+  }
+  const items = Array.isArray(result.items) ? result.items : [];
+  if (!items.length) {
+    mappingBackupList.innerHTML = '<div class="health-item ok">暂无备份。</div>';
+    return;
+  }
+  mappingBackupList.innerHTML = '';
+  items.slice(0, 6).forEach((item) => {
+    const row = document.createElement('div');
+    row.className = 'health-item warn';
+    const label = document.createElement('div');
+    label.className = 'health-label';
+    label.textContent = item.label || item.path;
+    const hint = document.createElement('div');
+    hint.className = 'health-hint';
+    hint.innerHTML = `<button class="btn ghost" data-action="restore-backup" data-path="${item.path}">恢复</button>`;
+    row.appendChild(label);
+    row.appendChild(hint);
+    mappingBackupList.appendChild(row);
+  });
 }
 
 async function copyMappingTemplate() {
@@ -3902,6 +3937,25 @@ if (mappingRestoreLatestBtn) {
 }
 if (mappingMissingList) {
   mappingMissingList.addEventListener('click', handleMissingListClick);
+}
+if (mappingBackupList) {
+  mappingBackupList.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!target || target.dataset.action !== 'restore-backup') return;
+    const path = target.dataset.path;
+    if (!path || !window.predictBot?.restoreMappingFromPath) return;
+    window.predictBot.restoreMappingFromPath(path).then((result) => {
+      if (!result?.ok) {
+        pushLog({ type: 'system', level: 'stderr', message: result?.message || '恢复备份失败' });
+        return;
+      }
+      loadMapping().then(() => {
+        checkMappingMissing().catch(() => {});
+        loadMappingBackups().catch(() => {});
+      });
+      pushLog({ type: 'system', level: 'system', message: `已恢复备份：${path}` });
+    });
+  });
 }
 if (mappingHideUnconfirmed) {
   mappingHideUnconfirmed.addEventListener('change', () => {
