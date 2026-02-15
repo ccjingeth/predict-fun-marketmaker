@@ -640,6 +640,8 @@ export class CrossPlatformExecutionRouter {
   private failureMinProfitUsdExtra = 0;
   private failureMinProfitBpsExtra = 0;
   private failureNotionalUsdExtra = 0;
+  private failureMinDepthSharesExtra = 0;
+  private forceFokUntil = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -786,6 +788,8 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureDepthExtra(true);
         this.adjustFailureMinProfitExtra(true);
         this.adjustFailureNotionalExtra(true);
+        this.adjustFailureMinDepthSharesExtra(true);
+        this.applyFailureForceFok(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -858,7 +862,9 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureDepthExtra(false);
         this.adjustFailureMinProfitExtra(false);
         this.adjustFailureNotionalExtra(false);
+        this.adjustFailureMinDepthSharesExtra(false);
         this.applyFailureForceSequential(false);
+        this.applyFailureForceFok(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -1860,6 +1866,22 @@ export class CrossPlatformExecutionRouter {
     this.failureNotionalUsdExtra = Math.min(maxBump, this.failureNotionalUsdExtra + bump);
   }
 
+  private adjustFailureMinDepthSharesExtra(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureMinDepthSharesBump || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureMinDepthSharesMax || bump * 5);
+    const recover = this.config.crossPlatformFailureMinDepthSharesRecover ?? 0.7;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureMinDepthSharesExtra = Math.max(0, this.failureMinDepthSharesExtra * recover);
+      }
+      return;
+    }
+    this.failureMinDepthSharesExtra = Math.min(maxBump, this.failureMinDepthSharesExtra + bump);
+  }
+
   private applyFailureForceSequential(success: boolean): void {
     const duration = Math.max(0, this.config.crossPlatformFailureForceSequentialMs || 0);
     if (!duration) {
@@ -1874,6 +1896,18 @@ export class CrossPlatformExecutionRouter {
     if (this.config.crossPlatformConsistencyTemplateEnabled) {
       this.consistencyTemplateActiveUntil = Math.max(this.consistencyTemplateActiveUntil, now + duration);
     }
+  }
+
+  private applyFailureForceFok(success: boolean): void {
+    const duration = Math.max(0, this.config.crossPlatformFailureForceFokMs || 0);
+    if (!duration) {
+      return;
+    }
+    if (success) {
+      return;
+    }
+    const now = Date.now();
+    this.forceFokUntil = Math.max(this.forceFokUntil, now + duration);
   }
 
   private onFailureStreak(success: boolean): void {
@@ -2166,6 +2200,9 @@ export class CrossPlatformExecutionRouter {
     if (auto.forceFok) {
       useFok = true;
     }
+    if (this.forceFokUntil > Date.now()) {
+      useFok = true;
+    }
 
     let useLimit = this.config.crossPlatformLimitOrders;
     if (this.isDegraded() && this.config.crossPlatformDegradeLimitOrders !== undefined) {
@@ -2188,7 +2225,7 @@ export class CrossPlatformExecutionRouter {
       batch = false;
     }
 
-    const finalOrderType = auto.forceFok ? 'FOK' : orderType;
+    const finalOrderType = auto.forceFok || this.forceFokUntil > Date.now() ? 'FOK' : orderType;
     return {
       useFok,
       useLimit,
@@ -3975,7 +4012,10 @@ export class CrossPlatformExecutionRouter {
       return 0;
     }
     const minDepth = Math.min(...depths.filter((x) => Number.isFinite(x)));
-    const minAllowed = this.config.crossPlatformMinDepthShares ?? 1;
+    let minAllowed = this.config.crossPlatformMinDepthShares ?? 1;
+    if (this.failureMinDepthSharesExtra > 0) {
+      minAllowed += this.failureMinDepthSharesExtra;
+    }
     if (!Number.isFinite(minDepth) || minDepth <= 0 || minDepth < minAllowed) {
       throw new Error(`Preflight failed: insufficient depth (min ${minAllowed})`);
     }
