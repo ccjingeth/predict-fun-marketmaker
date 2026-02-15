@@ -634,6 +634,7 @@ export class CrossPlatformExecutionRouter {
   private failureSizeFactor = 1;
   private failureProfitMult = 1;
   private consecutiveFailures = 0;
+  private failureCooldownBumpMs = 0;
   private allowlistTokens?: Set<string>;
   private blocklistTokens?: Set<string>;
   private allowlistPlatforms?: Set<string>;
@@ -776,6 +777,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureSizeFactor(true);
         this.adjustFailureProfitMultiplier(true);
         this.onFailureStreak(true);
+        this.adjustFailureCooldown(true);
         if (postTrade.penalizedLegs.length > 0) {
           this.adjustTokenScores(
             postTrade.penalizedLegs,
@@ -844,6 +846,7 @@ export class CrossPlatformExecutionRouter {
         this.adjustFailureSizeFactor(false);
         this.adjustFailureProfitMultiplier(false);
         this.onFailureStreak(false);
+        this.adjustFailureCooldown(false);
         this.adjustChunkDelay(false);
         this.checkGlobalCooldown();
         this.applyFailureReasonPenalty(reason);
@@ -860,7 +863,8 @@ export class CrossPlatformExecutionRouter {
         }
         attempt += 1;
         if (retryDelayMs > 0) {
-          await this.sleep(retryDelayMs * attempt);
+          const extra = Math.max(0, this.failureCooldownBumpMs || 0);
+          await this.sleep(retryDelayMs * attempt + extra);
         }
       }
     }
@@ -1752,6 +1756,22 @@ export class CrossPlatformExecutionRouter {
       return;
     }
     this.failureProfitMult = Math.min(max, this.failureProfitMult * down);
+  }
+
+  private adjustFailureCooldown(success: boolean): void {
+    const bump = Math.max(0, this.config.crossPlatformFailureCooldownBumpMs || 0);
+    if (!bump) {
+      return;
+    }
+    const maxBump = Math.max(bump, this.config.crossPlatformFailureCooldownBumpMaxMs || bump * 5);
+    const recover = this.config.crossPlatformFailureCooldownRecover ?? 0.7;
+    if (success) {
+      if (recover > 0 && recover < 1) {
+        this.failureCooldownBumpMs = Math.max(0, this.failureCooldownBumpMs * recover);
+      }
+      return;
+    }
+    this.failureCooldownBumpMs = Math.min(maxBump, this.failureCooldownBumpMs + bump);
   }
 
   private onFailureStreak(success: boolean): void {
