@@ -986,14 +986,37 @@ export class CrossPlatformExecutionRouter {
 
   private async preSubmitCheck(legs: PlatformLeg[]): Promise<void> {
     let driftBps = Math.max(0, this.config.crossPlatformPreSubmitDriftBps || 0);
-    const vwapBps = Math.max(0, this.config.crossPlatformPreSubmitVwapBps || 0);
-    const minProfitBps = Math.max(0, this.config.crossPlatformPreSubmitProfitBps || 0);
-    const minProfitUsd = Math.max(0, this.config.crossPlatformPreSubmitProfitUsd || 0);
+    let vwapBps = Math.max(0, this.config.crossPlatformPreSubmitVwapBps || 0);
+    let minProfitBps = Math.max(0, this.config.crossPlatformPreSubmitProfitBps || 0);
+    let minProfitUsd = Math.max(0, this.config.crossPlatformPreSubmitProfitUsd || 0);
     let totalCostBps = Math.max(0, this.config.crossPlatformPreSubmitTotalCostBps || 0);
-    const legSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0);
-    const legCostSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegCostSpreadBps || 0);
+    let legSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegVwapSpreadBps || 0);
+    let legCostSpreadBps = Math.max(0, this.config.crossPlatformPreSubmitLegCostSpreadBps || 0);
     if (this.failureTotalCostBpsExtra > 0) {
       totalCostBps += this.failureTotalCostBpsExtra;
+    }
+    const failureActive = this.circuitFailures > 0 || this.isDegraded() || this.consecutiveFailures > 0;
+    if (failureActive) {
+      const vwapTighten = Math.max(0, this.config.crossPlatformFailurePreSubmitVwapTightenBps || 0);
+      if (vwapTighten > 0) {
+        vwapBps = Math.max(0, vwapBps - vwapTighten);
+      }
+      const legSpreadTighten = Math.max(0, this.config.crossPlatformFailurePreSubmitLegSpreadTightenBps || 0);
+      if (legSpreadTighten > 0) {
+        legSpreadBps = Math.max(0, legSpreadBps - legSpreadTighten);
+      }
+      const legCostSpreadTighten = Math.max(0, this.config.crossPlatformFailurePreSubmitLegCostSpreadTightenBps || 0);
+      if (legCostSpreadTighten > 0) {
+        legCostSpreadBps = Math.max(0, legCostSpreadBps - legCostSpreadTighten);
+      }
+      const profitBpsBump = Math.max(0, this.config.crossPlatformFailurePreSubmitProfitBpsBump || 0);
+      const profitUsdBump = Math.max(0, this.config.crossPlatformFailurePreSubmitProfitUsdBump || 0);
+      if (profitBpsBump > 0) {
+        minProfitBps += profitBpsBump;
+      }
+      if (profitUsdBump > 0) {
+        minProfitUsd += profitUsdBump;
+      }
     }
     if (this.consecutiveFailures > 0) {
       const tighten = Math.max(0, this.config.crossPlatformFailureDriftTightenBps || 0);

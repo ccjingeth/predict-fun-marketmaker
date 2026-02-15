@@ -396,6 +396,11 @@ export interface Config {
   crossPlatformFailureTotalCostBpsBump?: number;
   crossPlatformFailureTotalCostBpsBumpMax?: number;
   crossPlatformFailureTotalCostBpsRecover?: number;
+  crossPlatformFailurePreSubmitVwapTightenBps?: number;
+  crossPlatformFailurePreSubmitLegSpreadTightenBps?: number;
+  crossPlatformFailurePreSubmitLegCostSpreadTightenBps?: number;
+  crossPlatformFailurePreSubmitProfitBpsBump?: number;
+  crossPlatformFailurePreSubmitProfitUsdBump?: number;
   crossPlatformLimitOrders?: boolean;
   crossPlatformCancelOpenMs?: number;
   crossPlatformPostFillCheck?: boolean;
