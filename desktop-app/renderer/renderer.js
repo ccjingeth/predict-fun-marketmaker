@@ -5,6 +5,8 @@ const mappingCheckMissingBtn = document.getElementById('mappingCheckMissing');
 const mappingGenerateTemplateBtn = document.getElementById('mappingGenerateTemplate');
 const mappingSuggestPredictBtn = document.getElementById('mappingSuggestPredict');
 const mappingCopyTemplateBtn = document.getElementById('mappingCopyTemplate');
+const mappingHideUnconfirmed = document.getElementById('mappingHideUnconfirmed');
+const mappingHideLowScore = document.getElementById('mappingHideLowScore');
 const dependencyEditor = document.getElementById('dependencyEditor');
 const logOutput = document.getElementById('logOutput');
 const logFilter = document.getElementById('logFilter');
@@ -1601,7 +1603,20 @@ function renderMissingList(missing) {
     mappingMissingList.appendChild(item);
     return;
   }
-  missing.slice(0, 20).forEach((itemData) => {
+  const env = parseEnv(envEditor.value || '');
+  const minScore = parseFloat(env.get('CROSS_PLATFORM_MAPPING_SUGGEST_MIN_SCORE') || '0.5');
+  const hideUnconfirmed = Boolean(mappingHideUnconfirmed?.checked);
+  const hideLowScore = Boolean(mappingHideLowScore?.checked);
+  const filtered = missing.filter((item) => {
+    if (hideUnconfirmed && item.predictMarketId && !item.predictConfirmed) {
+      return false;
+    }
+    if (hideLowScore && Number.isFinite(item.predictScore) && item.predictScore < minScore) {
+      return false;
+    }
+    return true;
+  });
+  filtered.slice(0, 20).forEach((itemData) => {
     const row = document.createElement('div');
     row.className = 'health-item warn';
     const label = document.createElement('div');
@@ -1617,17 +1632,22 @@ function renderMissingList(missing) {
       suggestionText = `｜Predict: ${itemData.predictQuestion || itemData.predictMarketId}${score}${confirmedTag}`;
     }
     if (Array.isArray(itemData.predictCandidates) && itemData.predictCandidates.length > 0) {
-      const top = itemData.predictCandidates
-        .map((c) => `${c.question || c.marketId} (${c.score})`)
-        .slice(0, 3)
-        .join(' | ');
+      const top = itemData.predictCandidates.slice(0, 3);
+      const candidateText = top
+        .map((c, idx) => {
+          const label = `${c.question || c.marketId} (${c.score})`;
+          return `<button class="btn ghost" data-action="pick-candidate" data-index="${idx}">${label}</button>`;
+        })
+        .join(' ');
       suggestionText = suggestionText
-        ? `${suggestionText}｜候选: ${top}`
-        : `｜候选: ${top}`;
+        ? `${suggestionText}｜候选: ${candidateText}`
+        : `｜候选: ${candidateText}`;
+      row.dataset.candidates = JSON.stringify(itemData.predictCandidates);
     }
-    hint.textContent = `${tokensText}${suggestionText}`;
+    hint.innerHTML = `${tokensText}${suggestionText}`;
     row.appendChild(label);
     row.appendChild(hint);
+    row.dataset.missing = JSON.stringify(itemData);
     mappingMissingList.appendChild(row);
   });
 }
@@ -1718,6 +1738,62 @@ async function copyMappingTemplate() {
   } catch {
     pushLog({ type: 'system', level: 'stderr', message: '复制映射模板失败，请手动复制。' });
   }
+}
+
+function replaceMissingItem(updatedItem) {
+  if (!mappingMissingList?.dataset.missing) return;
+  let missing = [];
+  try {
+    missing = JSON.parse(mappingMissingList.dataset.missing || '[]');
+  } catch {
+    return;
+  }
+  const idx = missing.findIndex(
+    (item) =>
+      item.platform === updatedItem.platform &&
+      item.marketId === updatedItem.marketId &&
+      item.yesTokenId === updatedItem.yesTokenId &&
+      item.noTokenId === updatedItem.noTokenId
+  );
+  if (idx >= 0) {
+    missing[idx] = updatedItem;
+  }
+  mappingMissingList.dataset.missing = JSON.stringify(missing);
+  mappingMissingList.dataset.template = generateMappingTemplate(missing);
+  renderMissingList(missing);
+}
+
+function handleMissingListClick(event) {
+  const target = event.target;
+  if (!target) return;
+  if (!target.dataset || target.dataset.action !== 'pick-candidate') return;
+  const row = target.closest('.health-item');
+  if (!row) return;
+  let candidates = [];
+  try {
+    candidates = JSON.parse(row.dataset.candidates || '[]');
+  } catch {
+    candidates = [];
+  }
+  const index = parseInt(target.dataset.index || '0', 10);
+  const candidate = candidates[index];
+  if (!candidate) return;
+  let missingItem = null;
+  try {
+    missingItem = JSON.parse(row.dataset.missing || '{}');
+  } catch {
+    missingItem = null;
+  }
+  if (!missingItem) return;
+  const updated = {
+    ...missingItem,
+    predictMarketId: candidate.marketId || '',
+    predictQuestion: candidate.question || '',
+    predictScore: candidate.score,
+    predictConfirmed: false,
+  };
+  replaceMissingItem(updated);
+  applyMappingTemplate('已应用候选到模板，请确认后保存。');
 }
 
 async function suggestPredictMappings() {
@@ -3645,6 +3721,31 @@ if (mappingSuggestPredictBtn) {
 if (mappingCopyTemplateBtn) {
   mappingCopyTemplateBtn.addEventListener('click', () => {
     copyMappingTemplate().catch(() => {});
+  });
+}
+if (mappingMissingList) {
+  mappingMissingList.addEventListener('click', handleMissingListClick);
+}
+if (mappingHideUnconfirmed) {
+  mappingHideUnconfirmed.addEventListener('change', () => {
+    if (!mappingMissingList?.dataset.missing) return;
+    try {
+      const missing = JSON.parse(mappingMissingList.dataset.missing || '[]');
+      renderMissingList(missing);
+    } catch {
+      // ignore
+    }
+  });
+}
+if (mappingHideLowScore) {
+  mappingHideLowScore.addEventListener('change', () => {
+    if (!mappingMissingList?.dataset.missing) return;
+    try {
+      const missing = JSON.parse(mappingMissingList.dataset.missing || '[]');
+      renderMissingList(missing);
+    } catch {
+      // ignore
+    }
   });
 }
 
