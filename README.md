@@ -4,7 +4,8 @@ Automated market making bot for [Predict.fun](https://predict.fun/) - the BNB Ch
 
 ## Referral
 
-- Invite link: [https://predict.fun?ref=B0CE6](https://predict.fun?ref=B0CE6)
+- Predict Invite link: [https://predict.fun?ref=B0CE6](https://predict.fun?ref=B0CE6)
+- probable Invite link：[https://probable.markets/?ref=PNRBS9VL](https://probable.markets/?ref=PNRBS9VL)
 - Twitter: @ccjing_eth
 
 ## Features
