@@ -672,12 +672,18 @@
           </div>
 
           <div class="tab-panel active" data-tab="env">
+            <div class="health-subtitle">配置状态</div>
+            <div class="health-list" id="configStatusList">
+              <div class="health-item warn">正在检查配置...</div>
+            </div>
             <div class="button-row">
               <button class="btn ghost" id="reloadEnv">重新加载</button>
               <button class="btn primary" id="saveEnv">保存配置</button>
+              <button class="btn subtle" id="loadMinTemplate">加载最小模板</button>
+              <button class="btn subtle" id="loadFullTemplate">加载完整模板</button>
             </div>
             <textarea id="envEditor" spellcheck="false"></textarea>
-            <p class="hint">修改后需要点击“保存配置”，再启动对应机器人。</p>
+            <p class="hint">修改后需要点击"保存配置"，再启动对应机器人。</p>
           </div>
 
           <div class="tab-panel" data-tab="mapping">

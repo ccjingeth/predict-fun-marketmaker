@@ -20,6 +20,8 @@
     "productName": "Predict.fun Console",
     "files": [
       "electron/**/*",
+      "electron/**/*.cjs",
+      "electron/**/*.mjs",
       "renderer/**/*",
       "package.json"
     ],

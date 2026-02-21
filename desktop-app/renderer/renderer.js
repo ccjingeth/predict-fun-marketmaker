@@ -441,24 +441,24 @@ const FIX_HINTS = {
   CROSS_PLATFORM_DEGRADE_USE_FOK: '降级模式强制 FOK',
 };
 const FIX_CATEGORY_KEYS = {
-  深度不足: ['CROSS_PLATFORM_ADAPTIVE_SIZE', 'CROSS_PLATFORM_DEPTH_USAGE', 'CROSS_PLATFORM_CHUNK_MAX_SHARES'],
-  预检失败: [
+  '深度不足': ['CROSS_PLATFORM_ADAPTIVE_SIZE', 'CROSS_PLATFORM_DEPTH_USAGE', 'CROSS_PLATFORM_CHUNK_MAX_SHARES'],
+  '预检失败': [
     'CROSS_PLATFORM_STABILITY_SAMPLES',
     'CROSS_PLATFORM_STABILITY_INTERVAL_MS',
     'CROSS_PLATFORM_MIN_PROFIT_USD',
     'CROSS_PLATFORM_MIN_NOTIONAL_USD',
   ],
-  VWAP 偏离: ['CROSS_PLATFORM_SLIPPAGE_BPS', 'CROSS_PLATFORM_EXECUTION_VWAP_CHECK', 'CROSS_PLATFORM_RECHECK_MS'],
-  价格漂移: ['CROSS_PLATFORM_PRICE_DRIFT_BPS', 'CROSS_PLATFORM_RECHECK_MS', 'CROSS_PLATFORM_STABILITY_SAMPLES'],
-  成交后漂移: ['CROSS_PLATFORM_POST_TRADE_DRIFT_BPS', 'CROSS_PLATFORM_STABILITY_BPS', 'CROSS_PLATFORM_CHUNK_FACTOR_MIN'],
-  高波动: ['CROSS_PLATFORM_VOLATILITY_BPS', 'CROSS_PLATFORM_STABILITY_SAMPLES'],
-  执行失败: ['CROSS_PLATFORM_MAX_RETRIES', 'CROSS_PLATFORM_RETRY_DELAY_MS', 'CROSS_PLATFORM_ABORT_COOLDOWN_MS'],
-  对冲失败: ['CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD', 'CROSS_PLATFORM_HEDGE_MIN_EDGE', 'CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS'],
-  未成交订单: ['CROSS_PLATFORM_POST_FILL_CHECK', 'CROSS_PLATFORM_USE_FOK'],
-  熔断触发: ['CROSS_PLATFORM_CIRCUIT_MAX_FAILURES', 'CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS'],
-  冷却触发: ['CROSS_PLATFORM_GLOBAL_MIN_QUALITY', 'CROSS_PLATFORM_GLOBAL_COOLDOWN_MS'],
-  映射/依赖: ['CROSS_PLATFORM_USE_MAPPING'],
-  网络/请求: ['ARB_WS_HEALTH_LOG_MS', 'PREDICT_WS_STALE_MS', 'CROSS_PLATFORM_RETRY_DELAY_MS'],
+  'VWAP 偏离': ['CROSS_PLATFORM_SLIPPAGE_BPS', 'CROSS_PLATFORM_EXECUTION_VWAP_CHECK', 'CROSS_PLATFORM_RECHECK_MS'],
+  '价格漂移': ['CROSS_PLATFORM_PRICE_DRIFT_BPS', 'CROSS_PLATFORM_RECHECK_MS', 'CROSS_PLATFORM_STABILITY_SAMPLES'],
+  '成交后漂移': ['CROSS_PLATFORM_POST_TRADE_DRIFT_BPS', 'CROSS_PLATFORM_STABILITY_BPS', 'CROSS_PLATFORM_CHUNK_FACTOR_MIN'],
+  '高波动': ['CROSS_PLATFORM_VOLATILITY_BPS', 'CROSS_PLATFORM_STABILITY_SAMPLES'],
+  '执行失败': ['CROSS_PLATFORM_MAX_RETRIES', 'CROSS_PLATFORM_RETRY_DELAY_MS', 'CROSS_PLATFORM_ABORT_COOLDOWN_MS'],
+  '对冲失败': ['CROSS_PLATFORM_HEDGE_MIN_PROFIT_USD', 'CROSS_PLATFORM_HEDGE_MIN_EDGE', 'CROSS_PLATFORM_HEDGE_SLIPPAGE_BPS'],
+  '未成交订单': ['CROSS_PLATFORM_POST_FILL_CHECK', 'CROSS_PLATFORM_USE_FOK'],
+  '熔断触发': ['CROSS_PLATFORM_CIRCUIT_MAX_FAILURES', 'CROSS_PLATFORM_CIRCUIT_COOLDOWN_MS'],
+  '冷却触发': ['CROSS_PLATFORM_GLOBAL_MIN_QUALITY', 'CROSS_PLATFORM_GLOBAL_COOLDOWN_MS'],
+  '映射/依赖': ['CROSS_PLATFORM_USE_MAPPING'],
+  '网络/请求': ['ARB_WS_HEALTH_LOG_MS', 'PREDICT_WS_STALE_MS', 'CROSS_PLATFORM_RETRY_DELAY_MS'],
 };
 const weightPresets = new Map();
 const logFilterPresets = new Map();
@@ -1715,6 +1715,209 @@ async function saveEnv() {
   renderFlowStatus({ appliedFixes: false, saved: true });
   renderSaveHint({ hasPendingSave: false });
   pushLog({ type: 'system', level: 'system', message: '配置已保存' });
+  await checkConfigStatus();
+}
+
+// 配置状态检查
+async function checkConfigStatus() {
+  const configStatusList = document.getElementById('configStatusList');
+  if (!configStatusList) return;
+
+  const text = envEditor.value || '';
+  const checks = [];
+
+  // 检查必填项
+  const hasApiKey = /API_KEY\s*=\s*[^ \n]/.test(text);
+  const hasPrivateKey = /PRIVATE_KEY\s*=\s*[^ \n]/.test(text);
+  const hasJwtToken = /JWT_TOKEN\s*=\s*[^ \n]/.test(text);
+  const isEnabledTrading = /ENABLE_TRADING\s*=\s*true/i.test(text);
+  const isAutoConfirm = /AUTO_CONFIRM\s*=\s*true/i.test(text);
+
+  checks.push({
+    key: 'API_KEY',
+    label: 'API 密钥',
+    status: hasApiKey ? 'ok' : 'error',
+    message: hasApiKey ? '已配置' : '⚠️ 未配置（必填）',
+  });
+
+  checks.push({
+    key: 'PRIVATE_KEY',
+    label: '钱包私钥',
+    status: hasPrivateKey ? 'ok' : 'error',
+    message: hasPrivateKey ? '已配置' : '⚠️ 未配置（必填）',
+  });
+
+  checks.push({
+    key: 'JWT_TOKEN',
+    label: 'JWT Token',
+    status: hasJwtToken ? 'ok' : (isEnabledTrading ? 'error' : 'warn'),
+    message: hasJwtToken ? '已配置' : (isEnabledTrading ? '⚠️ 实盘交易必需' : '💡 模拟模式可选'),
+  });
+
+  checks.push({
+    key: 'TRADING_MODE',
+    label: '交易模式',
+    status: 'ok',
+    message: isEnabledTrading ? '🔴 实盘模式' : '🟢 模拟模式',
+  });
+
+  checks.push({
+    key: 'AUTO_CONFIRM',
+    label: '自动确认',
+    status: isAutoConfirm ? 'warn' : 'ok',
+    message: isAutoConfirm ? '⚠️ 已启用（谨慎使用）' : '✅ 已关闭（推荐）',
+  });
+
+  // 渲染状态
+  configStatusList.innerHTML = checks.map(check => `
+    <div class="health-item ${check.status}">
+      <span class="health-label">${check.label}:</span>
+      <span class="health-message">${check.message}</span>
+    </div>
+  `).join('');
+}
+
+// 加载最小配置模板
+function loadMinTemplate() {
+  try {
+    const editor = document.getElementById('envEditor');
+    if (!editor) {
+      pushLog({ type: 'system', level: 'stderr', message: '错误：找不到环境变量编辑器' });
+      console.error('envEditor 元素未找到');
+      return;
+    }
+
+    const template = `# Predict.fun 最小配置模板
+# ==================== 必填配置 ====================
+API_KEY=your_api_key_here          # 从 Discord 获取
+PRIVATE_KEY=0x...                   # 你的钱包私钥
+
+# ==================== 交易模式 ====================
+ENABLE_TRADING=false               # false=模拟, true=实盘
+AUTO_CONFIRM=false                 # 建议先关闭
+
+# ==================== 基础参数 ====================
+ORDER_SIZE=10                      # 订单大小（USDT）
+SPREAD=0.02                        # 价差 2%
+MAX_POSITION=100                   # 最大持仓（USDT）
+
+# ==================== WebSocket ====================
+PREDICT_WS_ENABLED=true            # 推荐：开启实时行情
+
+# ==================== 做市商配置 ====================
+MM_VENUE=predict                   # 做市平台
+MM_REQUIRE_JWT=true
+
+# ==================== 套利配置 ====================
+ARB_AUTO_EXECUTE=false             # 建议先手动执行
+ARB_WS_REALTIME=true               # 实时扫描
+`;
+
+    editor.value = template;
+    detectTradingMode(template);
+    syncTogglesFromEnv(template);
+    pushLog({ type: 'system', level: 'system', message: '✅ 已加载最小配置模板' });
+    checkConfigStatus();
+    console.log('模板加载完成');
+  } catch (error) {
+    console.error('加载模板失败:', error);
+    pushLog({ type: 'system', level: 'stderr', message: '加载模板失败: ' + error.message });
+  }
+}
+
+// 加载完整配置模板
+function loadFullTemplate() {
+  try {
+    const editor = document.getElementById('envEditor');
+    if (!editor) {
+      pushLog({ type: 'system', level: 'stderr', message: '错误：找不到环境变量编辑器' });
+      console.error('envEditor 元素未找到');
+      return;
+    }
+
+    const template = `# Predict.fun 完整配置模板
+# 详细说明请查看 QUICKSTART_CONFIG.md
+
+# ==================== API 配置 ====================
+API_BASE_URL=https://api.predict.fun
+RPC_URL=https://eth-sepolia.public.blastapi.io
+
+# ==================== 钱包配置 ====================
+PRIVATE_KEY=0x...
+PREDICT_ACCOUNT_ADDRESS=0x...
+
+# ==================== 认证配置 ====================
+API_KEY=your_api_key_here          # ⭐ 必填
+JWT_TOKEN=your_jwt_token_here      # 实盘必需
+
+# ==================== 交易模式 ====================
+ENABLE_TRADING=false               # false=模拟, true=实盘
+AUTO_CONFIRM=false                 # 自动确认订单
+
+# ==================== 做市商配置 ====================
+MM_VENUE=predict                   # 做市平台
+MM_REQUIRE_JWT=true
+ORDER_SIZE=10                      # 订单大小（USDT）
+MAX_POSITION=100                   # 最大持仓（USDT）
+SPREAD=0.02                        # 价差 2%
+MIN_SPREAD=0.01
+MAX_SPREAD=0.08
+INVENTORY_SKEW_FACTOR=0.15
+MAX_ORDERS_PER_MARKET=2
+
+# ==================== 套利配置 ====================
+ARB_AUTO_EXECUTE=false             # 自动执行套利
+ARB_WS_REALTIME=true               # 实时扫描
+CROSS_PLATFORM_ENABLED=false       # 跨平台套利
+
+# ==================== WebSocket 配置 ====================
+PREDICT_WS_ENABLED=true            # ⭐ 推荐
+POLYMARKET_WS_ENABLED=false
+OPINION_WS_ENABLED=false
+PROBABLE_WS_ENABLED=false
+ARB_REQUIRE_WS=false
+CROSS_PLATFORM_WS_REALTIME=false
+
+# ==================== 风控参数 ====================
+CANCEL_THRESHOLD=0.05             # 5% 价格变动取消
+REPRICE_THRESHOLD=0.003           # 0.3% 价格变动重新报价
+MAX_DAILY_LOSS=200                # 每日最大亏损
+MIN_ORDER_INTERVAL_MS=3000        # 最小订单间隔
+
+# ==================== 高级参数 ====================
+MM_ADAPTIVE_PARAMS=true           # 自适应做市
+USE_VALUE_SIGNAL=false            # 价值信号
+VALUE_SIGNAL_WEIGHT=0.35
+MM_ICEBERG_ENABLED=false          # 冰山订单
+MM_BATCH_CANCEL_ENABLED=false     # 批量撤单
+
+# ==================== 跨平台配置（可选）====================
+CROSS_PLATFORM_AUTO_EXECUTE=false
+CROSS_PLATFORM_EXECUTION_VWAP_CHECK=true
+CROSS_PLATFORM_ADAPTIVE_SIZE=true
+CROSS_PLATFORM_DEPTH_USAGE=0.3
+CROSS_PLATFORM_RECHECK_MS=300
+CROSS_PLATFORM_STABILITY_SAMPLES=3
+
+# ==================== 依赖套利（可选）====================
+DEPENDENCY_ARB_ENABLED=false
+
+# ==================== 日志路径 ====================
+MM_METRICS_PATH=data/mm-metrics.json
+CROSS_PLATFORM_MAPPING_PATH=data/cross-platform-mapping.json
+DEPENDENCY_CONSTRAINTS_PATH=data/dependency-constraints.json
+`;
+
+    editor.value = template;
+    detectTradingMode(template);
+    syncTogglesFromEnv(template);
+    pushLog({ type: 'system', level: 'system', message: '✅ 已加载完整配置模板' });
+    checkConfigStatus();
+    console.log('完整模板加载完成');
+  } catch (error) {
+    console.error('加载模板失败:', error);
+    pushLog({ type: 'system', level: 'stderr', message: '加载模板失败: ' + error.message });
+  }
 }
 
 async function loadMapping() {
@@ -4675,10 +4878,10 @@ async function loadMetrics() {
     setMetricText(metricSoftBlocks, `${metrics.softBlocks || 0}`);
     setMetricText(metricBlockedTokens, `${(data.blockedTokens || []).length}`);
     setMetricText(metricBlockedPlatforms, `${(data.blockedPlatforms || []).length}`);
-    const cooldownUntil = Number(data.globalCooldownUntil || 0);
+    const globalCooldownUntil = Number(data.globalCooldownUntil || 0);
     setMetricText(
       metricCooldown,
-      cooldownUntil && cooldownUntil > Date.now() ? `冷却中：${formatTimestamp(cooldownUntil)}` : '未触发'
+      globalCooldownUntil && globalCooldownUntil > Date.now() ? `冷却中：${formatTimestamp(globalCooldownUntil)}` : '未触发'
     );
     setMetricText(metricLastError, metrics.lastError || '无');
     setMetricText(metricUpdatedAt, formatTimestamp(updatedAt));
@@ -5062,9 +5265,16 @@ function activateTab(name) {
 }
 
 async function startBot(type) {
-  const result = await window.predictBot.startBot(type);
-  if (!result.ok) {
-    pushLog({ type, level: 'stderr', message: result.message || '启动失败' });
+  pushLog({ type: 'system', level: 'system', message: `正在启动 ${type}...` });
+  try {
+    const result = await window.predictBot.startBot(type);
+    if (!result.ok) {
+      pushLog({ type, level: 'stderr', message: result.message || '启动失败' });
+    } else {
+      pushLog({ type: 'system', level: 'system', message: `✅ ${type} 启动成功` });
+    }
+  } catch (error) {
+    pushLog({ type: 'system', level: 'stderr', message: `启动错误: ${error.message}` });
   }
 }
 
@@ -5077,6 +5287,7 @@ async function stopBot(type) {
 
 async function init() {
   await loadEnv();
+  await checkConfigStatus();
   await Promise.all([loadMapping().catch(() => {}), loadDependency().catch(() => {})]);
   const status = await window.predictBot.getStatus();
   updateStatusDisplay(status);
@@ -5116,27 +5327,171 @@ window.predictBot.onStatus((payload) => {
   }
 });
 
-logFilter.addEventListener('change', renderLogs);
-failureCategoryFilter.addEventListener('change', renderLogs);
-logKeyword.addEventListener('input', renderLogs);
+// 等待DOM加载完成后再绑定事件监听器
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', setupEventListeners);
+} else {
+  setupEventListeners();
+}
 
-document.getElementById('clearLog').addEventListener('click', () => {
-  logs.length = 0;
-  renderLogs();
-});
+function setupEventListeners() {
+  console.log('开始绑定事件监听器...');
 
-document.getElementById('reloadEnv').addEventListener('click', loadEnv);
-document.getElementById('saveEnv').addEventListener('click', saveEnv);
-document.getElementById('reloadMapping').addEventListener('click', loadMapping);
-document.getElementById('saveMapping').addEventListener('click', saveMapping);
-document.getElementById('reloadDependency').addEventListener('click', loadDependency);
-document.getElementById('saveDependency').addEventListener('click', saveDependency);
+  logFilter.addEventListener('change', renderLogs);
+  failureCategoryFilter.addEventListener('change', renderLogs);
+  logKeyword.addEventListener('input', renderLogs);
 
-document.getElementById('startMM').addEventListener('click', () => startBot('mm'));
-document.getElementById('stopMM').addEventListener('click', () => stopBot('mm'));
-document.getElementById('startArb').addEventListener('click', () => startBot('arb'));
-document.getElementById('stopArb').addEventListener('click', () => stopBot('arb'));
+  const clearLogBtn = document.getElementById('clearLog');
+  if (clearLogBtn) {
+    clearLogBtn.addEventListener('click', () => {
+      logs.length = 0;
+      renderLogs();
+    });
+  }
 
+  const reloadEnvBtn = document.getElementById('reloadEnv');
+  if (reloadEnvBtn) {
+    reloadEnvBtn.addEventListener('click', () => {
+      loadEnv().then(() => {
+        pushLog({ type: 'system', level: 'system', message: '✅ 配置已重新加载' });
+      });
+    });
+  }
+
+  const saveEnvBtn = document.getElementById('saveEnv');
+  if (saveEnvBtn) {
+    saveEnvBtn.addEventListener('click', () => {
+      const btn = document.getElementById('saveEnv');
+      btn.textContent = '保存中...';
+      saveEnv().then(() => {
+        btn.textContent = '保存配置';
+      });
+    });
+  }
+
+  const loadMinBtn = document.getElementById('loadMinTemplate');
+  if (loadMinBtn) {
+    console.log('找到加载最小模板按钮');
+    loadMinBtn.addEventListener('click', () => {
+      try {
+        console.log('加载最小模板按钮被点击');
+        const envEditor = document.getElementById('envEditor');
+        if (!envEditor) {
+          console.error('envEditor 元素未找到');
+          alert('错误：找不到环境变量编辑器');
+          return;
+        }
+        console.log('开始加载模板...');
+        loadMinTemplate();
+        pushLog({ type: 'system', level: 'system', message: '✅ 已加载最小配置模板' });
+        console.log('模板加载完成');
+      } catch (error) {
+        console.error('加载模板失败:', error);
+        alert('加载模板失败: ' + error.message);
+      }
+    });
+  } else {
+    console.error('未找到 loadMinTemplate 按钮');
+  }
+
+  const loadFullBtn = document.getElementById('loadFullTemplate');
+  if (loadFullBtn) {
+    console.log('找到加载完整模板按钮');
+    loadFullBtn.addEventListener('click', () => {
+      try {
+        console.log('加载完整模板按钮被点击');
+        loadFullTemplate();
+        pushLog({ type: 'system', level: 'system', message: '✅ 已加载完整配置模板' });
+      } catch (error) {
+        console.error('加载模板失败:', error);
+        alert('加载模板失败: ' + error.message);
+      }
+    });
+  } else {
+    console.error('未找到 loadFullTemplate 按钮');
+  }
+
+  const reloadMappingBtn = document.getElementById('reloadMapping');
+  if (reloadMappingBtn) {
+    reloadMappingBtn.addEventListener('click', () => {
+      loadMapping().then(() => {
+        pushLog({ type: 'system', level: 'system', message: '✅ 映射已重新加载' });
+      });
+    });
+  }
+
+  const saveMappingBtn = document.getElementById('saveMapping');
+  if (saveMappingBtn) {
+    saveMappingBtn.addEventListener('click', saveMapping);
+  }
+
+  const reloadDepBtn = document.getElementById('reloadDependency');
+  if (reloadDepBtn) {
+    reloadDepBtn.addEventListener('click', loadDependency);
+  }
+
+  const saveDepBtn = document.getElementById('saveDependency');
+  if (saveDepBtn) {
+    saveDepBtn.addEventListener('click', saveDependency);
+  }
+
+  const startMMBtn = document.getElementById('startMM');
+  if (startMMBtn) {
+    console.log('找到启动做市商按钮');
+    startMMBtn.addEventListener('click', (e) => {
+      const btn = e.target;
+      btn.textContent = '启动中...';
+      btn.disabled = true;
+      startBot('mm').finally(() => {
+        btn.textContent = '启动做市商';
+        btn.disabled = false;
+      });
+    });
+  }
+
+  const stopMMBtn = document.getElementById('stopMM');
+  if (stopMMBtn) {
+    stopMMBtn.addEventListener('click', (e) => {
+      const btn = e.target;
+      btn.textContent = '停止中...';
+      btn.disabled = true;
+      stopBot('mm').finally(() => {
+        btn.textContent = '停止';
+        btn.disabled = false;
+      });
+    });
+  }
+
+  const startArbBtn = document.getElementById('startArb');
+  if (startArbBtn) {
+    startArbBtn.addEventListener('click', (e) => {
+      const btn = e.target;
+      btn.textContent = '启动中...';
+      btn.disabled = true;
+      startBot('arb').finally(() => {
+        btn.textContent = '启动套利';
+        btn.disabled = false;
+      });
+    });
+  }
+
+  const stopArbBtn = document.getElementById('stopArb');
+  if (stopArbBtn) {
+    stopArbBtn.addEventListener('click', (e) => {
+      const btn = e.target;
+      btn.textContent = '停止中...';
+      btn.disabled = true;
+      stopBot('arb').finally(() => {
+        btn.textContent = '停止';
+        btn.disabled = false;
+      });
+    });
+  }
+
+  console.log('事件监听器绑定完成');
+}
+
+// 其余的事件监听器（不需要等待DOM的）
 document.getElementById('setDry').addEventListener('click', () => {
   envEditor.value = setEnvValue(envEditor.value, 'ENABLE_TRADING', 'false');
   detectTradingMode(envEditor.value);

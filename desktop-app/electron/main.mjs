@@ -15,8 +15,6 @@ const logBuffer = [];
 const LOG_MAX = 2000;
 const rescanCooldownUntil = { value: 0 };
 const RESCAN_COOLDOWN_MS = 10000;
-const rescanCooldownUntil = { value: 0 };
-const RESCAN_COOLDOWN_MS = 10000;
 
 function sendToRenderer(channel, payload) {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -972,9 +970,16 @@ function createWindow() {
     backgroundColor: '#0f1222',
     title: 'Predict.fun 控制台',
     webPreferences: {
-      preload: path.resolve(__dirname, 'preload.mjs'),
+      preload: path.resolve(__dirname, 'preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
     },
   });
+
+  // 开发模式下打开开发者工具
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 
   mainWindow.loadFile(rendererPath);
 }
