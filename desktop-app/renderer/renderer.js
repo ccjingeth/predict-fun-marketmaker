@@ -41,6 +41,8 @@ const metricsStatus = document.getElementById('metricsStatus');
 const arbSnapshotStatus = document.getElementById('arbSnapshotStatus');
 const refreshArbSnapshot = document.getElementById('refreshArbSnapshot');
 const arbTypeFilter = document.getElementById('arbTypeFilter');
+const arbPlatformFilter = document.getElementById('arbPlatformFilter');
+const resetPlatformFilter = document.getElementById('resetPlatformFilter');
 const arbMinReturn = document.getElementById('arbMinReturn');
 const arbMinProfitUsd = document.getElementById('arbMinProfitUsd');
 const arbOppList = document.getElementById('arbOppList');
@@ -942,12 +944,29 @@ function renderArbList() {
   const minReturn = arbMinReturn ? parseFloat(arbMinReturn.value || '0') : 0;
   const minProfit = arbMinProfitUsd ? parseFloat(arbMinProfitUsd.value || '0') : 0;
 
+  // 获取选中的平台
+  const selectedPlatforms = arbPlatformFilter
+    ? Array.from(arbPlatformFilter.selectedOptions).map(opt => opt.value)
+    : ['Predict', 'Polymarket', 'Opinion', 'Probable'];
+
+  // 类型过滤
   if (typeFilter && typeFilter !== 'all') {
     items = items.filter((item) => item.typeKey === typeFilter);
   }
+
+  // 平台过滤
+  items = items.filter((item) => {
+    if (!item.legs || !Array.isArray(item.legs)) return true;
+    // 检查是否包含至少一个选中的平台
+    return item.legs.some((leg) => selectedPlatforms.includes(leg.platform));
+  });
+
+  // 收益过滤
   if (Number.isFinite(minReturn) && minReturn > 0) {
     items = items.filter((item) => Number(item.expectedReturn || 0) >= minReturn);
   }
+
+  // 利润过滤
   if (Number.isFinite(minProfit) && minProfit > 0) {
     items = items.filter((item) => Number(item.profitUsd || 0) >= minProfit);
   }
@@ -5913,6 +5932,14 @@ refreshArbSnapshot?.addEventListener('click', () => {
   loadArbCommandStatus().catch(() => {});
 });
 arbTypeFilter?.addEventListener('change', renderArbList);
+arbPlatformFilter?.addEventListener('change', renderArbList);
+resetPlatformFilter?.addEventListener('click', () => {
+  if (arbPlatformFilter) {
+    Array.from(arbPlatformFilter.options).forEach(opt => opt.selected = true);
+    pushLog({ type: 'system', level: 'system', message: '✅ 已重置平台过滤器' });
+    renderArbList();
+  }
+});
 arbMinReturn?.addEventListener('input', renderArbList);
 arbMinProfitUsd?.addEventListener('input', renderArbList);
 enableRecoveryTemplateBtn?.addEventListener('click', () => toggleRecoveryTemplate(true));

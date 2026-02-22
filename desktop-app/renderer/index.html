@@ -616,12 +616,20 @@
             <label>类型</label>
             <select id="arbTypeFilter">
               <option value="all">全部</option>
-              <option value="intra">站内</option>
-              <option value="cross">跨平台</option>
-              <option value="multi">多结果</option>
-              <option value="dependency">依赖</option>
+              <option value="intra">站内套利</option>
+              <option value="cross">跨平台套利</option>
+              <option value="multi">多结果套利</option>
+              <option value="dependency">依赖套利</option>
               <option value="value">价值错配</option>
             </select>
+            <label>平台</label>
+            <select id="arbPlatformFilter" multiple style="height: 80px;">
+              <option value="Predict" selected>Predict.fun</option>
+              <option value="Polymarket" selected>Polymarket</option>
+              <option value="Opinion" selected>Opinion</option>
+              <option value="Probable" selected>Probable</option>
+            </select>
+            <button class="btn ghost" id="resetPlatformFilter" style="font-size: 12px; padding: 4px 12px;">重置平台</button>
             <label>最小收益%</label>
             <input id="arbMinReturn" type="number" min="0" step="0.1" value="0" />
             <label>最小利润USD</label>
