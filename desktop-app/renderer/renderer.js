@@ -1939,6 +1939,76 @@ DEPENDENCY_CONSTRAINTS_PATH=data/dependency-constraints.json
   }
 }
 
+// 加载积分优化模板（简化版专用）
+function loadPointsOptimizationTemplate() {
+  try {
+    const editor = document.getElementById('envEditor');
+    if (!editor) {
+      pushLog({ type: 'system', level: 'stderr', message: '错误：找不到环境变量编辑器' });
+      console.error('envEditor 元素未找到');
+      return;
+    }
+
+    const template = `# Predict.fun 积分优化模板（简化版专用）
+# ==================== 必填配置 ====================
+API_KEY=your_api_key_here          # ⭐ 必填
+PRIVATE_KEY=0x...                  # ⭐ 必填（实盘）
+JWT_TOKEN=your_jwt_token_here      # 实盘必需
+
+# ==================== 交易模式 ====================
+ENABLE_TRADING=false               # false=模拟, true=实盘
+AUTO_CONFIRM=false                 # 自动确认订单
+
+# ==================== 做市商配置 ====================
+MM_VENUE=predict                   # 做市平台
+
+# ⭐ 积分优化核心配置
+MM_POINTS_PRIORITIZE=true          # 优先积分市场
+MM_POINTS_OPTIMIZATION=true        # 启用积分优化
+MM_POINTS_V2_OPTIMIZER=true        # V2 极致优化
+MM_ONLY_POINTS_MARKETS=true        # 只做积分市场
+
+# ⭐ 积分规则（满足 min_shares 和 max_spread）
+MM_POINTS_MIN_SHARES=100           # 最小订单股数
+MM_POINTS_MAX_SPREAD_CENTS=6       # 最大价差 6 美分
+MM_POINTS_ASSUME_ACTIVE=true       # 启用默认规则
+
+# 订单参数（自动优化）
+ORDER_SIZE=100                     # ≥100 满足 min_shares
+SPREAD=0.05                        # 5¢ 满足 max_spread 6¢
+MIN_SPREAD=0.02
+MAX_SPREAD=0.06                    # 最大 6¢
+
+# 风控参数
+MAX_POSITION=500                   # 最大持仓
+INVENTORY_SKEW_FACTOR=0.15         # 库存倾斜
+MAX_ORDERS_PER_MARKET=3            # 每市场最大订单数
+
+# ==================== WebSocket 配置 ====================
+PREDICT_WS_ENABLED=true            # ⭐ 实时数据推荐
+
+# ==================== 风控参数 ====================
+CANCEL_THRESHOLD=0.05             # 5% 价格变动取消
+REPRICE_THRESHOLD=0.003           # 0.3% 价格变动重新报价
+MAX_DAILY_LOSS=200                # 每日最大亏损
+MIN_ORDER_INTERVAL_MS=3000        # 最小订单间隔
+
+# ==================== 高级参数 ====================
+MM_ADAPTIVE_PARAMS=true           # 自适应做市
+`;
+
+    editor.value = template;
+    detectTradingMode(template);
+    syncTogglesFromEnv(template);
+    pushLog({ type: 'system', level: 'system', message: '✅ 已加载积分优化模板' });
+    checkConfigStatus();
+    console.log('积分优化模板加载完成');
+  } catch (error) {
+    console.error('加载模板失败:', error);
+    pushLog({ type: 'system', level: 'stderr', message: '加载模板失败: ' + error.message });
+  }
+}
+
 // 一键最佳实践配置（针对积分优化）
 async function applyBestPractice() {
   const editor = document.getElementById('envEditor');
@@ -2060,7 +2130,7 @@ async function getSmartSuggestions() {
 
   try {
     const envText = document.getElementById('envEditor')?.value || '';
-    const suggestions: string[] = [];
+    const suggestions = [];
 
     // 检查API_KEY
     if (!/API_KEY\s*=\s*[^ \s]/.test(envText)) {
@@ -5612,9 +5682,9 @@ if (document.readyState === 'loading') {
 function setupEventListeners() {
   console.log('开始绑定事件监听器...');
 
-  logFilter.addEventListener('change', renderLogs);
-  failureCategoryFilter.addEventListener('change', renderLogs);
-  logKeyword.addEventListener('input', renderLogs);
+  if (logFilter) logFilter.addEventListener('change', renderLogs);
+  if (failureCategoryFilter) failureCategoryFilter.addEventListener('change', renderLogs);
+  if (logKeyword) logKeyword.addEventListener('input', renderLogs);
 
   const clearLogBtn = document.getElementById('clearLog');
   if (clearLogBtn) {
@@ -5702,6 +5772,39 @@ function setupEventListeners() {
     });
   } else {
     console.error('未找到 applyBestPractice 按钮');
+  }
+
+  // 简化版模板按钮
+  const loadMinSimpleBtn = document.getElementById('loadMinTemplateSimple');
+  if (loadMinSimpleBtn) {
+    console.log('找到简化版最小模板按钮');
+    loadMinSimpleBtn.addEventListener('click', () => {
+      try {
+        console.log('简化版最小模板按钮被点击');
+        loadMinTemplate();
+        pushLog({ type: 'system', level: 'system', message: '✅ 已加载最小配置模板' });
+      } catch (error) {
+        console.error('加载模板失败:', error);
+        pushLog({ type: 'system', level: 'stderr', message: '❌ 加载模板失败: ' + error.message });
+        alert('加载模板失败: ' + error.message);
+      }
+    });
+  }
+
+  const loadPointsBtn = document.getElementById('loadPointsTemplate');
+  if (loadPointsBtn) {
+    console.log('找到积分优化模板按钮');
+    loadPointsBtn.addEventListener('click', () => {
+      try {
+        console.log('积分优化模板按钮被点击');
+        loadPointsOptimizationTemplate();
+        pushLog({ type: 'system', level: 'system', message: '✅ 已加载积分优化模板' });
+      } catch (error) {
+        console.error('加载模板失败:', error);
+        pushLog({ type: 'system', level: 'stderr', message: '❌ 加载模板失败: ' + error.message });
+        alert('加载模板失败: ' + error.message);
+      }
+    });
   }
 
   // 智能建议按钮
@@ -5880,22 +5983,33 @@ function setupEventListeners() {
 }
 
 // 其余的事件监听器（不需要等待DOM的）
-document.getElementById('setDry').addEventListener('click', () => {
-  envEditor.value = setEnvValue(envEditor.value, 'ENABLE_TRADING', 'false');
-  detectTradingMode(envEditor.value);
-  syncTogglesFromEnv(envEditor.value);
-});
+const setDryBtn = document.getElementById('setDry');
+if (setDryBtn) {
+  setDryBtn.addEventListener('click', () => {
+    envEditor.value = setEnvValue(envEditor.value, 'ENABLE_TRADING', 'false');
+    detectTradingMode(envEditor.value);
+    syncTogglesFromEnv(envEditor.value);
+  });
+}
 
-document.getElementById('setLive').addEventListener('click', () => {
-  envEditor.value = setEnvValue(envEditor.value, 'ENABLE_TRADING', 'true');
-  detectTradingMode(envEditor.value);
-  syncTogglesFromEnv(envEditor.value);
-});
+const setLiveBtn = document.getElementById('setLive');
+if (setLiveBtn) {
+  setLiveBtn.addEventListener('click', () => {
+    envEditor.value = setEnvValue(envEditor.value, 'ENABLE_TRADING', 'true');
+    detectTradingMode(envEditor.value);
+    syncTogglesFromEnv(envEditor.value);
+  });
+}
 
-document.getElementById('applyToggles').addEventListener('click', applyToggles);
-toggleInputs.forEach((input) => {
-  input.addEventListener('change', applyToggles);
-});
+const applyTogglesBtn = document.getElementById('applyToggles');
+if (applyTogglesBtn) {
+  applyTogglesBtn.addEventListener('click', applyToggles);
+}
+if (toggleInputs) {
+  toggleInputs.forEach((input) => {
+    input.addEventListener('change', applyToggles);
+  });
+}
 if (mmVenueSelect) {
   mmVenueSelect.addEventListener('change', applyToggles);
 }

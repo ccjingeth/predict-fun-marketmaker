@@ -770,5 +770,33 @@
 
     <script src="renderer.js"></script>
     <script src="charts.js"></script>
+    <script>
+      // 调试代码：检查按钮和事件监听器
+      console.log('=== UI 调试信息 ===');
+      console.log('当前时间:', new Date().toISOString());
+
+      setTimeout(() => {
+        const startMMBtn = document.getElementById('startMM');
+        const startArbBtn = document.getElementById('startArb');
+        const stopMMBtn = document.getElementById('stopMM');
+        const stopArbBtn = document.getElementById('stopArb');
+
+        console.log('startMM 按钮:', startMMBtn);
+        console.log('startArb 按钮:', startArbBtn);
+        console.log('stopMM 按钮:', stopMMBtn);
+        console.log('stopArb 按钮:', stopArbBtn);
+
+        // 检查 predictBot API 是否可用
+        console.log('predictBot API:', typeof window.predictBot);
+        if (window.predictBot) {
+          console.log('predictBot.startBot:', typeof window.predictBot.startBot);
+          console.log('predictBot.stopBot:', typeof window.predictBot.stopBot);
+        } else {
+          console.error('ERROR: predictBot API 不可用!');
+        }
+
+        console.log('=== UI 调试完成 ===');
+      }, 1000);
+    </script>
   </body>
 </html>
