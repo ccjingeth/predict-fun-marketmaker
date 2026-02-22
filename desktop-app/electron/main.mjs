@@ -7,7 +7,28 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const devProjectRoot = path.resolve(__dirname, '..', '..');
-const rendererPath = path.resolve(__dirname, '..', 'renderer', 'index.html');
+
+// 解析命令行参数，确定加载哪个HTML
+// --launcher 或 -l: 启动器（版本选择页面）
+// --simple 或 -s: 简化版
+// --full 或 -f: 完整版（默认）
+// 默认：完整版
+const args = process.argv.slice(1);
+const useLauncher = args.includes('--launcher') || args.includes('-l');
+const useSimple = args.includes('--simple') || args.includes('-s');
+const useFull = args.includes('--full') || args.includes('-f');
+
+let htmlFileName;
+if (useLauncher) {
+  htmlFileName = 'launcher.html';
+} else if (useSimple) {
+  htmlFileName = 'index_simple.html';
+} else {
+  // 默认完整版
+  htmlFileName = 'index.html';
+}
+
+const rendererPath = path.resolve(__dirname, '..', 'renderer', htmlFileName);
 
 const processes = new Map();
 let mainWindow = null;
@@ -962,13 +983,15 @@ function exportMmEventsBundle() {
 }
 
 function createWindow() {
+  const title = useSimple ? 'Predict.fun 积分专用控制台 (简化版)' : 'Predict.fun 完整控制台';
+
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 780,
     minWidth: 1100,
     minHeight: 680,
     backgroundColor: '#0f1222',
-    title: 'Predict.fun 控制台',
+    title: title,
     webPreferences: {
       preload: path.resolve(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -981,6 +1004,7 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 
+  console.log(`Loading renderer: ${rendererPath}`);
   mainWindow.loadFile(rendererPath);
 }
 
@@ -1026,6 +1050,69 @@ ipcMain.handle('write-dependency', (_, text) => {
 });
 ipcMain.handle('read-metrics', () => readTextFile(resolveMetricsPath(), '{\"version\":1,\"ts\":0,\"metrics\":{}}'));
 ipcMain.handle('read-mm-metrics', () => readTextFile(resolveMmMetricsPath(), '{\"version\":1,\"ts\":0,\"markets\":[]}'));
+ipcMain.handle('read-points-stats', () => {
+  try {
+    const mmMetricsPath = resolveMmMetricsPath();
+    const metrics = readJsonFile(mmMetricsPath);
+
+    if (!metrics || !Array.isArray(metrics.markets)) {
+      return JSON.stringify({
+        totalMarkets: 0,
+        pointsActiveMarkets: 0,
+        efficiency: 0,
+        markets: []
+      });
+    }
+
+    let totalMarkets = metrics.markets.length;
+    let pointsActiveMarkets = 0;
+    let eligibleOrders = 0;
+    let totalOrders = 0;
+    const pointsMarkets = [];
+
+    for (const market of metrics.markets) {
+      if (!market || !market.marketId) continue;
+
+      // 检查是否激活积分
+      const hasLiquidity = (market.minShares || 0) > 0 && (market.maxSpread || 1) <= 0.03;
+      if (hasLiquidity) {
+        pointsActiveMarkets++;
+        pointsMarkets.push({
+          marketId: market.marketId,
+          question: market.question || '',
+          minShares: market.minShares || 0,
+          maxSpread: market.maxSpread || 0,
+          eligibleOrders: market.eligibleOrders || 0,
+          totalOrders: market.totalOrders || 0
+        });
+        eligibleOrders += market.eligibleOrders || 0;
+        totalOrders += market.totalOrders || 0;
+      }
+
+      // 统计总订单数
+      if (market.totalOrders) {
+        totalOrders += market.totalOrders;
+      }
+    }
+
+    const efficiency = totalOrders > 0 ? Math.round((eligibleOrders / totalOrders) * 100) : 0;
+
+    return JSON.stringify({
+      totalMarkets,
+      pointsActiveMarkets,
+      efficiency,
+      markets: pointsMarkets
+    });
+  } catch (error) {
+    return JSON.stringify({
+      totalMarkets: 0,
+      pointsActiveMarkets: 0,
+      efficiency: 0,
+      markets: [],
+      error: error?.message || String(error)
+    });
+  }
+});
 ipcMain.handle('read-arb-opportunities', () =>
   readTextFile(resolveArbOpportunitiesPath(), '{\"ts\":0,\"items\":[]}\n')
 );

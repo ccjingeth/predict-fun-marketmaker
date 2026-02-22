@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Predict.fun 做市商 - 选择版本</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 40px;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    .header p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+    }
+
+    .version-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    .version-card {
+      background: white;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      transition: all 0.3s ease;
+      cursor: pointer;
+      border: 3px solid transparent;
+    }
+
+    .version-card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.4);
+    }
+
+    .version-card.simple {
+      border-color: #6366f1;
+    }
+
+    .version-card.simple:hover {
+      background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+    }
+
+    .version-card.full {
+      border-color: #8b5cf6;
+    }
+
+    .version-card.full:hover {
+      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    }
+
+    .version-icon {
+      font-size: 4rem;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .version-card h2 {
+      font-size: 1.8rem;
+      margin-bottom: 12px;
+      color: #1f2937;
+    }
+
+    .version-card .tag {
+      display: inline-block;
+      background: #dbeafe;
+      color: #1e40af;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .version-card .tag.simple {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .version-card .tag.full {
+      background: #f3e8ff;
+      color: #6b21a8;
+    }
+
+    .features {
+      list-style: none;
+      margin: 20px 0;
+    }
+
+    .features li {
+      padding: 8px 0;
+      color: #4b5563;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .features li::before {
+      content: "✓";
+      color: #10b981;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 32px;
+    }
+
+    .btn {
+      padding: 14px 28px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-simple {
+      background: #6366f1;
+      color: white;
+    }
+
+    .btn-simple:hover {
+      background: #4f46e5;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+
+    .btn-full {
+      background: #8b5cf6;
+      color: white;
+    }
+
+    .btn-full:hover {
+      background: #7c3aed;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+    }
+
+    .remember {
+      text-align: center;
+      margin-top: 24px;
+      color: white;
+    }
+
+    .remember label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
+    .remember input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .info-box {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 24px;
+      color: white;
+      text-align: center;
+    }
+
+    .info-box h3 {
+      margin-bottom: 12px;
+      font-size: 1.1rem;
+    }
+
+    .info-box p {
+      font-size: 0.95rem;
+      opacity: 0.9;
+      line-height: 1.6;
+    }
+
+    @media (max-width: 640px) {
+      .header h1 {
+        font-size: 2rem;
+      }
+
+      .version-cards {
+        grid-template-columns: 1fr;
+      }
+
+      .button-group {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🚀 Predict.fun 做市商控制台</h1>
+      <p>选择适合您的版本，开始智能做市之旅</p>
+    </div>
+
+    <div class="version-cards">
+      <!-- 简化版卡片 -->
+      <div class="version-card simple" onclick="selectVersion('simple')">
+        <div class="version-icon">🎯</div>
+        <h2>简化版</h2>
+        <span class="tag simple">推荐新手</span>
+        <ul class="features">
+          <li>界面简洁，只有15个按钮</li>
+          <li>一键最佳实践自动配置</li>
+          <li>专注积分获取优化</li>
+          <li>智能建议系统</li>
+          <li>实时积分状态显示</li>
+          <li>适合小白用户</li>
+        </ul>
+      </div>
+
+      <!-- 完整版卡片 -->
+      <div class="version-card full" onclick="selectVersion('full')">
+        <div class="version-icon">🔧</div>
+        <h2>完整版</h2>
+        <span class="tag full">高级功能</span>
+        <ul class="features">
+          <li>包含套利机器人功能</li>
+          <li>30+个高级配置选项</li>
+          <li>详细执行指标（30+个）</li>
+          <li>跨平台映射配置</li>
+          <li>依赖约束编辑器</li>
+          <li>适合高级用户</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn btn-simple" onclick="selectVersion('simple')">
+        选择简化版 🎯
+      </button>
+      <button class="btn btn-full" onclick="selectVersion('full')">
+        选择完整版 🔧
+      </button>
+    </div>
+
+    <div class="remember">
+      <label>
+        <input type="checkbox" id="rememberChoice" checked />
+        记住我的选择，下次直接进入
+      </label>
+    </div>
+
+    <div class="info-box">
+      <h3>💡 提示</h3>
+      <p>
+        两个版本可以随时在界面内切换，无需重启应用。<br>
+        您的选择会被保存，下次打开时会直接进入您选择的版本。
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // 检查是否有保存的选择
+    const savedChoice = localStorage.getItem('preferredVersion');
+    if (savedChoice) {
+      // 直接跳转到保存的版本
+      const targetFile = savedChoice === 'simple' ? 'index_simple.html' : 'index.html';
+      window.location.href = targetFile;
+    }
+
+    // 版本选择函数
+    function selectVersion(version) {
+      const remember = document.getElementById('rememberChoice').checked;
+
+      // 保存用户选择
+      if (remember) {
+        localStorage.setItem('preferredVersion', version);
+        console.log('已保存版本选择:', version);
+      }
+
+      // 跳转到对应版本
+      const targetFile = version === 'simple' ? 'index_simple.html' : 'index.html';
+      window.location.href = targetFile;
+    }
+
+    // 添加键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '1' || e.key === 's') {
+        selectVersion('simple');
+      } else if (e.key === '2' || e.key === 'f') {
+        selectVersion('full');
+      }
+    });
+
+    // 页面加载动画
+    document.addEventListener('DOMContentLoaded', () => {
+      document.body.style.opacity = '0';
+      setTimeout(() => {
+        document.body.style.transition = 'opacity 0.5s ease';
+        document.body.style.opacity = '1';
+      }, 100);
+    });
+  </script>
+</body>
+</html>

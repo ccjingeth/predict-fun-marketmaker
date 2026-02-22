@@ -1920,6 +1920,219 @@ DEPENDENCY_CONSTRAINTS_PATH=data/dependency-constraints.json
   }
 }
 
+// 一键最佳实践配置（针对积分优化）
+async function applyBestPractice() {
+  const editor = document.getElementById('envEditor');
+  if (!editor) {
+    pushLog({ type: 'system', level: 'stderr', message: '错误：找不到环境变量编辑器' });
+    return;
+  }
+
+  // 检测当前平台（默认Predict.fun）
+  const currentText = editor.value || '';
+  const isProbable = /MM_VENUE\s*=\s*probable/i.test(currentText);
+  const isPredict = /MM_VENUE\s*=\s*predict/i.test(currentText) || !isProbable;
+
+  let template = '';
+  let modeName = '';
+
+  if (isPredict) {
+    // Predict.fun 积分优化配置
+    modeName = 'Predict.fun 积分优化模式';
+    template = `# 🎯 一键最佳实践 - Predict.fun 积分优化
+# 自动生成时间: ${new Date().toLocaleString('zh-CN')}
+
+# =============== 必填配置（3项）==============
+API_KEY=你的API_Key_这里                  # ⭐ 必填：从Discord申请
+PRIVATE_KEY=你的钱包私钥_0x开头           # ⭐ 必填：新钱包私钥
+ENABLE_TRADING=false                      # ⭐ 必填：false=模拟，true=实盘
+
+# =============== 积分优化配置（自动）============
+# 🔵 积分规则适配（自动满足积分要求）
+MM_VENUE=predict                       # 固定平台
+ORDER_SIZE=110                         # ✅ >100股的min_shares要求
+SPREAD=0.055                            # ✅ 5.5¢ <6¢的max_spread限制
+MIN_SPREAD=0.05                         # 最小5¢
+MAX_SPREAD=0.08                         # 最大8¢（安全边际）
+
+# 📊 实时数据（必需）
+PREDICT_WS_ENABLED=true                  # ⭐ WebSocket实时数据
+PREDICT_WS_URL=wss://stream.predict.fun
+
+# 🎯 做市参数优化
+MM_LAYERS=3                             # 挂3层订单
+MM_LAYER_STEP_BPS=30                    # 层间距3¢
+MM_QUOTE_INTERVAL_MS=5000                # 5秒更新一次
+MAX_POSITION=100                         # 最大持仓100 USDT
+
+# 🛡️ 风险控制
+MAX_DAILY_LOSS=50                       # 每日最大亏损50 USDT
+CANCEL_THRESHOLD=0.05                   # 5%价格变动取消
+REPRICE_THRESHOLD=0.003                 # 0.3%价格变动重新报价
+
+# 📈 自适应优化
+MM_ADAPTIVE_PARAMS=true                  # 自适应市场
+MM_WS_HEALTH_EMERGENCY_CANCEL_ALL=true  # 紧急全部撤单保护
+
+# ===========================================
+# 📋 小白提示：
+# 1. ORDER_SIZE=110 确保满足 min_shares=100
+# 2. SPREAD=0.055 确保不超过 max_spread=6¢
+# 3. 启用 PREDICT_WS_ENABLED 获取实时数据
+# 4. 先用模拟模式测试，确认无误后设置 ENABLE_TRADING=true
+# ===========================================
+`;
+  } else {
+    // Probable.markets 利润优化配置
+    modeName = 'Probable.markets 利润优化模式';
+    template = `# 🚀 一键最佳实践 - Probable.markets 利润优化
+# 自动生成时间: ${new Date().toLocaleString('zh-CN')}
+
+# =============== 必填配置（3项）==============
+PROBABLE_PRIVATE_KEY=你的钱包私钥_0x开头  # ⭐ 必填：Probable专用私钥
+ENABLE_TRADING=false                        # ⭐ 必填：false=模拟，true=实盘
+
+# =============== 利润优化配置（自动）============
+# 🔵 0%手续费优势（可更激进）
+MM_VENUE=probable                        # 固定平台
+ORDER_SIZE=100                           # 基础订单大小
+SPREAD=0.01                              # ✅ 1% 超窄价差（无手续费！）
+MIN_SPREAD=0.005                         # 最小0.5%
+MAX_SPREAD=0.03                          # 最大3%
+
+# 📊 实时数据（必需）
+PROBABLE_WS_ENABLED=true                 # ⭐ WebSocket实时数据
+
+# 🚀 激进配置（0%手续费）
+MM_LAYERS=5                             # 挂5层订单
+MM_LAYER_STEP_BPS=20                    # 层间距2¢
+MM_QUOTE_INTERVAL_MS=2000                # 2秒更新（更快）
+
+# 🎯 做市参数
+MAX_POSITION=100                         # 最大持仓100 USDT
+
+# 🛡️ 风险控制
+MAX_DAILY_LOSS=50                       # 每日最大亏损50 USDT
+CANCEL_THRESHOLD=0.05                   # 5%价格变动取消
+
+# ===========================================
+# 📋 小白提示：
+# 1. Probable.markets 0% 手续费，可用更窄价差
+# 2. 更多层数 + 更快更新 = 更多成交机会
+# 3. 适合追求高收益、高频交易
+# 4. 先模拟测试，确认无误后再实盘
+# ===========================================
+`;
+  }
+
+  editor.value = template;
+  detectTradingMode(template);
+  syncTogglesFromEnv(template);
+  pushLog({ type: 'system', level: 'system', message: `✅ 已应用${modeName}最佳实践配置` });
+  checkConfigStatus();
+}
+
+async function getSmartSuggestions() {
+  const suggestionsList = document.getElementById('smartSuggestionsList');
+  if (!suggestionsList) return;
+
+  suggestionsList.style.display = 'block';
+  suggestionsList.innerHTML = '<div class="health-item">分析中...</div>';
+
+  try {
+    const envText = document.getElementById('envEditor')?.value || '';
+    const suggestions: string[] = [];
+
+    // 检查API_KEY
+    if (!/API_KEY\s*=\s*[^ \s]/.test(envText)) {
+      suggestions.push('❌ 缺少 API_KEY - 请先填写Predict.fun API Key');
+    } else {
+      suggestions.push('✅ API_KEY 已配置');
+    }
+
+    // 检查PRIVATE_KEY
+    if (!/PRIVATE_KEY\s*=\s*0x[a-fA-F0-9]/i.test(envText)) {
+      suggestions.push('❌ 缺少 PRIVATE_KEY - 请填写钱包私钥（格式：0x...）');
+    } else {
+      suggestions.push('✅ PRIVATE_KEY 已配置');
+    }
+
+    // 检查交易模式
+    const isEnabledTrading = /ENABLE_TRADING\s*=\s*true/i.test(envText);
+    if (!isEnabledTrading) {
+      suggestions.push('💡 当前为模拟模式（ENABLE_TRADING=false）');
+      suggestions.push('💡 测试通过后设置为 true 即可实盘交易');
+    } else {
+      suggestions.push('⚠️ 当前为实盘模式，请注意风险！');
+    }
+
+    // 检查积分规则配置
+    const orderSize = /ORDER_SIZE\s*=\s*(\d+)/.exec(envText)?.[1];
+    const spread = /SPREAD\s*=\s*([\d.]+)/.exec(envText)?.[1];
+
+    if (orderSize && spread) {
+      const size = Number(orderSize);
+      const spreadCents = Number(spread) * 100;
+
+      if (size >= 100) {
+        suggestions.push(`✅ ORDER_SIZE=${size} 满足积分min_shares要求`);
+      } else {
+        suggestions.push(`⚠️ ORDER_SIZE=${size} < 100，不满足积分要求，建议增加到110`);
+      }
+
+      if (spreadCents <= 6) {
+        suggestions.push(`✅ SPREAD=${spreadCents.toFixed(1)}¢ 符合积分max_spread限制`);
+      } else {
+        suggestions.push(`⚠️ SPREAD=${spreadCents.toFixed(1)}¢ 超过积分max_spread限制（6¢）`);
+      }
+    }
+
+    // 检查WebSocket
+    const wsEnabled = /PREDICT_WS_ENABLED\s*=\s*true/i.test(envText);
+    if (wsEnabled) {
+      suggestions.push('✅ WebSocket已启用 - 实时数据获取');
+    } else {
+      suggestions.push('💡 建议启用 PREDICT_WS_ENABLED=true 获取实时数据');
+    }
+
+    // 平台建议
+    const venue = /MM_VENUE\s*=\s*(\w+)/i.exec(envText)?.[1];
+    if (venue) {
+      if (venue.toLowerCase() === 'predict') {
+        suggestions.push('💡 当前平台：Predict.fun（有积分）');
+        suggestions.push('💡 建议：ORDER_SIZE≥110, SPREAD≤5.5¢');
+      } else if (venue.toLowerCase() === 'probable') {
+        suggestions.push('💡 当前平台：Probable.markets（0%手续费）');
+        suggestions.push('💡 建议：SPREAD=0.01（1%），可用更窄价差');
+      }
+    }
+
+    // 风险提示
+    if (!/MAX_DAILY_LOSS\s*=/i.test(envText)) {
+      suggestions.push('💡 建议添加 MAX_DAILY_LOSS=50 限制每日亏损');
+    }
+
+    if (!/MAX_POSITION\s*=/i.test(envText)) {
+      suggestions.push('💡 建议添加 MAX_POSITION=100 限制最大持仓');
+    }
+
+    if (suggestions.length === 0) {
+      suggestions.push('✅ 配置完美！没有发现需要优化的地方');
+    }
+
+    suggestionsList.innerHTML = suggestions.map(s => {
+      const className = s.startsWith('❌') ? 'error' : s.startsWith('⚠️') ? 'warn' : 'ok';
+      return `<div class="health-item ${className}">${s}</div>`;
+    }).join('');
+
+    pushLog({ type: 'system', level: 'system', message: `✅ 已生成${suggestions.length}条智能建议` });
+
+  } catch (error) {
+    console.error('获取建议失败:', error);
+    suggestionsList.innerHTML = '<div class="health-item error">获取建议失败</div>';
+  }
+}
+
 async function loadMapping() {
   const text = await window.predictBot.readMapping();
   mappingEditor.value = text;
@@ -5011,6 +5224,14 @@ async function loadMmMetrics() {
     const halted = data.tradingHalted ? '已熔断' : emergencyActive ? '急撤冷却中' : '运行中';
     setMetricText(mmTradingStatus, halted);
     setMetricText(mmPnL, data.sessionPnL !== undefined ? data.sessionPnL.toFixed(2) : '--');
+    // 更新PnL图表
+    if (typeof updatePnLChart === 'function' && data.sessionPnL !== undefined) {
+      try {
+        updatePnLChart(data.sessionPnL);
+      } catch (e) {
+        // 忽略图表更新错误
+      }
+    }
     setMetricText(mmOpenOrders, `${data.openOrders ?? '--'}`);
     setMetricText(mmPositions, `${data.positions ?? '--'}`);
     if (mmWsHealth) {
@@ -5249,6 +5470,40 @@ async function loadMmMetrics() {
   }
 }
 
+async function loadPointsStats() {
+  if (!window.predictBot.readPointsStats) return;
+  try {
+    const raw = await window.predictBot.readPointsStats();
+    if (!raw) {
+      return;
+    }
+    const data = JSON.parse(raw);
+
+    // 更新积分市场数量
+    const mmPointsMarkets = document.getElementById('mmPointsMarkets');
+    if (mmPointsMarkets) {
+      mmPointsMarkets.textContent = `${data.pointsActiveMarkets}/${data.totalMarkets}`;
+    }
+
+    // 更新积分效率
+    const mmPointsEfficiency = document.getElementById('mmPointsEfficiency');
+    const mmPointsEfficiencyHint = document.getElementById('mmPointsEfficiencyHint');
+    if (mmPointsEfficiency) {
+      mmPointsEfficiency.textContent = `${data.efficiency}%`;
+    }
+    if (mmPointsEfficiencyHint) {
+      mmPointsEfficiencyHint.textContent = `${data.pointsActiveMarkets} 个市场激活积分`;
+    }
+
+    // 如果有错误，记录日志
+    if (data.error) {
+      pushLog({ type: 'system', level: 'stderr', message: `积分统计错误: ${data.error}` });
+    }
+  } catch (error) {
+    // 静默失败，不影响其他功能
+  }
+}
+
 function activateTab(name) {
   tabButtons.forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === name);
@@ -5302,6 +5557,7 @@ async function init() {
   bindLogFilterPresets();
   await loadMetrics();
   await loadMmMetrics();
+  await loadPointsStats();
   await loadArbSnapshot();
   await loadArbCommandStatus();
   await runDiagnostics();
@@ -5409,6 +5665,119 @@ function setupEventListeners() {
     });
   } else {
     console.error('未找到 loadFullTemplate 按钮');
+  }
+
+  // 一键最佳实践按钮
+  const applyBestBtn = document.getElementById('applyBestPractice');
+  if (applyBestBtn) {
+    console.log('找到一键最佳实践按钮');
+    applyBestBtn.addEventListener('click', () => {
+      try {
+        console.log('一键最佳实践按钮被点击');
+        applyBestPractice();
+      } catch (error) {
+        console.error('应用最佳实践失败:', error);
+        pushLog({ type: 'system', level: 'stderr', message: '❌ 应用最佳实践失败: ' + error.message });
+        alert('应用最佳实践失败: ' + error.message);
+      }
+    });
+  } else {
+    console.error('未找到 applyBestPractice 按钮');
+  }
+
+  // 智能建议按钮
+  const suggestionsBtn = document.getElementById('getSmartSuggestions');
+  if (suggestionsBtn) {
+    console.log('找到智能建议按钮');
+    suggestionsBtn.addEventListener('click', () => {
+      try {
+        console.log('智能建议按钮被点击');
+        getSmartSuggestions();
+      } catch (error) {
+        console.error('获取智能建议失败:', error);
+        pushLog({ type: 'system', level: 'stderr', message: '❌ 获取智能建议失败: ' + error.message });
+        alert('获取智能建议失败: ' + error.message);
+      }
+    });
+  } else {
+    console.error('未找到 getSmartSuggestions 按钮');
+  }
+
+  // 版本切换按钮
+  const switchToSimpleBtn = document.getElementById('switchToSimple');
+  if (switchToSimpleBtn) {
+    console.log('找到切换到简化版按钮');
+    switchToSimpleBtn.addEventListener('click', () => {
+      pushLog({ type: 'system', level: 'system', message: '🎯 正在切换到简化版...' });
+
+      // 检查做市商是否在运行
+      const status = window.electron?.ipcRenderer?.sendSync('status') ||
+                     { marketMaker: false, arbitrage: false };
+
+      let message = '切换到简化版？\n\n';
+      message += '简化版特点：\n';
+      message += '• 专注积分获取，界面简洁\n';
+      message += '• 适合小白用户\n';
+      message += '• 一键最佳实践自动优化\n\n';
+
+      if (status.marketMaker) {
+        message += '✅ 做市商会继续运行\n';
+        message += '✅ 配置和状态保持不变\n\n';
+      }
+
+      message += '确认切换？';
+
+      if (confirm(message)) {
+        pushLog({ type: 'system', level: 'system', message: '✅ 切换到简化版' });
+        window.location.href = 'index_simple.html';
+      } else {
+        pushLog({ type: 'system', level: 'system', message: '❌ 取消切换' });
+      }
+    });
+  }
+
+  const switchToFullBtn = document.getElementById('switchToFull');
+  if (switchToFullBtn) {
+    console.log('找到切换到完整版按钮');
+    switchToFullBtn.addEventListener('click', () => {
+      pushLog({ type: 'system', level: 'system', message: '🔧 正在切换到完整版...' });
+
+      // 检查做市商是否在运行
+      const status = window.electron?.ipcRenderer?.sendSync('status') ||
+                     { marketMaker: false, arbitrage: false };
+
+      let message = '切换到完整版？\n\n';
+      message += '完整版特点：\n';
+      message += '• 包含套利机器人功能\n';
+      message += '• 30+个高级配置选项\n';
+      message += '• 详细的执行指标\n\n';
+
+      if (status.marketMaker) {
+        message += '✅ 做市商会继续运行\n';
+        message += '✅ 配置和状态保持不变\n\n';
+      }
+
+      message += '确认切换？';
+
+      if (confirm(message)) {
+        pushLog({ type: 'system', level: 'system', message: '✅ 切换到完整版' });
+        window.location.href = 'index.html';
+      } else {
+        pushLog({ type: 'system', level: 'system', message: '❌ 取消切换' });
+      }
+    });
+  }
+
+  // 重置版本选择按钮
+  const resetVersionChoiceBtn = document.getElementById('resetVersionChoice');
+  if (resetVersionChoiceBtn) {
+    resetVersionChoiceBtn.addEventListener('click', () => {
+      if (confirm('清除版本选择记忆？\n\n下次启动时将显示版本选择页面。')) {
+        localStorage.removeItem('preferredVersion');
+        pushLog({ type: 'system', level: 'system', message: '✅ 已清除版本选择记忆' });
+        alert('✅ 已清除！下次启动将显示版本选择页面。\n\n您也可以点击"切换版本"按钮直接切换到另一个版本。');
+      }
+    });
   }
 
   const reloadMappingBtn = document.getElementById('reloadMapping');
@@ -5714,6 +6083,7 @@ init().catch((err) => {
 setInterval(() => {
   loadMetrics().catch(() => {});
   loadMmMetrics().catch(() => {});
+  loadPointsStats().catch(() => {});
   loadArbSnapshot().catch(() => {});
   loadArbCommandStatus().catch(() => {});
 }, 5000);

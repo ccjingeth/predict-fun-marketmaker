@@ -14,15 +14,7 @@
           <h1>做市与套利操作台</h1>
           <p>本地运行，控制做市商与套利机器人，查看日志与实时状态。</p>
         </div>
-        <div style="display: flex; gap: 12px; align-items: center;">
-          <button class="btn ghost" id="switchToSimple" style="font-size: 13px; padding: 8px 16px; border: 1px solid rgba(99, 102, 241, 0.3); background: rgba(99, 102, 241, 0.1);">
-            🎯 简化版
-          </button>
-          <button class="btn ghost" id="resetVersionChoice" style="font-size: 11px; padding: 6px 12px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.05); opacity: 0.7;" title="清除版本选择记忆">
-            🔄 重置
-          </button>
-          <div class="status-pill" id="globalStatus">未连接</div>
-        </div>
+        <div class="status-pill" id="globalStatus">未连接</div>
       </header>
 
       <main class="grid">

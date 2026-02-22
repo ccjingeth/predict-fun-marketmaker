@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Predict.fun 积分做市控制台</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Predict.fun 积分做市控制台</div>
+          <h1>积分获取专用</h1>
+          <p>专注于积分优化，自动满足 min_shares 和 max_spread 要求</p>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <button class="btn ghost" id="switchToFull" style="font-size: 13px; padding: 8px 16px; border: 1px solid rgba(99, 102, 241, 0.3); background: rgba(99, 102, 241, 0.1);">
+            🔧 完整版
+          </button>
+          <button class="btn ghost" id="resetVersionChoice" style="font-size: 11px; padding: 6px 12px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.05); opacity: 0.7;" title="清除版本选择记忆">
+            🔄 重置
+          </button>
+          <div class="status-pill" id="globalStatus">未连接</div>
+        </div>
+      </header>
+
+      <main class="grid">
+        <!-- 左侧：运行控制 -->
+        <section class="card control-card">
+          <div class="card-header">
+            <h2>运行控制</h2>
+            <span class="badge" id="tradingMode">Dry Run</span>
+          </div>
+
+          <!-- 做市商控制 -->
+          <div class="control-block">
+            <h3>做市商</h3>
+            <div class="button-row">
+              <button class="btn primary" id="startMM">启动做市商</button>
+              <button class="btn ghost" id="stopMM">停止</button>
+            </div>
+            <div class="status-row">
+              <span>状态</span>
+              <span id="statusMM" class="status">未运行</span>
+            </div>
+          </div>
+
+          <!-- 快捷操作 -->
+          <div class="control-block">
+            <h3>快捷操作</h3>
+            <div class="button-row">
+              <button class="btn subtle" id="setDry">模拟模式</button>
+              <button class="btn subtle" id="setLive">实盘模式</button>
+            </div>
+            <div class="button-row">
+              <button class="btn info" id="getSmartSuggestions">💡 智能建议</button>
+              <button class="btn success" id="applyBestPractice">✨ 一键最佳实践</button>
+            </div>
+            <p class="hint">模拟模式不会真实交易，用于测试配置</p>
+            <div class="health-list" id="smartSuggestionsList" style="display: none;">
+              <div class="health-item ok">点击"智能建议"获取优化建议</div>
+            </div>
+          </div>
+
+          <!-- 积分状态 -->
+          <div class="control-block">
+            <h3>积分状态</h3>
+            <div class="health-list" id="pointsStatusList">
+              <div class="health-item">等待启动...</div>
+            </div>
+          </div>
+
+          <!-- 简化的策略开关 -->
+          <div class="control-block">
+            <h3>核心设置</h3>
+            <div class="toggle-grid">
+              <label class="toggle"><input type="checkbox" data-env="ENABLE_TRADING" />实盘交易</label>
+              <label class="toggle"><input type="checkbox" data-env="AUTO_CONFIRM" />自动确认</label>
+              <label class="toggle"><input type="checkbox" data-env="PREDICT_WS_ENABLED" />WebSocket实时数据</label>
+            </div>
+          </div>
+        </section>
+
+        <!-- 中间：运行日志 -->
+        <section class="card log-card">
+          <div class="card-header">
+            <h2>运行日志</h2>
+            <div class="filters">
+              <select id="logFilter">
+                <option value="all">全部日志</option>
+                <option value="mm">做市商</option>
+                <option value="points">积分相关</option>
+              </select>
+              <input id="logKeyword" type="text" placeholder="搜索关键词" />
+              <button class="btn ghost" id="clearLog">清空</button>
+            </div>
+          </div>
+          <div id="logOutput" class="log-output"></div>
+        </section>
+
+        <!-- 右侧：配置与指标 -->
+        <section class="card config-card">
+          <div class="card-header">
+            <h2>配置中心</h2>
+          </div>
+
+          <!-- 配置状态 -->
+          <div class="health-subtitle">配置检查</div>
+          <div class="health-list" id="configStatusList">
+            <div class="health-item warn">正在检查配置...</div>
+          </div>
+
+          <!-- 配置按钮 -->
+          <div class="button-row">
+            <button class="btn primary" id="saveEnv">保存配置</button>
+            <button class="btn ghost" id="reloadEnv">重新加载</button>
+          </div>
+
+          <!-- 环境变量编辑器 -->
+          <textarea id="envEditor" spellcheck="false"></textarea>
+
+          <!-- 配置提示 -->
+          <div class="template-hint">
+            <strong>积分优化要点：</strong><br>
+            • ORDER_SIZE ≥ 100（满足 min_shares）<br>
+            • SPREAD ≤ 0.06（满足 max_spread 6¢）<br>
+            • 启用 PREDICT_WS_ENABLED 获取实时数据
+          </div>
+        </section>
+
+        <!-- 做市指标 -->
+        <section class="card metrics-card">
+          <div class="card-header">
+            <h2>做市指标</h2>
+            <button class="btn ghost" id="refreshMetrics">刷新</button>
+          </div>
+          <div class="metrics-grid">
+            <div class="metric">
+              <span class="metric-label">活跃市场</span>
+              <span class="metric-value" id="metricActiveMarkets">--</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">订单总数</span>
+              <span class="metric-value" id="metricTotalOrders">--</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">符合积分规则</span>
+              <span class="metric-value" id="metricPointsEligible">--</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">积分效率</span>
+              <span class="metric-value" id="metricPointsEfficiency">--</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">总盈亏</span>
+              <span class="metric-value" id="metricTotalPnL">--</span>
+            </div>
+            <div class="metric">
+              <span class="metric-label">成交次数</span>
+              <span class="metric-value" id="metricFills">--</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- 系统体检 -->
+        <section class="card health-card">
+          <div class="card-header">
+            <h2>系统体检</h2>
+            <button class="btn ghost" id="refreshHealth">刷新</button>
+          </div>
+          <div class="health-list" id="healthList">
+            <div class="health-item">等待检查...</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="renderer.js"></script>
+    <script src="charts.js"></script>
+  </body>
+</html>

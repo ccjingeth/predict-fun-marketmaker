@@ -1,12 +1,18 @@
 {
   "name": "predict-fun-desktop",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "electron/main.mjs",
   "scripts": {
     "dev": "electron .",
     "start": "electron .",
+    "start:simple": "electron . --simple",
+    "start:full": "electron . --full",
+    "start:launcher": "electron . --launcher",
+    "dev:simple": "electron . --simple",
+    "dev:full": "electron . --full",
+    "dev:launcher": "electron . --launcher",
     "build:bot": "npm --prefix .. run build",
     "pack": "npm run build:bot && electron-builder",
     "dist": "npm run build:bot && electron-builder --publish never"

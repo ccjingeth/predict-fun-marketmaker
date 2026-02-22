@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('predictBot', {
   writeDependency: (text) => ipcRenderer.invoke('write-dependency', text),
   readMetrics: () => ipcRenderer.invoke('read-metrics'),
   readMmMetrics: () => ipcRenderer.invoke('read-mm-metrics'),
+  readPointsStats: () => ipcRenderer.invoke('read-points-stats'),
   readArbOpportunities: () => ipcRenderer.invoke('read-arb-opportunities'),
   readArbCommand: () => ipcRenderer.invoke('read-arb-command'),
   executeArbOpportunity: (payload) => ipcRenderer.invoke('execute-arb-opportunity', payload),
