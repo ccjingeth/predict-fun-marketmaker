@@ -17,6 +17,8 @@ import path from 'node:path';
 import { pointsManager } from './mm/points/points-manager.js';
 import { spreadCache } from './mm/cache/spread-cache.js';
 import { pointsOptimizerEngine, type PointsMarketScore } from './mm/points/points-optimizer.js';
+import { pointsSystemIntegration } from './mm/points/points-integration.js';
+import { pointsOptimizerEngineV2, type OptimizedOrderParams } from './mm/points/points-optimizer-v2.js';
 
 interface QuotePrices {
   bidPrice: number;
@@ -4953,41 +4955,67 @@ export class MarketMaker {
     }
 
     try {
-      // 应用积分优化调整
+      // 应用积分优化调整（使用 V2 优化器）
       let adjustedPrice = price;
       let adjustedShares = shares;
       let pointsOptimized = false;
-      let optimizationWarnings: string[] = [];
+      let optimizationInfo: string[] = [];
 
       // 检查是否需要积分优化
       const hasPointsRules = pointsManager.isPointsActive(market);
       const enablePointsOptimization = this.config.mmPointsOptimization !== false; // 默认启用
+      const enableV2Optimizer = this.config.mmPointsV2Optimizer !== false; // 默认启用 V2
 
       if (hasPointsRules && enablePointsOptimization && currentSpread !== undefined) {
         const orderbook = this.pointsOrderbookCache.get(market.token_id);
         if (orderbook) {
-          const adjustment = pointsOptimizerEngine.adjustOrderForPoints(
-            market,
-            currentSpread,
-            shares,
-            orderbook
-          );
+          if (enableV2Optimizer) {
+            // 使用 V2 优化器（极致优化）
+            const optimized: OptimizedOrderParams = pointsOptimizerEngineV2.optimizeOrder(
+              market,
+              price,
+              currentSpread,
+              side,
+              orderbook,
+              shares
+            );
 
-          adjustedShares = adjustment.adjustedSize;
-          optimizationWarnings = adjustment.warnings;
-          pointsOptimized = adjustment.pointsEligible;
+            adjustedPrice = optimized.price;
+            adjustedShares = optimized.shares;
+            pointsOptimized = optimized.overallScore >= 70;
+            optimizationInfo = optimized.reasons;
 
-          // 调整价格以保持价差在允许范围内
-          if (side === 'BUY' && adjustment.adjustedSpread !== currentSpread) {
-            const spreadDelta = adjustment.adjustedSpread - currentSpread;
-            adjustedPrice = Math.max(0.0001, price - spreadDelta / 2);
-          } else if (side === 'SELL' && adjustment.adjustedSpread !== currentSpread) {
-            const spreadDelta = adjustment.adjustedSpread - currentSpread;
-            adjustedPrice = Math.min(0.9999, price + spreadDelta / 2);
-          }
+            // 记录详细优化信息
+            if (optimized.overallScore >= 80) {
+              console.log(`🚀 Elite optimization for ${market.token_id.slice(0, 8)}: score=${optimized.overallScore.toFixed(0)} points=${optimized.expectedPoints.toFixed(0)}`);
+            } else if (optimized.reasons.length > 0) {
+              console.log(`🎯 V2 optimization for ${market.token_id.slice(0, 8)}: ${optimized.reasons.slice(0, 2).join(', ')}`);
+            }
+          } else {
+            // 使用 V1 优化器（兼容模式）
+            const adjustment = pointsOptimizerEngine.adjustOrderForPoints(
+              market,
+              currentSpread,
+              shares,
+              orderbook
+            );
 
-          if (optimizationWarnings.length > 0) {
-            console.log(`🎯 Points optimization for ${market.token_id.slice(0, 8)}: ${optimizationWarnings.join(', ')}`);
+            adjustedShares = adjustment.adjustedSize;
+            optimizationInfo = adjustment.warnings;
+            pointsOptimized = adjustment.pointsEligible;
+
+            // 调整价格以保持价差在允许范围内
+            if (side === 'BUY' && adjustment.adjustedSpread !== currentSpread) {
+              const spreadDelta = adjustment.adjustedSpread - currentSpread;
+              adjustedPrice = Math.max(0.0001, price - spreadDelta / 2);
+            } else if (side === 'SELL' && adjustment.adjustedSpread !== currentSpread) {
+              const spreadDelta = adjustment.adjustedSpread - currentSpread;
+              adjustedPrice = Math.min(0.9999, price + spreadDelta / 2);
+            }
+
+            if (optimizationInfo.length > 0) {
+              console.log(`🎯 Points optimization for ${market.token_id.slice(0, 8)}: ${optimizationInfo.join(', ')}`);
+            }
           }
         }
       }
@@ -5021,15 +5049,19 @@ export class MarketMaker {
         timestamp: Date.now(),
       });
 
-      // 记录积分统计
+      // 记录积分统计到集成系统
       if (currentSpread !== undefined) {
         const check = pointsManager.checkOrderEligibility(market, adjustedShares, currentSpread);
-        pointsManager.recordOrder(market, adjustedShares, currentSpread, check.isEligible);
+        const orderbook = this.pointsOrderbookCache.get(market.token_id);
+
+        // 使用集成系统记录
+        pointsSystemIntegration.recordOrder(market, adjustedShares, currentSpread, check.isEligible, orderbook);
 
         // 记录积分优化事件
         if (pointsOptimized || hasPointsRules) {
+          const optInfo = optimizationInfo.length > 0 ? optimizationInfo.join('; ') : 'standard';
           this.recordMmEvent('POINTS_ORDER',
-            `side=${side} price=${adjustedPrice.toFixed(4)} shares=${adjustedShares} eligible=${check.isEligible} optimized=${pointsOptimized}`,
+            `side=${side} price=${adjustedPrice.toFixed(4)} shares=${adjustedShares} eligible=${check.isEligible} optimized=${pointsOptimized} info=${optInfo}`,
             market.token_id);
         }
       }

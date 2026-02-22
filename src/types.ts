@@ -472,6 +472,7 @@ export interface Config {
   mmPointsMinMultiplier?: number;
   mmPointsPrioritize?: boolean; // 是否优先做积分市场
   mmPointsOptimization?: boolean; // 是否启用积分优化
+  mmPointsV2Optimizer?: boolean; // 是否启用 V2 优化器（极致优化）
   mmPointsAssumeActive?: boolean;
   mmPointsMinShares?: number;
   mmPointsMaxSpreadCents?: number;
