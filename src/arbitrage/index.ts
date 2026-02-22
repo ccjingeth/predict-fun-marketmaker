@@ -23,6 +23,20 @@ export { ExecutionEngine, getExecutionEngine } from './execution-engine.js';
 export { PerformanceDashboard, getPerformanceDashboard } from './performance-dashboard.js';
 export { MLPredictor, getMLPredictor } from './ml-predictor.js';
 
+// P2 增强系统
+export {
+  CacheManager,
+  getOrderbookCache,
+  getMarketDataCache,
+  getComputationCache,
+  getArbitrageCache,
+  CacheKeyGenerator,
+  CacheWarmer,
+  printAllCacheStats,
+} from './cache-manager.js';
+export { BatchOrderRouter, getBatchRouter } from './batch-router.js';
+export { BacktestEngine, PerformanceAnalyzer, RiskAnalyzer } from './advanced-analytics.js';
+
 export type {
   ArbitrageType,
   ArbitrageOpportunity,
@@ -52,4 +66,15 @@ export type {
 export type {
   HistoryDataPoint, PredictionResult, ArbitrageSuccessPrediction, MLConfig
 } from './ml-predictor.js';
+
+// P2 增强类型
+export type {
+  CacheEntry, CacheStats, CacheConfig
+} from './cache-manager.js';
+export type {
+  BatchExecutionConfig, BatchExecutionResult, OpportunityGroup
+} from './batch-router.js';
+export type {
+  BacktestResult, BacktestTrade, SimulationConfig, PerformanceMetrics as PerfMetrics
+} from './advanced-analytics.js';
 
