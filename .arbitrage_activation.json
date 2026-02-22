@@ -1,0 +1,13 @@
+{
+  "activated": true,
+  "licenseKey": "A7E5-2F9C-725E-1899-9F93-D64C-0AC4-DBF7",
+  "userId": "test_user",
+  "userName": "测试用户",
+  "expireDate": 1803314467169,
+  "machineId": "31402d58b5ea7e95",
+  "features": [
+    "arbitrage",
+    "auto_trading"
+  ],
+  "activatedAt": 1771778467169
+}

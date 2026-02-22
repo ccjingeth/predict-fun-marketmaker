@@ -4,6 +4,9 @@
  */
 
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 /**
  * 激活码信息
@@ -41,13 +44,14 @@ export class ActivationManager {
    * 生成机器ID（基于硬件信息）
    */
   private static generateMachineId(): string {
-    const os = require('os');
     const networkInterfaces = os.networkInterfaces();
 
     // 获取第一个 MAC 地址
     let mac = 'unknown';
     for (const name of Object.keys(networkInterfaces)) {
       const nets = networkInterfaces[name];
+      if (!nets) continue;
+
       for (const net of nets) {
         if (net.mac && mac === 'unknown') {
           mac = net.mac;
@@ -271,9 +275,6 @@ export class ActivationManager {
    * 保存激活信息
    */
   private static saveActivationInfo(info: ActivationInfo): void {
-    const fs = require('fs');
-    const path = require('path');
-
     try {
       const filePath = path.join(process.cwd(), this.ACTIVATION_FILE);
       fs.writeFileSync(filePath, JSON.stringify(info, null, 2), 'utf-8');
@@ -286,9 +287,6 @@ export class ActivationManager {
    * 加载激活信息
    */
   private static loadActivationInfo(): ActivationInfo | null {
-    const fs = require('fs');
-    const path = require('path');
-
     try {
       const filePath = path.join(process.cwd(), this.ACTIVATION_FILE);
       const data = fs.readFileSync(filePath, 'utf-8');
@@ -302,9 +300,6 @@ export class ActivationManager {
    * 清除激活信息（用于测试或重新激活）
    */
   static clearActivation(): void {
-    const fs = require('fs');
-    const path = require('path');
-
     try {
       const filePath = path.join(process.cwd(), this.ACTIVATION_FILE);
       if (fs.existsSync(filePath)) {
