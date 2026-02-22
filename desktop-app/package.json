@@ -15,7 +15,9 @@
     "dev:launcher": "electron . --launcher",
     "build:bot": "npm --prefix .. run build",
     "pack": "npm run build:bot && electron-builder",
-    "dist": "npm run build:bot && electron-builder --publish never"
+    "dist": "npm run build:bot && electron-builder --publish never",
+    "build:release": "./scripts/build-release.sh",
+    "upload:release": "./scripts/upload-release.sh"
   },
   "devDependencies": {
     "electron": "^30.0.0",
@@ -55,10 +57,90 @@
       {
         "from": "../docs",
         "to": "bot/docs"
+      },
+      {
+        "from": "../ACTIVATION_README.md",
+        "to": "bot/ACTIVATION_README.md"
       }
     ],
     "directories": {
       "output": "dist"
-    }
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "category": "public.app-category.finance",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        },
+        {
+          "target": "tar.gz",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "Finance",
+      "maintainer": "Predict.fun"
+    },
+    "afterSign": "scripts/notarize.js"
   }
 }
