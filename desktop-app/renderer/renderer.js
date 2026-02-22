@@ -6120,14 +6120,58 @@ function setupEventListeners() {
 
   const startArbBtn = document.getElementById('startArb');
   if (startArbBtn) {
-    startArbBtn.addEventListener('click', (e) => {
+    startArbBtn.addEventListener('click', async (e) => {
       const btn = e.target;
       btn.textContent = '启动中...';
       btn.disabled = true;
-      startBot('arb').finally(() => {
+
+      try {
+        // 🔑 检查激活码
+        const activation = await checkArbitrageActivation();
+        if (!activation.valid) {
+          pushLog({
+            type: 'system',
+            level: 'stderr',
+            message: `⚠️ 套利模块需要激活码: ${activation.message}`,
+            timestamp: Date.now()
+          });
+          pushLog({
+            type: 'system',
+            level: 'stderr',
+            message: '💡 在上方激活码输入框中输入激活码，或运行: npm run activate',
+            timestamp: Date.now()
+          });
+
+          // 更新UI显示
+          const activationStatus = document.getElementById('activationStatus');
+          const activationMessage = document.getElementById('activationMessage');
+          if (activationMessage) {
+            activationMessage.textContent = `❌ ${activation.message}`;
+            activationMessage.style.display = 'block';
+          }
+          if (activationStatus) {
+            activationStatus.style.color = '#f87171';
+            activationStatus.textContent = '❌ 需要激活';
+          }
+          return;
+        }
+
+        // 显示激活信息
+        if (activation.remainingDays !== undefined) {
+          pushLog({
+            type: 'system',
+            level: 'stdout',
+            message: `✅ 套利模块已激活 (剩余 ${activation.remainingDays} 天)`,
+            timestamp: Date.now()
+          });
+        }
+
+        // 启动套利机器人
+        await startBot('arb');
+      } finally {
         btn.textContent = '启动套利';
         btn.disabled = false;
-      });
+      }
     });
   }
 
