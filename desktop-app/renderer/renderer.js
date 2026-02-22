@@ -1,3 +1,20 @@
+// 日志工具 - 仅在开发环境输出详细日志
+const isDev = window.location.hostname === 'localhost' || window.location.protocol === 'file:';
+const logger = {
+  debug: (...args) => {
+    if (isDev) console.log('[DEBUG]', ...args);
+  },
+  log: (...args) => {
+    if (isDev) console.log(...args);
+  },
+  error: (...args) => {
+    console.error('[ERROR]', ...args);
+  },
+  warn: (...args) => {
+    if (isDev) console.warn('[WARN]', ...args);
+  }
+};
+
 const envEditor = document.getElementById('envEditor');
 const mappingEditor = document.getElementById('mappingEditor');
 const mappingMissingList = document.getElementById('mappingMissingList');
@@ -1940,12 +1957,21 @@ DEPENDENCY_CONSTRAINTS_PATH=data/dependency-constraints.json
 }
 
 // 加载积分优化模板（简化版专用）
-function loadPointsOptimizationTemplate() {
+async function loadPointsOptimizationTemplate() {
+  const btn = document.getElementById('loadPointsTemplate');
+  const originalText = btn ? btn.textContent : '';
+
   try {
+    // 显示加载状态
+    if (btn) {
+      btn.textContent = '加载中...';
+      btn.disabled = true;
+    }
+
     const editor = document.getElementById('envEditor');
     if (!editor) {
       pushLog({ type: 'system', level: 'stderr', message: '错误：找不到环境变量编辑器' });
-      console.error('envEditor 元素未找到');
+      logger.error('envEditor 元素未找到');
       return;
     }
 
@@ -2002,10 +2028,16 @@ MM_ADAPTIVE_PARAMS=true           # 自适应做市
     syncTogglesFromEnv(template);
     pushLog({ type: 'system', level: 'system', message: '✅ 已加载积分优化模板' });
     checkConfigStatus();
-    console.log('积分优化模板加载完成');
+    logger.log('积分优化模板加载完成');
   } catch (error) {
-    console.error('加载模板失败:', error);
+    logger.error('加载模板失败:', error);
     pushLog({ type: 'system', level: 'stderr', message: '加载模板失败: ' + error.message });
+  } finally {
+    // 恢复按钮状态
+    if (btn) {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
   }
 }
 
@@ -6014,11 +6046,16 @@ if (mmVenueSelect) {
   mmVenueSelect.addEventListener('change', applyToggles);
 }
 
+// 环境变量编辑器输入防抖
+let envEditorDebounceTimer;
 envEditor.addEventListener('input', () => {
-  syncTogglesFromEnv(envEditor.value);
-  updateMetricsPaths();
-  updateFixPreview();
-  runPreflightCheck();
+  clearTimeout(envEditorDebounceTimer);
+  envEditorDebounceTimer = setTimeout(() => {
+    syncTogglesFromEnv(envEditor.value);
+    updateMetricsPaths();
+    updateFixPreview();
+    runPreflightCheck();
+  }, 300); // 300ms 防抖
 });
 
 tabButtons.forEach((btn) => {
