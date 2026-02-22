@@ -6,6 +6,7 @@ import { createWalletClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { bsc, bscTestnet } from 'viem/chains';
 import { joinProbablePath, ensureProbableApiBase } from '../external/probable-utils.js';
+import { probablePointsAdapter } from '../mm/points/probable-adapter.js';
 
 interface ProbableConfig {
   marketApiUrl: string;
@@ -161,7 +162,9 @@ export class ProbableAPI implements MakerApi {
         const tokenId = String(tokens[i] || '');
         if (!tokenId) continue;
         const outcome = String(outcomes[i] || '');
-        mapped.push({
+
+        // 为 Probable 市场添加虚拟积分规则
+        const baseMarket: Market = {
           token_id: tokenId,
           question,
           condition_id: eventId,
@@ -170,7 +173,13 @@ export class ProbableAPI implements MakerApi {
           is_neg_risk: false,
           is_yield_bearing: false,
           fee_rate_bps: Number(this.config.feeBps || 0),
-        });
+        };
+
+        // 添加虚拟积分规则
+        const virtualRules = probablePointsAdapter.generateLiquidityRules(baseMarket);
+        baseMarket.liquidity_activation = virtualRules;
+
+        mapped.push(baseMarket);
       }
     }
 
