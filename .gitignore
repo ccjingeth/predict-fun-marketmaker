@@ -7,3 +7,12 @@ dist/
 desktop-app/node_modules/
 desktop-app/dist/
 desktop-app/dist-pack/
+
+# 🔒 私有管理工具（绝对不要上传到公开仓库）
+private/
+*.activation-guide.md
+*.deployment-report.md
+*.quickstart.md
+
+# 激活信息文件（用户本地）
+.arbitrage_activation.json

@@ -17,11 +17,7 @@
     "setup:approvals": "node --import tsx src/setup-approvals.ts",
     "smoke:predict": "node --import tsx scripts/smoke-trade.ts",
     "activate": "node --import tsx scripts/activate.ts",
-    "activate:validate": "node --import tsx scripts/activate.ts validate",
-    "activate:check": "node --import tsx scripts/activate.ts check",
-    "activate:clear": "node --import tsx scripts/activate.ts clear",
-    "activate:generate": "node --import tsx scripts/activate.ts generate",
-    "activate:quick": "node --import tsx scripts/generate-test-key.ts"
+    "activate:check": "node --import tsx scripts/activate.ts check"
   },
   "keywords": [
     "predict",
