@@ -3,7 +3,10 @@
  * 动态阈值系统 - 根据市场状况自动调整
  */
 
-import type { MarketData, OrderBook } from '../external/types.js';
+export interface OrderBook {
+  bids: { price: number; size: number }[];
+  asks: { price: number; size: number }[];
+}
 
 export interface DynamicThresholds {
   // 站内套利
@@ -138,8 +141,8 @@ function calculateAverageLiquidity(markets: MarketData[]): number {
   const liquidities = markets.map(m => {
     if (!m.orderbook) return 1000; // 默认 $1000
 
-    const bids = m.orderbook.bids?.reduce((sum, bid) => sum + bid.size, 0) || 0;
-    const asks = m.orderbook.asks?.reduce((sum, ask) => sum + ask.size, 0) || 0;
+    const bids = m.orderbook.bids?.reduce((sum: number, bid: { price: number; size: number }) => sum + bid.size, 0) || 0;
+    const asks = m.orderbook.asks?.reduce((sum: number, ask: { price: number; size: number }) => sum + ask.size, 0) || 0;
 
     return (bids + asks) / 2;
   });

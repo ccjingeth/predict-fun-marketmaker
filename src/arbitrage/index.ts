@@ -27,5 +27,8 @@ export type {
 } from './types.js';
 
 // 新增：优化类型
-export type { ArbitrageScore, DynamicThresholds, RiskConfig, PreflightResult, RiskStatus } from './scoring.js';
+export type { ArbitrageScore } from './scoring.js';
+export type { DynamicThresholds, MarketData, OrderBook } from './dynamic-thresholds.js';
+export type { RiskConfig, PreflightResult, RiskStatus, ArbitragePosition } from './risk-manager.js';
+export type { EnhancedExecutionConfig, ExecutionResult } from './enhanced-executor.js';
 

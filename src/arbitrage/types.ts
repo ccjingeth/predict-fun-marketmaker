@@ -43,6 +43,7 @@ export interface ArbitrageOpportunity {
   yesAsk?: number;
   noBid?: number;
   noAsk?: number;
+  depthShares?: number; // 订单簿深度（股数）
 
   // 跨平台套利相关
   platformA?: string;

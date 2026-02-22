@@ -289,7 +289,7 @@ export class EnhancedArbitrageExecutor {
 
     if (report.riskReport.recommendations.length > 0) {
       console.log('\n💡 建议:');
-      report.riskReport.recommendations.forEach(rec => {
+      report.riskReport.recommendations.forEach((rec: string) => {
         console.log(`   - ${rec}`);
       });
     }

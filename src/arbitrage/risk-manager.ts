@@ -41,7 +41,7 @@ export interface RiskStatus {
   metrics: {
     exposure: number;
     maxDrawdown: number;
-    var: number;
+    valueAtRisk: number;
   };
   actions: string[];
 }
@@ -167,19 +167,19 @@ export class RiskManager {
     // 计算风险指标
     const exposure = this.calculateExposure(position);
     const maxDrawdown = this.calculateMaxDrawdown(position);
-    const var = this.calculateVar(position);
+    const valueAtRisk = this.calculateVar(position);
 
     // 确定风险等级
     let level: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
     const actions: string[] = [];
 
-    if (var > this.config.maxVar || exposure > this.config.maxExposure) {
+    if (valueAtRisk > this.config.maxVar || exposure > this.config.maxExposure) {
       level = 'CRITICAL';
       actions.push('🚨 立即平仓');
-    } else if (var > this.config.maxVar * 0.8 || exposure > this.config.maxExposure * 0.8) {
+    } else if (valueAtRisk > this.config.maxVar * 0.8 || exposure > this.config.maxExposure * 0.8) {
       level = 'HIGH';
       actions.push('⚠️ 考虑减仓');
-    } else if (var > this.config.maxVar * 0.5 || exposure > this.config.maxExposure * 0.5) {
+    } else if (valueAtRisk > this.config.maxVar * 0.5 || exposure > this.config.maxExposure * 0.5) {
       level = 'MEDIUM';
       actions.push('📊 密切监控');
     } else {
@@ -196,7 +196,7 @@ export class RiskManager {
       metrics: {
         exposure,
         maxDrawdown,
-        var,
+        valueAtRisk,
       },
       actions,
     };
@@ -310,7 +310,7 @@ export class RiskManager {
     }
 
     const depth = opp.yesBid + opp.yesAsk + opp.noBid + opp.noAsk;
-    const avgPrice = (opp.yesPrice || 0.5 + opp.noPrice || 0.5) / 2;
+    const avgPrice = ((opp.yesPrice || 0.5) + (opp.noPrice || 0.5)) / 2;
     const liquidity = depth * avgPrice;
 
     return liquidity;
@@ -384,9 +384,9 @@ export class RiskManager {
   }
 
   private maxRiskLevel(current: string, candidate: string): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
-    const levels = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-    const currentIndex = levels.indexOf(current);
-    const candidateIndex = levels.indexOf(candidate);
-    return levels[Math.max(currentIndex, candidateIndex)];
+    const levels = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
+    const currentIndex = levels.indexOf(current as any);
+    const candidateIndex = levels.indexOf(candidate as any);
+    return levels[Math.max(currentIndex, candidateIndex)] as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   }
 }
