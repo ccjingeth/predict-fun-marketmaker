@@ -5985,6 +5985,111 @@ function setupEventListeners() {
     });
   }
 
+  // 自动套利按钮事件监听器（简化版专用）
+  const startAutoArbBtn = document.getElementById('startAutoArb');
+  if (startAutoArbBtn) {
+    logger.debug('找到启动自动套利按钮');
+    startAutoArbBtn.addEventListener('click', async (e) => {
+      const btn = e.target;
+      const originalText = btn.textContent;
+      btn.textContent = '启动中...';
+      btn.disabled = true;
+
+      try {
+        // 检查是否启用了自动套利
+        const envText = envEditor.value;
+        const enabled = /AUTO_ARB_ENABLED\s*=\s*true/i.test(envText);
+
+        if (!enabled) {
+          pushLog({
+            type: 'system',
+            level: 'stderr',
+            message: '⚠️ 请先启用"启用自动套利"开关',
+            timestamp: Date.now()
+          });
+          return;
+        }
+
+        // 启动套利机器人
+        pushLog({
+          type: 'system',
+          level: 'stdout',
+          message: '🚀 启动全自动套利机器人...',
+          timestamp: Date.now()
+        });
+
+        await startBot('arb');
+
+        // 更新状态显示
+        const statusEl = document.getElementById('statusAutoArb');
+        if (statusEl) {
+          statusEl.textContent = '运行中';
+          statusEl.style.color = '#10b981';
+        }
+
+        // 启动统计更新
+        startArbitrageStatsUpdate();
+
+        pushLog({
+          type: 'system',
+          level: 'stdout',
+          message: '✅ 自动套利已启动（循环扫描模式）',
+          timestamp: Date.now()
+        });
+
+      } catch (error) {
+        logger.error('启动自动套利失败:', error);
+        pushLog({
+          type: 'system',
+          level: 'stderr',
+          message: `❌ 启动失败: ${error.message}`,
+          timestamp: Date.now()
+        });
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    });
+  }
+
+  const stopAutoArbBtn = document.getElementById('stopAutoArb');
+  if (stopAutoArbBtn) {
+    logger.debug('找到停止自动套利按钮');
+    stopAutoArbBtn.addEventListener('click', async (e) => {
+      const btn = e.target;
+      const originalText = btn.textContent;
+      btn.textContent = '停止中...';
+      btn.disabled = true;
+
+      try {
+        await stopBot('arb');
+
+        // 更新状态显示
+        const statusEl = document.getElementById('statusAutoArb');
+        if (statusEl) {
+          statusEl.textContent = '未运行';
+          statusEl.style.color = '#6b7280';
+        }
+
+        // 停止统计更新
+        stopArbitrageStatsUpdate();
+
+        pushLog({
+          type: 'system',
+          level: 'stdout',
+          message: '⏹ 自动套利已停止',
+          timestamp: Date.now()
+        });
+
+      } catch (error) {
+        logger.error('停止自动套利失败:', error);
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    });
+  }
+
   const startArbBtn = document.getElementById('startArb');
   if (startArbBtn) {
     startArbBtn.addEventListener('click', (e) => {
