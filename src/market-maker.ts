@@ -16,6 +16,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pointsManager } from './mm/points/points-manager.js';
 import { spreadCache } from './mm/cache/spread-cache.js';
+import { pointsOptimizerEngine, type PointsMarketScore } from './mm/points/points-optimizer.js';
 
 interface QuotePrices {
   bidPrice: number;
@@ -142,6 +143,11 @@ export class MarketMaker {
   private riskThrottleState: Map<string, { score: number; lastUpdate: number; coolOffUntil: number }> = new Map();
   private nearTouchBurst: Map<string, { count: number; windowStart: number }> = new Map();
   private fillBurst: Map<string, { count: number; windowStart: number }> = new Map();
+  // 积分优化相关字段
+  private pointsScores: Map<string, PointsMarketScore> = new Map();
+  private pointsLastReportAt = 0;
+  private pointsReportInterval = 5 * 60 * 1000; // 5分钟报告一次
+  private pointsOrderbookCache: Map<string, Orderbook> = new Map();
 
   constructor(api: MakerApi, config: Config, orderManagerFactory?: () => Promise<MakerOrderManager>) {
     this.api = api;
@@ -4032,6 +4038,10 @@ export class MarketMaker {
 
     const tokenId = market.token_id;
     this.updateBestPrices(tokenId, orderbook);
+
+    // 缓存订单簿用于积分优化
+    this.pointsOrderbookCache.set(tokenId, orderbook);
+
     if (!this.lastFillAt.has(tokenId)) {
       this.lastFillAt.set(tokenId, Date.now());
     }
@@ -4943,7 +4953,51 @@ export class MarketMaker {
     }
 
     try {
-      const payload = await this.orderManager.buildLimitOrderPayload({ market, side, price, shares });
+      // 应用积分优化调整
+      let adjustedPrice = price;
+      let adjustedShares = shares;
+      let pointsOptimized = false;
+      let optimizationWarnings: string[] = [];
+
+      // 检查是否需要积分优化
+      const hasPointsRules = pointsManager.isPointsActive(market);
+      const enablePointsOptimization = this.config.mmPointsOptimization !== false; // 默认启用
+
+      if (hasPointsRules && enablePointsOptimization && currentSpread !== undefined) {
+        const orderbook = this.pointsOrderbookCache.get(market.token_id);
+        if (orderbook) {
+          const adjustment = pointsOptimizerEngine.adjustOrderForPoints(
+            market,
+            currentSpread,
+            shares,
+            orderbook
+          );
+
+          adjustedShares = adjustment.adjustedSize;
+          optimizationWarnings = adjustment.warnings;
+          pointsOptimized = adjustment.pointsEligible;
+
+          // 调整价格以保持价差在允许范围内
+          if (side === 'BUY' && adjustment.adjustedSpread !== currentSpread) {
+            const spreadDelta = adjustment.adjustedSpread - currentSpread;
+            adjustedPrice = Math.max(0.0001, price - spreadDelta / 2);
+          } else if (side === 'SELL' && adjustment.adjustedSpread !== currentSpread) {
+            const spreadDelta = adjustment.adjustedSpread - currentSpread;
+            adjustedPrice = Math.min(0.9999, price + spreadDelta / 2);
+          }
+
+          if (optimizationWarnings.length > 0) {
+            console.log(`🎯 Points optimization for ${market.token_id.slice(0, 8)}: ${optimizationWarnings.join(', ')}`);
+          }
+        }
+      }
+
+      const payload = await this.orderManager.buildLimitOrderPayload({
+        market,
+        side,
+        price: adjustedPrice,
+        shares: adjustedShares
+      });
       const response = await this.api.createOrder(payload);
       const orderHash =
         response?.order?.hash ||
@@ -4959,8 +5013,8 @@ export class MarketMaker {
         signer: this.orderManager.getSignerAddress(),
         order_type: 'LIMIT',
         side,
-        price: price.toString(),
-        shares: shares.toString(),
+        price: adjustedPrice.toString(),
+        shares: adjustedShares.toString(),
         is_neg_risk: market.is_neg_risk,
         is_yield_bearing: market.is_yield_bearing,
         status: 'OPEN',
@@ -4969,12 +5023,20 @@ export class MarketMaker {
 
       // 记录积分统计
       if (currentSpread !== undefined) {
-        const check = pointsManager.checkOrderEligibility(market, shares, currentSpread);
-        pointsManager.recordOrder(market, shares, currentSpread, check.isEligible);
+        const check = pointsManager.checkOrderEligibility(market, adjustedShares, currentSpread);
+        pointsManager.recordOrder(market, adjustedShares, currentSpread, check.isEligible);
+
+        // 记录积分优化事件
+        if (pointsOptimized || hasPointsRules) {
+          this.recordMmEvent('POINTS_ORDER',
+            `side=${side} price=${adjustedPrice.toFixed(4)} shares=${adjustedShares} eligible=${check.isEligible} optimized=${pointsOptimized}`,
+            market.token_id);
+        }
       }
 
       this.recordAutoTuneEvent(market.token_id, 'PLACED');
-      console.log(`✅ ${side} order submitted at ${price.toFixed(4)} (${shares} shares)`);
+      const optTag = pointsOptimized ? ' [Points optimized]' : '';
+      console.log(`✅ ${side} order submitted at ${adjustedPrice.toFixed(4)} (${adjustedShares} shares)${optTag}`);
     } catch (error) {
       console.error(`Error placing ${side} order:`, error);
     }
@@ -5332,6 +5394,91 @@ export class MarketMaker {
     console.log(`🛡️ Flattened position on Predict (${side} ${shares})`);
   }
 
+  /**
+   * 更新市场积分评分
+   */
+  private updatePointsScores(markets: Market[]): void {
+    const now = Date.now();
+    const shouldUpdate = this.pointsScores.size === 0 || (now - this.pointsLastReportAt) > 60000; // 1分钟更新一次
+
+    if (!shouldUpdate) return;
+
+    for (const market of markets) {
+      const orderbook = this.pointsOrderbookCache.get(market.token_id);
+      if (!orderbook) continue;
+
+      const spread = orderbook.spread ?? orderbook.mid_price ? 0.02 : 0.01;
+      const score = pointsOptimizerEngine.evaluateMarket(market, spread, orderbook);
+      this.pointsScores.set(market.token_id, score);
+    }
+
+    this.pointsLastReportAt = now;
+  }
+
+  /**
+   * 获取高积分优先级市场
+   */
+  getTopPointsMarkets(allMarkets: Market[], topN: number = 20): Market[] {
+    if (!this.config.mmPointsPrioritize) {
+      return allMarkets;
+    }
+
+    this.updatePointsScores(allMarkets);
+
+    const scored = allMarkets
+      .map(market => ({
+        market,
+        score: this.pointsScores.get(market.token_id)
+      }))
+      .filter(item => item.score && item.score.priority > 0)
+      .sort((a, b) => (b.score?.priority || 0) - (a.score?.priority || 0));
+
+    const topMarkets = scored.slice(0, topN).map(item => item.market);
+    const remaining = allMarkets.filter(m => !topMarkets.includes(m));
+
+    return [...topMarkets, ...remaining];
+  }
+
+  /**
+   * 报告积分效率
+   */
+  private reportPointsEfficiency(): void {
+    const now = Date.now();
+    if (now - this.pointsLastReportAt < this.pointsReportInterval) {
+      return;
+    }
+
+    const stats = pointsManager.getStats();
+    if (stats.totalMarkets === 0) {
+      return;
+    }
+
+    console.log('\n🎯 Points Efficiency Report:');
+    console.log('─'.repeat(60));
+    console.log(`Total Markets: ${stats.totalMarkets}`);
+    console.log(`Points Active: ${stats.pointsActiveMarkets}`);
+    console.log(`Eligibility Rate: ${stats.efficiency}%`);
+
+    const topMarkets = stats.markets
+      .filter(m => m.isActive)
+      .sort((a, b) => b.eligibleOrders - a.eligibleOrders)
+      .slice(0, 10);
+
+    if (topMarkets.length > 0) {
+      console.log('\nTop Points Markets:');
+      for (const m of topMarkets) {
+        const rate = m.totalOrders > 0 ? Math.round((m.eligibleOrders / m.totalOrders) * 100) : 0;
+        console.log(`  [${m.marketId.slice(0, 8)}] ${rate}% eligible (${m.eligibleOrders}/${m.totalOrders}) min_shares=${m.minShares}`);
+      }
+    }
+
+    console.log('─'.repeat(60) + '\n');
+    this.pointsLastReportAt = now;
+
+    // 清理过期数据
+    pointsManager.clearExpired(24 * 60 * 60 * 1000); // 24小时
+  }
+
   printStatus(): void {
     console.log('\n📊 Market Maker Status:');
     console.log('─'.repeat(80));
@@ -5339,6 +5486,12 @@ export class MarketMaker {
     console.log(`Open Orders: ${this.openOrders.size}`);
     console.log(`Positions: ${this.positions.size}`);
     console.log(`Session PnL: ${this.sessionPnL.toFixed(2)}`);
+
+    // 积分效率报告
+    const pointsStats = pointsManager.getStats();
+    if (pointsStats.totalMarkets > 0) {
+      console.log(`Points Efficiency: ${pointsStats.efficiency}% (${pointsStats.pointsActiveMarkets}/${pointsStats.totalMarkets} markets)`);
+    }
 
     if (this.positions.size > 0) {
       console.log('\nPositions:');
@@ -5350,5 +5503,8 @@ export class MarketMaker {
     }
 
     console.log('─'.repeat(80) + '\n');
+
+    // 定期详细积分报告
+    this.reportPointsEfficiency();
   }
 }

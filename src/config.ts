@@ -572,6 +572,8 @@ export function loadConfig(): Config {
     mmPointsMaxSpread: parseFloat(process.env.MM_POINTS_MAX_SPREAD || '0'),
     mmPointsMinOnly: process.env.MM_POINTS_MIN_ONLY === 'true',
     mmPointsMinMultiplier: parseFloat(process.env.MM_POINTS_MIN_MULTIPLIER || '1'),
+    mmPointsPrioritize: process.env.MM_POINTS_PRIORITIZE !== 'false', // 默认启用积分优先
+    mmPointsOptimization: process.env.MM_POINTS_OPTIMIZATION !== 'false', // 默认启用积分优化
     antiFillBps: parseFloat(process.env.ANTI_FILL_BPS || '0.002'),
     nearTouchBps: parseFloat(process.env.NEAR_TOUCH_BPS || '0.0015'),
     cooldownAfterCancelMs: parseInt(process.env.COOLDOWN_AFTER_CANCEL_MS || '4000'),
@@ -2178,6 +2180,8 @@ export function printConfig(config: Config): void {
   console.log(
     `MM Points Min Only: ${config.mmPointsMinOnly ? '✅' : '❌'} x${config.mmPointsMinMultiplier ?? 1}`
   );
+  console.log(`MM Points Prioritize: ${config.mmPointsPrioritize !== false ? '✅' : '❌'}`);
+  console.log(`MM Points Optimization: ${config.mmPointsOptimization !== false ? '✅' : '❌'}`);
   console.log(`Hedge On Fill: ${config.hedgeOnFill ? '✅' : '❌'}`);
   console.log(`Hedge Mode: ${config.hedgeMode}`);
   console.log(`Cross-Platform Enabled: ${config.crossPlatformEnabled ? '✅' : '❌'}`);
