@@ -325,6 +325,8 @@ class PredictMarketMakerBot {
     while (this.running) {
       try {
         this.updateWsHealth();
+        // 维护 WebSocket 健康状态（自动恢复）
+        this.marketMaker.maintainWsHealth();
         // Update state (private endpoint requires JWT)
         if (this.config.jwtToken) {
           await this.marketMaker.updateState(this.getAccountAddressForQueries());
@@ -643,6 +645,8 @@ class ProbableMarketMakerBot {
     while (this.running) {
       try {
         this.updateWsHealth();
+        // 维护 WebSocket 健康状态（自动恢复）
+        this.marketMaker.maintainWsHealth();
         if (this.config.jwtToken && this.config.mmRequireJwt !== false) {
           await this.marketMaker.updateState(this.getAccountAddressForQueries());
         }

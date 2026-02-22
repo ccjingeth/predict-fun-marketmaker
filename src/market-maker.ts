@@ -14,6 +14,8 @@ import { findBestMatch, similarityScore } from './external/match.js';
 import type { PlatformLeg, PlatformMarket } from './external/types.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { pointsManager } from './mm/points/points-manager.js';
+import { spreadCache } from './mm/cache/spread-cache.js';
 
 interface QuotePrices {
   bidPrice: number;
@@ -129,6 +131,7 @@ export class MarketMaker {
   private orderManager?: MakerOrderManager;
   private orderManagerFactory?: () => Promise<MakerOrderManager>;
   private tradingHalted = false;
+  private tradingHaltAt = 0;  // 记录交易暂停的时间戳
   private sessionPnL = 0;
   private warnedNoExecution = false;
   private warnedNoOrderSync = false;
@@ -237,10 +240,24 @@ export class MarketMaker {
 
       this.sessionPnL = Array.from(this.positions.values()).reduce((sum, p) => sum + p.pnl, 0);
 
+      // 日损失自动恢复机制（默认24小时自动恢复）
+      const autoResetMs = 24 * 60 * 60 * 1000; // 24小时
+      if (this.tradingHalted && this.tradingHaltAt > 0) {
+        const elapsed = Date.now() - this.tradingHaltAt;
+        if (elapsed > autoResetMs) {
+          console.log(`♻️  Auto-resuming trading after ${(elapsed / 1000 / 60).toFixed(0)} minutes`);
+          this.tradingHalted = false;
+          this.tradingHaltAt = 0;
+          this.sessionPnL = 0;
+          this.recordMmEvent('TRADING_RESUMED', `Auto-reset after ${(elapsed / 1000 / 60).toFixed(0)} min`);
+        }
+      }
+
       const maxDailyLoss = this.getEffectiveMaxDailyLoss();
       if (this.sessionPnL <= -Math.abs(maxDailyLoss)) {
         if (!this.tradingHalted) {
           console.log(`🛑 Trading halted: session PnL ${this.sessionPnL.toFixed(2)} <= -${Math.abs(maxDailyLoss)}`);
+          this.tradingHaltAt = Date.now(); // 记录暂停时间
         }
         this.tradingHalted = true;
       }
@@ -263,6 +280,37 @@ export class MarketMaker {
     }
     this.wsHealthScore = this.clamp(score, 0, 100);
     this.wsHealthUpdatedAt = Date.now();
+  }
+
+  /**
+   * WebSocket 健康自动恢复
+   * 在长时间没有更新后，逐渐恢复健康分数
+   */
+  private autoRecoverWsHealth(): void {
+    const now = Date.now();
+    const elapsed = now - this.wsHealthUpdatedAt;
+    const recoverMs = 30000; // 默认30秒
+
+    // 如果超过恢复时间且健康分数低于100，逐渐恢复
+    if (elapsed > recoverMs && this.wsHealthScore < 100) {
+      const recoveryRate = 1; // 每次恢复1分
+      const oldScore = this.wsHealthScore;
+      this.wsHealthScore = Math.min(100, this.wsHealthScore + recoveryRate);
+      this.wsHealthUpdatedAt = now;
+
+      if (this.wsHealthScore > oldScore) {
+        this.recordMmEvent('WS_HEALTH_RECOVERING',
+          `score=${this.wsHealthScore} old=${oldScore}`,
+          'global');
+      }
+    }
+  }
+
+  /**
+   * 公共方法：在每个循环中调用，维护 WebSocket 健康状态
+   */
+  maintainWsHealth(): void {
+    this.autoRecoverWsHealth();
   }
 
   private getWsHealthSnapshot(): {
@@ -1856,7 +1904,23 @@ export class MarketMaker {
   }
 
   private updateWsEmergencyRecoveryState(): void {
-    const active = this.wsEmergencyRecoveryUntil > Date.now();
+    const now = Date.now();
+    const active = this.wsEmergencyRecoveryUntil > now;
+
+    // 超时保护：如果恢复状态超过5分钟，强制退出
+    const recoveryMaxMs = 300000; // 默认5分钟
+    if (this.wsEmergencyRecoveryActive && this.wsEmergencyGlobalLast > 0) {
+      const elapsed = now - this.wsEmergencyGlobalLast;
+      if (elapsed > recoveryMaxMs) {
+        console.warn(`⚠️  Forcing exit from emergency recovery after ${elapsed}ms`);
+        this.wsEmergencyRecoveryUntil = 0;
+        this.wsEmergencyRecoveryActive = false;
+        this.wsEmergencyRecoveryStage = -1;
+        this.recordMmEvent('WS_EMERGENCY_RECOVERY_FORCE_EXIT', `Forced exit after ${elapsed}ms`);
+        return;
+      }
+    }
+
     if (this.wsEmergencyRecoveryActive && !active) {
       this.recordMmEvent('WS_EMERGENCY_RECOVERY_END', 'Emergency recovery window ended');
       this.wsEmergencyRecoveryStage = -1;
@@ -2759,6 +2823,13 @@ export class MarketMaker {
       cancelBurstCount: burstEntry?.count ?? 0,
       cancelBurstCooldownMs: burstCooldownMs,
       wsHealthAt: wsHealth.updatedAt,
+      // 积分统计
+      marketId: market.token_id || '',
+      minShares: market.liquidity_activation?.min_shares || 0,
+      maxSpread: market.liquidity_activation?.max_spread || 0,
+      pointsActive: pointsManager.isPointsActive(market),
+      eligibleOrders: pointsManager.getMarketStats(market.token_id || '')?.eligibleOrders || 0,
+      totalOrders: pointsManager.getMarketStats(market.token_id || '')?.totalOrders || 0,
       updatedAt: Date.now(),
     };
     this.mmMetrics.set(market.token_id, entry);
@@ -2821,9 +2892,18 @@ export class MarketMaker {
     for (let i = 0; i < safeCount; i += 1) {
       const scaled = i === 0 ? baseShares : baseShares * Math.pow(decay, i);
       let size = Math.max(1, Math.floor(scaled * floor));
+
+      // 修复：第一层优先满足 min_shares，后续层可以为 0
       if (minShares > 0 && size < minShares && !allowBelowMin) {
-        size = 0;
+        if (i === 0) {
+          // 第一层：尽量满足 min_shares 以获得积分
+          size = minShares;
+        } else {
+          // 后续层：可以为 0
+          size = 0;
+        }
       }
+
       sizes.push(size);
     }
     return sizes;
@@ -3718,9 +3798,16 @@ export class MarketMaker {
       const minOrderValue = minShares * price;
       const hardCap = this.config.maxSingleOrderValue ?? Number.POSITIVE_INFINITY;
       if (minOrderValue <= hardCap && minOrderValue <= remainingRiskBudget) {
-        if (!depthCap || minShares <= depthCap) {
-          shares = minShares;
-        }
+        // 优先确保满足 min_shares 以获得积分，即使超过 depthCap
+        shares = minShares;
+        this.recordMmEvent('MIN_SHARES_ENFORCED',
+          `min=${minShares} depthCap=${depthCap || 'none'} original=${shares * sizeFactor * penalty * (noFill.sizeFactor || 1)}`,
+          market.token_id);
+      } else {
+        // 无法满足 min_shares 要求，记录警告
+        this.recordMmEvent('MIN_SHARES_UNMET',
+          `min=${minShares} shares=${shares} value=${minOrderValue} cap=${hardCap} budget=${remainingRiskBudget}`,
+          market.token_id);
       }
     }
 
@@ -3773,15 +3860,18 @@ export class MarketMaker {
 
   checkLiquidityPointsEligibility(market: Market, orderbook: Orderbook): boolean {
     const rules = this.getEffectiveLiquidityActivation(market);
+    // 修复：无积分规则时允许交易
     if (!rules?.active) {
-      return false;
+      return true;
     }
 
-    if (rules.max_spread_cents && orderbook.spread) {
-      const maxSpread = rules.max_spread_cents / 100;
-      if (orderbook.spread > maxSpread) {
-        return false;
-      }
+    // 检查 max_spread（支持 cents 和 decimal 两种格式）
+    const maxSpread = rules.max_spread ?? (rules.max_spread_cents ? rules.max_spread_cents / 100 : undefined);
+    if (maxSpread && orderbook.spread && orderbook.spread > maxSpread) {
+      this.recordMmEvent('POINTS_SPREAD_EXCEEDED',
+        `spread=${orderbook.spread} max=${maxSpread}`,
+        market.token_id);
+      return false;
     }
 
     return true;
@@ -4790,7 +4880,7 @@ export class MarketMaker {
           this.recordMmEvent('SKIP_VWAP', msg, tokenId);
           continue;
         }
-        await this.placeLimitOrder(market, 'BUY', bidTargets[i], shares);
+        await this.placeLimitOrder(market, 'BUY', bidTargets[i], shares, prices.spread);
         placed = true;
         if (forceSingle) {
           break;
@@ -4824,7 +4914,7 @@ export class MarketMaker {
           this.recordMmEvent('SKIP_VWAP', msg, tokenId);
           continue;
         }
-        await this.placeLimitOrder(market, 'SELL', askTargets[i], shares);
+        await this.placeLimitOrder(market, 'SELL', askTargets[i], shares, prices.spread);
         placed = true;
         if (forceSingle) {
           break;
@@ -4845,7 +4935,8 @@ export class MarketMaker {
     market: Market,
     side: 'BUY' | 'SELL',
     price: number,
-    shares: number
+    shares: number,
+    currentSpread?: number
   ): Promise<void> {
     if (!this.orderManager) {
       return;
@@ -4875,6 +4966,12 @@ export class MarketMaker {
         status: 'OPEN',
         timestamp: Date.now(),
       });
+
+      // 记录积分统计
+      if (currentSpread !== undefined) {
+        const check = pointsManager.checkOrderEligibility(market, shares, currentSpread);
+        pointsManager.recordOrder(market, shares, currentSpread, check.isEligible);
+      }
 
       this.recordAutoTuneEvent(market.token_id, 'PLACED');
       console.log(`✅ ${side} order submitted at ${price.toFixed(4)} (${shares} shares)`);
