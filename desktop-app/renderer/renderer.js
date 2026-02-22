@@ -6010,6 +6010,34 @@ function setupEventListeners() {
           return;
         }
 
+        // 🔑 检查激活码
+        const activation = await checkArbitrageActivation();
+        if (!activation.valid) {
+          pushLog({
+            type: 'system',
+            level: 'stderr',
+            message: `⚠️ 套利模块需要激活码: ${activation.message}`,
+            timestamp: Date.now()
+          });
+          pushLog({
+            type: 'system',
+            level: 'stderr',
+            message: '💡 在上方激活码输入框中输入激活码，或运行: npm run activate',
+            timestamp: Date.now()
+          });
+          return;
+        }
+
+        // 显示激活信息
+        if (activation.remainingDays !== undefined) {
+          pushLog({
+            type: 'system',
+            level: 'stdout',
+            message: `✅ 套利模块已激活 (剩余 ${activation.remainingDays} 天)`,
+            timestamp: Date.now()
+          });
+        }
+
         // 启动套利机器人
         pushLog({
           type: 'system',

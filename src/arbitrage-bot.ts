@@ -21,6 +21,7 @@ import type { CrossPlatformMappingStore } from './external/mapping.js';
 import { PredictWebSocketFeed } from './external/predict-ws.js';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { ActivationManager } from './activation.js';
 
 class ArbitrageBot {
   private api: PredictAPI;
@@ -244,6 +245,37 @@ class ArbitrageBot {
 
   async startMonitoring(): Promise<void> {
     console.log('🔄 Starting continuous monitoring...\n');
+
+    // 🔑 检查套利模块激活码
+    const activation = ActivationManager.checkActivation();
+    if (!activation.valid) {
+      console.log('\n' + '='.repeat(70));
+      console.log('⚠️  套利模块需要激活码才能使用');
+      console.log('='.repeat(70));
+      console.log('\n📋 功能说明:');
+      console.log('   ✅ 做市商模块 - 完全免费，可正常使用');
+      console.log('   ❌ 套利模块 - 需要激活码才能使用');
+      console.log('\n' + '−'.repeat(70));
+      console.log('❌ 错误:', activation.message);
+      console.log('\n🔑 如何获取激活码:');
+      console.log('   1. 联系管理员获取激活码');
+      console.log('   2. 运行激活命令: npm run activate <激活码>');
+      console.log('   3. 或使用交互式激活: npm run activate');
+      console.log('\n💡 其他命令:');
+      console.log('   npm run activate:check  - 查看激活状态');
+      console.log('   npm run activate:clear  - 清除激活（测试用）');
+      console.log('\n' + '='.repeat(70) + '\n');
+
+      throw new Error(`套利模块未激活: ${activation.message}`);
+    }
+
+    // 显示激活信息
+    if (activation.info && activation.remainingDays !== undefined) {
+      console.log('✅ 套利模块已激活');
+      console.log(`   用户: ${activation.info.userName}`);
+      console.log(`   有效期至: ${new Date(activation.info.expireDate).toLocaleDateString()}`);
+      console.log(`   剩余天数: ${activation.remainingDays} 天\n`);
+    }
 
     this.startRealtimeLoop();
     this.startCrossRealtimeLoop();

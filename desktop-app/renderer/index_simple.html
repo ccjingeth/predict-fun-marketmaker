@@ -52,6 +52,21 @@
             <p style="margin: 0 0 12px 0; font-size: 12px; color: rgba(52, 211, 153, 0.8);">
               自动扫描市场并执行套利（同平台 yes+no&lt;1 / 跨平台价差）
             </p>
+
+            <!-- 激活码输入区域 -->
+            <div id="activationSection" style="margin-bottom: 12px; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <span style="font-size: 12px; font-weight: 600; color: #f87171;">🔑 需要激活码</span>
+                <span id="activationStatus" style="font-size: 11px; color: #fca5a5;">未激活</span>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <input type="text" id="licenseKeyInput" placeholder="输入激活码 (XXXX-XXXX-XXXX-XXXX-XXXX)"
+                  style="flex: 1; padding: 6px 10px; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px; font-size: 11px; background: rgba(0, 0, 0, 0.2); color: #e5e7eb;">
+                <button class="btn primary" id="activateBtn" style="padding: 6px 12px; font-size: 11px;">激活</button>
+              </div>
+              <p id="activationMessage" style="margin: 8px 0 0 0; font-size: 11px; color: #fca5a5;"></p>
+            </div>
+
             <div class="button-row">
               <button class="btn success" id="startAutoArb" style="flex: 1;">▶ 启动自动套利</button>
               <button class="btn ghost" id="stopAutoArb" style="flex: 1;">⏹ 停止</button>
@@ -236,6 +251,7 @@
       </main>
     </div>
 
+    <script src="activation-check.js"></script>
     <script src="arbitrage-stats.js"></script>
     <script src="renderer.js"></script>
     <script src="charts.js"></script>
