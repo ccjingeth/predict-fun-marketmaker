@@ -7,6 +7,7 @@
   "scripts": {
     "start:mm": "node --import tsx src/index.ts",
     "start:arb": "node --import tsx src/arbitrage-bot.ts",
+    "start:auto-bot": "node --import tsx scripts/start-auto-bot.ts",
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "test": "node --import tsx src/test.ts",
