@@ -65,6 +65,12 @@ function createWindow() {
 
 function getProjectPath() {
   let projectPath = store.get('projectPath');
+  // 验证缓存的路径是否仍然有效（跨平台或路径变更时）
+  if (projectPath && !fs.existsSync(path.join(projectPath, 'package.json'))) {
+    console.log(`⚠️  缓存路径无效: ${projectPath}，重新检测...`);
+    store.delete('projectPath');
+    projectPath = undefined;
+  }
   if (!projectPath) {
     // 打包模式：runtime-dist 被 extraResources 复制到 resources/runtime-dist/
     const resourcesPath = path.dirname(app.getAppPath());

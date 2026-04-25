@@ -54,7 +54,7 @@ export class PredictAPI {
     const trimmed = String(token).trim().replace(/^['"]|['"]$/g, '');
     const withoutBearer = trimmed.replace(/^Bearer\s+/i, '');
     if (!withoutBearer) return undefined;
-    if (!/^[A-Za-z0-9._-]+$/.test(withoutBearer)) {
+    if (!/^[A-Za-z0-9._+=/-]+$/.test(withoutBearer)) {
       return undefined;
     }
     return withoutBearer;
