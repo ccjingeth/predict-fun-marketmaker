@@ -617,9 +617,36 @@ export class PredictAPI {
       }
 
       return normalized;
-    } catch (error) {
-      console.error(`Error fetching orderbook for ${tokenId}:`, error);
-      throw error;
+    } catch (error: any) {
+      console.error(`Error fetching orderbook for ${tokenId}:`, error.message || error);
+      // 所有路径都失败，尝试从 getMarket 获取已有价格数据
+      try {
+        const marketData = await this.getMarket(tokenId);
+        const bestBid = marketData.best_bid ? Number(marketData.best_bid) : undefined;
+        const bestAsk = marketData.best_ask ? Number(marketData.best_ask) : undefined;
+        const yesPrice = marketData.yes_price ? Number(marketData.yes_price) : undefined;
+        const noPrice = marketData.no_price ? Number(marketData.no_price) : undefined;
+        const bidPrice = bestBid ?? yesPrice ?? noPrice;
+        const askPrice = bestAsk ?? (yesPrice !== undefined ? 1 - yesPrice : undefined) ?? noPrice;
+        if (bidPrice !== undefined || askPrice !== undefined) {
+          const spread = bidPrice !== undefined && askPrice !== undefined ? askPrice - bidPrice : undefined;
+          const spreadPct = bidPrice !== undefined && askPrice !== undefined && bidPrice > 0 ? ((askPrice - bidPrice) / bidPrice) * 100 : undefined;
+          return {
+            bids: bidPrice !== undefined ? [{ price: String(bidPrice), shares: '0' }] : [],
+            asks: askPrice !== undefined ? [{ price: String(askPrice), shares: '0' }] : [],
+            best_bid: bidPrice,
+            best_ask: askPrice,
+            spread,
+            spread_pct: spreadPct,
+            marketId: tokenId,
+            tokenId,
+            timestamp: Date.now(),
+          };
+        }
+      } catch {
+        // getMarket 也失败
+      }
+      return { bids: [], asks: [], marketId: tokenId, tokenId, timestamp: Date.now() };
     }
   }
 
