@@ -906,8 +906,7 @@ export class PredictMarketMakerBot {
   async selectMarkets(): Promise<void> {
     console.log('🔍 Scanning markets...\n');
 
-    const allMarkets = await this.api.getMarkets();
-    console.log(`Found ${allMarkets.length} active markets\n`);
+    const allMarkets = await this.api.getMarkets({ status: 'active' });
 
     // Apply manual liquidity activation rules from config
     const marketsWithRules = applyLiquidityRules(allMarkets);

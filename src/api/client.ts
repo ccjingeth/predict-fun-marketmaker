@@ -500,12 +500,18 @@ export class PredictAPI {
       const rawData = await this.requestWithFallback<any>('get', [
         `/v1/markets/${marketLookupId}/orderbook`,
         `/v1/markets/${tokenId}/orderbook`,
-        `/v1/orderbook/${marketLookupId}`,
-        `/v1/orderbook/${tokenId}`,
+        `/markets/${marketLookupId}/orderbook`,
+        `/markets/${tokenId}/orderbook`,
+        `/v1/markets/${marketLookupId}`,
+        `/v1/markets/${tokenId}`,
+        `/markets/${marketLookupId}`,
+        `/markets/${tokenId}`,
       ], { requireJwt: true });
 
-      const bidsRaw = Array.isArray(rawData?.bids) ? rawData.bids : [];
-      const asksRaw = Array.isArray(rawData?.asks) ? rawData.asks : [];
+      // API 可能把 orderbook 嵌在 market 数据里（新版 API）
+      const bookData = rawData?.orderbook ?? rawData?.book ?? rawData;
+      const bidsRaw = Array.isArray(bookData?.bids) ? bookData.bids : Array.isArray(rawData?.bids) ? rawData.bids : [];
+      const asksRaw = Array.isArray(bookData?.asks) ? bookData.asks : Array.isArray(rawData?.asks) ? rawData.asks : [];
 
       const bids: Orderbook['bids'] = bidsRaw
         .map((bid: any) => {
