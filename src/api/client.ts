@@ -497,7 +497,12 @@ export class PredictAPI {
   async getOrderbook(tokenId: string): Promise<Orderbook> {
     try {
       const marketLookupId = this.marketIdByTokenId.get(tokenId) || tokenId;
-      const rawData = await this.requestWithFallback<any>('get', [`/v1/markets/${marketLookupId}/orderbook`], { requireJwt: true });
+      const rawData = await this.requestWithFallback<any>('get', [
+        `/v1/markets/${marketLookupId}/orderbook`,
+        `/v1/markets/${tokenId}/orderbook`,
+        `/v1/orderbook/${marketLookupId}`,
+        `/v1/orderbook/${tokenId}`,
+      ], { requireJwt: true });
 
       const bidsRaw = Array.isArray(rawData?.bids) ? rawData.bids : [];
       const asksRaw = Array.isArray(rawData?.asks) ? rawData.asks : [];
