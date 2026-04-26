@@ -256,6 +256,11 @@ export class PredictAPI {
         }))
       : undefined;
 
+    // 从第一个 outcome 提取 bestBid/bestAsk（用于 getMarket 单独返回时）
+    const firstOutcome = Array.isArray(raw?.outcomes) ? raw.outcomes[0] : null;
+    const bestBid = firstOutcome?.bestBid?.price;
+    const bestAsk = firstOutcome?.bestAsk?.price;
+
     return {
       token_id: String(
         raw?.token_id ??
@@ -287,6 +292,8 @@ export class PredictAPI {
       volume_24h: Number(volume24h ?? 0),
       liquidity_24h: Number(liquidity24h ?? 0),
       outcomes,
+      best_bid: bestBid !== undefined && bestBid !== null ? Number(bestBid) : undefined,
+      best_ask: bestAsk !== undefined && bestAsk !== null ? Number(bestAsk) : undefined,
       // 将 API 返回的积分规则正规化为统一的 snake_case 格式
       liquidity_activation: (() => {
         // 1) 先检查嵌套的 liquidity_activation 对象
@@ -353,10 +360,16 @@ export class PredictAPI {
           outcomeCount: expanded.length,
         });
       }
+      // 从 outcome 数据中提取 bestBid/bestAsk
+      const rawOutcome = outcomes[outcome.index];
+      const bestBid = rawOutcome?.bestBid?.price;
+      const bestAsk = rawOutcome?.bestAsk?.price;
       return {
         ...baseMarket,
         token_id: outcome.tokenId,
         outcome: outcome.name || baseMarket.outcome,
+        best_bid: bestBid !== undefined && bestBid !== null ? Number(bestBid) : undefined,
+        best_ask: bestAsk !== undefined && bestAsk !== null ? Number(bestAsk) : undefined,
       };
     });
   }
@@ -444,9 +457,8 @@ export class PredictAPI {
         const payload = await this.requestWithFallbackRaw('get', ['/v1/markets', '/markets'], {
           params: {
             ...(status ? { status } : {}),
-            ...(after ? { after } : {}),
+            ...(after ? { cursor: after } : {}),
           },
-          requireJwt: true,
         });
         const rawMarkets = this.extractList(payload);
         if (rawMarkets.length === 0) {
@@ -481,12 +493,12 @@ export class PredictAPI {
   /**
    * Get a specific market by token ID
    */
-  async getMarket(tokenId: string): Promise<Market> {
+  async getMarket(marketId: string): Promise<Market> {
     try {
-      const raw = await this.requestWithFallback<any>('get', [`/v1/markets/${tokenId}`, `/markets/${tokenId}`], { requireJwt: true });
+      const raw = await this.requestWithFallback<any>('get', [`/v1/markets/${marketId}`, `/markets/${marketId}`]);
       return this.normalizeMarket(raw);
     } catch (error) {
-      console.error(`Error fetching market ${tokenId}:`, error);
+      console.error(`Error fetching market ${marketId}:`, error);
       throw error;
     }
   }
@@ -500,13 +512,7 @@ export class PredictAPI {
       const rawData = await this.requestWithFallback<any>('get', [
         `/v1/markets/${marketLookupId}/orderbook`,
         `/v1/markets/${tokenId}/orderbook`,
-        `/markets/${marketLookupId}/orderbook`,
-        `/markets/${tokenId}/orderbook`,
-        `/v1/markets/${marketLookupId}`,
-        `/v1/markets/${tokenId}`,
-        `/markets/${marketLookupId}`,
-        `/markets/${tokenId}`,
-      ], { requireJwt: true });
+      ]);
 
       // API 可能把 orderbook 嵌在 market 数据里（新版 API）
       const bookData = rawData?.orderbook ?? rawData?.book ?? rawData;
@@ -624,10 +630,8 @@ export class PredictAPI {
         const marketData = await this.getMarket(tokenId);
         const bestBid = marketData.best_bid ? Number(marketData.best_bid) : undefined;
         const bestAsk = marketData.best_ask ? Number(marketData.best_ask) : undefined;
-        const yesPrice = marketData.yes_price ? Number(marketData.yes_price) : undefined;
-        const noPrice = marketData.no_price ? Number(marketData.no_price) : undefined;
-        const bidPrice = bestBid ?? yesPrice ?? noPrice;
-        const askPrice = bestAsk ?? (yesPrice !== undefined ? 1 - yesPrice : undefined) ?? noPrice;
+        const bidPrice = bestBid;
+        const askPrice = bestAsk;
         if (bidPrice !== undefined || askPrice !== undefined) {
           const spread = bidPrice !== undefined && askPrice !== undefined ? askPrice - bidPrice : undefined;
           const spreadPct = bidPrice !== undefined && askPrice !== undefined && bidPrice > 0 ? ((askPrice - bidPrice) / bidPrice) * 100 : undefined;
@@ -638,15 +642,13 @@ export class PredictAPI {
             best_ask: askPrice,
             spread,
             spread_pct: spreadPct,
-            marketId: tokenId,
-            tokenId,
-            timestamp: Date.now(),
+            token_id: tokenId,
           };
         }
       } catch {
         // getMarket 也失败
       }
-      return { bids: [], asks: [], marketId: tokenId, tokenId, timestamp: Date.now() };
+      return { bids: [], asks: [], token_id: tokenId };
     }
   }
 
@@ -749,7 +751,7 @@ export class PredictAPI {
    */
   async removeOrders(ids: string[]): Promise<any> {
     try {
-      const response = await this.requestWithFallback<any>('delete', ['/v1/orders', '/orders'], {
+      const response = await this.requestWithFallback<any>('post', ['/v1/orders/remove', '/orders/remove'], {
         data: { ids },
         requireJwt: true,
       });
