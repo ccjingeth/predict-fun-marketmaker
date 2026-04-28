@@ -215,14 +215,49 @@ function startMainApp() {
     }
 
     const platform = process.platform;
-    const command = platform === 'win32' ? 'npm.cmd' : 'npm';
+
+    // 检查 node 和 npm 可用性，优先用 node 直接启动（避免依赖 npm 在 PATH 中）
+    function findCommand(name) {
+      const paths = process.env.PATH?.split(platform === 'win32' ? ';' : ':') || [];
+      const exts = platform === 'win32' ? ['.exe', '.cmd', ''] : [''];
+      for (const dir of paths) {
+        for (const ext of exts) {
+          const full = path.join(dir, name + ext);
+          if (fs.existsSync(full)) return full;
+        }
+      }
+      return name; // fallback 让系统自己找
+    }
+
+    const nodePath = findCommand('node');
+    const npmPath = platform === 'win32' ? findCommand('npm.cmd') : findCommand('npm');
+
+    let command, args, spawnOptions;
     
-    appProcess = spawn(command, ['run', 'start:cli'], {
+    if (fs.existsSync(path.join(projectPath, 'node_modules', 'tsx'))) {
+      // runtime-dist 里有 tsx，直接用 node 启动
+      command = nodePath;
+      args = ['--import', 'tsx', 'src/index.ts'];
+    } else if (fs.existsSync(npmPath) || npmPath === 'npm' || npmPath === 'npm.cmd') {
+      // fallback 用 npm
+      command = npmPath;
+      args = ['run', 'start:cli'];
+    } else {
+      throw new Error('找不到 node 或 npm，请确保已安装 Node.js');
+    }
+
+    spawnOptions = {
       cwd: projectPath,
       env: { ...process.env, ENV_PATH: getEnvPath() },
       stdio: ['ignore', 'pipe', 'pipe'],
-      detached: true, // 允许杀死整个进程组（包括tsx/node子进程）
-    });
+    };
+
+    // Windows 不支持 detached，会报 EINVAL
+    if (platform !== 'win32') {
+      spawnOptions.detached = true;
+    }
+    
+    appProcess = spawn(command, args, spawnOptions);
 
     const pushLog = (data, type) => {
       try {
