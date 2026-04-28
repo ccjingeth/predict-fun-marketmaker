@@ -80,7 +80,7 @@ const esbuildPlatforms = [
   '@esbuild/darwin-arm64@0.27.2',
 ];
 try {
-  execSync(`npm install ${esbuildPlatforms.join(' ')} --no-save`, { cwd: RUNTIME, stdio: 'inherit' });
+  execSync(`npm install ${esbuildPlatforms.join(' ')} --force --no-save`, { cwd: RUNTIME, stdio: 'inherit' });
   console.log('[copy-source] Cross-platform esbuild binaries installed');
 } catch (e) {
   console.log('[copy-source] Warning: failed to install some esbuild binaries:', e.message);
