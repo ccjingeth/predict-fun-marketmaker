@@ -71,13 +71,23 @@ execSync('npm install --production', { cwd: RUNTIME, stdio: 'inherit' });
 
 // 4b. 安装跨平台 esbuild 二进制包（tsx 依赖 esbuild，否则 Windows/Linux 运行时找不到对应平台包）
 console.log('[copy-source] Installing cross-platform esbuild binaries...');
+
+// 动态获取 esbuild 实际版本，确保二进制包版本与主包一致
+let esbuildVersion = '0.27.7'; // fallback
+const esbuildPkgPath = path.join(RUNTIME, 'node_modules', 'esbuild', 'package.json');
+if (fs.existsSync(esbuildPkgPath)) {
+  const esbuildPkg = fs.readJsonSync(esbuildPkgPath);
+  esbuildVersion = esbuildPkg.version || esbuildVersion;
+  console.log('[copy-source] Detected esbuild version:', esbuildVersion);
+}
+
 const esbuildPlatforms = [
-  '@esbuild/win32-x64@0.27.2',
-  '@esbuild/win32-arm64@0.27.2',
-  '@esbuild/linux-x64@0.27.2',
-  '@esbuild/linux-arm64@0.27.2',
-  '@esbuild/darwin-x64@0.27.2',
-  '@esbuild/darwin-arm64@0.27.2',
+  `@esbuild/win32-x64@${esbuildVersion}`,
+  `@esbuild/win32-arm64@${esbuildVersion}`,
+  `@esbuild/linux-x64@${esbuildVersion}`,
+  `@esbuild/linux-arm64@${esbuildVersion}`,
+  `@esbuild/darwin-x64@${esbuildVersion}`,
+  `@esbuild/darwin-arm64@${esbuildVersion}`,
 ];
 try {
   execSync(`npm install ${esbuildPlatforms.join(' ')} --force --no-save`, { cwd: RUNTIME, stdio: 'inherit' });
