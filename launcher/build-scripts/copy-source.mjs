@@ -69,6 +69,23 @@ if (fs.existsSync(envPath)) {
 console.log('[copy-source] Installing dependencies...');
 execSync('npm install --production', { cwd: RUNTIME, stdio: 'inherit' });
 
+// 4b. 安装跨平台 esbuild 二进制包（tsx 依赖 esbuild，否则 Windows/Linux 运行时找不到对应平台包）
+console.log('[copy-source] Installing cross-platform esbuild binaries...');
+const esbuildPlatforms = [
+  '@esbuild/win32-x64@0.27.2',
+  '@esbuild/win32-arm64@0.27.2',
+  '@esbuild/linux-x64@0.27.2',
+  '@esbuild/linux-arm64@0.27.2',
+  '@esbuild/darwin-x64@0.27.2',
+  '@esbuild/darwin-arm64@0.27.2',
+];
+try {
+  execSync(`npm install ${esbuildPlatforms.join(' ')} --no-save`, { cwd: RUNTIME, stdio: 'inherit' });
+  console.log('[copy-source] Cross-platform esbuild binaries installed');
+} catch (e) {
+  console.log('[copy-source] Warning: failed to install some esbuild binaries:', e.message);
+}
+
 // 5. 编译TypeScript
 console.log('[copy-source] Compiling TypeScript...');
 if (fs.existsSync(path.join(RUNTIME, 'tsconfig.json'))) {
