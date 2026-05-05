@@ -9,9 +9,10 @@
 import axios from 'axios';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Wallet, JsonRpcProvider } from 'ethers';
+import { Wallet } from 'ethers';
 import { ChainId, OrderBuilder } from '@predictdotfun/sdk';
 import { loadConfig } from './config.js';
+import { createRobustProvider } from './rpc-provider.js';
 
 function upsertEnvVar(envContent: string, key: string, value: string): string {
   const pattern = new RegExp(`^${key}=.*$`, 'm');
@@ -95,9 +96,13 @@ async function main() {
   }
 
   console.log('🔐 Step 2: Create wallet...');
-  const wallet = config.rpcUrl
-    ? new Wallet(config.privateKey, new JsonRpcProvider(config.rpcUrl))
-    : new Wallet(config.privateKey);
+  let wallet: Wallet;
+  if (config.rpcUrl) {
+    const { provider } = await createRobustProvider(config.rpcUrl, 15000);
+    wallet = new Wallet(config.privateKey, provider);
+  } else {
+    wallet = new Wallet(config.privateKey);
+  }
   console.log(`✅ Wallet created: ${wallet.address}`);
 
   // Validate address: reject placeholder / zero addresses

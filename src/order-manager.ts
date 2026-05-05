@@ -6,6 +6,7 @@
 import PredictSdk from '@predictdotfun/sdk';
 import { Contract, JsonRpcProvider, Wallet, formatUnits, parseUnits } from 'ethers';
 import type { Config, Market, Orderbook } from './types.js';
+import { createRobustProvider } from './rpc-provider.js';
 
 const {
   AddressesByChainId,
@@ -85,9 +86,7 @@ export class OrderManager {
       throw new Error('Invalid privateKey: must be a non-empty hex string (length >= 32)');
     }
     const chainId = config.predictChainId ?? ChainId.BnbMainnet;
-    const provider = config.rpcUrl
-      ? new JsonRpcProvider(config.rpcUrl)
-      : (ProviderByChainId[chainId] as JsonRpcProvider);
+    const { provider } = await createRobustProvider(config.rpcUrl, 15000);
     let wallet: Wallet;
     try {
       wallet = new Wallet(config.privateKey, provider);

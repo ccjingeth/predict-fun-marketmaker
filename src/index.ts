@@ -8,6 +8,7 @@ import path from 'node:path';
 import { Wallet } from 'ethers';
 import { loadConfig, printConfig } from './config.js';
 import { PredictAPI } from './api/client.js';
+import { createRobustProvider } from './rpc-provider.js';
 import { PolymarketAPI } from './api/polymarket-client.js';
 import { MarketSelector, evaluatePolymarketEventRisk } from './market-selector.js';
 import { MarketMaker } from './market-maker.js';
@@ -60,7 +61,6 @@ async function autoFetchJwt(config: ReturnType<typeof loadConfig>): Promise<stri
   try {
     // 动态导入以避免不必要的依赖加载
     const axios = (await import('axios')).default;
-    const { JsonRpcProvider } = await import('ethers');
     const { ChainId, OrderBuilder } = await import('@predictdotfun/sdk');
 
     const baseUrl = config.apiBaseUrl.replace(/\/+$/, '');
@@ -91,9 +91,13 @@ async function autoFetchJwt(config: ReturnType<typeof loadConfig>): Promise<stri
     }
 
     // Step 2: Sign message
-    const wallet = config.rpcUrl
-      ? new Wallet(config.privateKey, new JsonRpcProvider(config.rpcUrl))
-      : new Wallet(config.privateKey);
+    let wallet: Wallet;
+    if (config.rpcUrl) {
+      const { provider } = await createRobustProvider(config.rpcUrl, 15000);
+      wallet = new Wallet(config.privateKey, provider);
+    } else {
+      wallet = new Wallet(config.privateKey);
+    }
 
     const signerAddress = config.predictAccountAddress || wallet.address;
     let signature = '';
@@ -886,7 +890,20 @@ export class PredictMarketMakerBot {
     // Select markets to trade
     await this.selectMarkets();
 
-    await this.marketMaker.initialize();
+    try {
+      await this.marketMaker.initialize();
+    } catch (initErr: any) {
+      const msg = initErr?.message || String(initErr);
+      console.error(`\n❌ MarketMaker 初始化失败: ${msg}`);
+      if (msg.includes('TIMEOUT') || msg.includes('timeout') || msg.includes('RPC')) {
+        console.error('   诊断: 链上 RPC 连接超时。请检查以下项：');
+        console.error('   1. .env 中的 RPC_URL 是否可访问');
+        console.error('   2. 是否开启了 VPN/代理');
+        console.error('   3. 网络是否可以访问 BSC 节点');
+      }
+      console.error('   进程将退出。\n');
+      throw initErr;
+    }
     this.setupMarketWs();
 
     // Update initial state (private endpoint requires JWT)

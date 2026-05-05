@@ -197,7 +197,42 @@ function writeEnv(key, value) {
 
 // ==================== 进程管理 ====================
 
-function startMainApp() {
+/**
+ * 自动检测本地代理（支持 Clash/Surge/V2Ray 等常见端口）
+ * 返回可用的 HTTP 代理地址，如 http://127.0.0.1:7890
+ */
+async function detectLocalProxy() {
+  const net = require('net');
+  const candidates = [
+    { port: 7890, proto: 'http' },   // Clash Verge / ClashX
+    { port: 7891, proto: 'http' },   // Clash mixed
+    { port: 7892, proto: 'http' },   // Clash fallback
+    { port: 1087, proto: 'http' },   // Surge / ShadowsocksX-NG
+    { port: 1080, proto: 'socks5' }, // Shadowsocks
+    { port: 8080, proto: 'http' },   // SSR / V2RayN
+    { port: 6152, proto: 'http' },   // Surge Mac
+    { port: 8001, proto: 'http' },   // 其它
+  ];
+
+  for (const { port, proto } of candidates) {
+    const ok = await new Promise((resolve) => {
+      const socket = net.createConnection({ host: '127.0.0.1', port, timeout: 500 });
+      socket.on('connect', () => { socket.destroy(); resolve(true); });
+      socket.on('error', () => resolve(false));
+      socket.on('timeout', () => { socket.destroy(); resolve(false); });
+    });
+    if (ok) {
+      const url = proto === 'socks5'
+        ? `socks5://127.0.0.1:${port}`
+        : `http://127.0.0.1:${port}`;
+      console.log(`[launcher] 检测到本地代理: ${url}`);
+      return url;
+    }
+  }
+  return null;
+}
+
+async function startMainApp() {
   if (appProcess) {
     return { success: false, message: '做市商已在运行中' };
   }
@@ -246,9 +281,20 @@ function startMainApp() {
       throw new Error('找不到 node 或 npm，请确保已安装 Node.js');
     }
 
+    // 自动检测本地代理并注入子进程
+    const detectedProxy = await detectLocalProxy();
+    const proxyEnv = {};
+    if (detectedProxy) {
+      proxyEnv.HTTP_PROXY = detectedProxy;
+      proxyEnv.HTTPS_PROXY = detectedProxy;
+      proxyEnv.ALL_PROXY = detectedProxy;
+      // 确保 Node.js 的 net/tls 走代理
+      proxyEnv.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+    }
+
     spawnOptions = {
       cwd: projectPath,
-      env: { ...process.env, ENV_PATH: getEnvPath() },
+      env: { ...process.env, ...proxyEnv, ENV_PATH: getEnvPath() },
       stdio: ['ignore', 'pipe', 'pipe'],
     };
 

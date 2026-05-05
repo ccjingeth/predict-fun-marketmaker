@@ -10,8 +10,9 @@
 import PredictSdk from '@predictdotfun/sdk';
 import { JsonRpcProvider, Wallet, formatUnits } from 'ethers';
 import { PredictAPI } from './client.js';
+import { createRobustProvider } from '../rpc-provider.js';
 
-const { ChainId, OrderBuilder, ProviderByChainId } = PredictSdk as any;
+const { ChainId, OrderBuilder } = PredictSdk as any;
 
 /**
  * 平台类型
@@ -115,9 +116,7 @@ export class APIClientAdapter {
     }
 
     const chainId = this.getPredictChainId();
-    const provider = this.config.rpcUrl
-      ? new JsonRpcProvider(this.config.rpcUrl)
-      : (ProviderByChainId[chainId] as JsonRpcProvider);
+    const { provider } = await createRobustProvider(this.config.rpcUrl, 20000);
     const wallet = new Wallet(this.config.privateKey, provider);
 
     this.predictOrderBuilderPromise = OrderBuilder.make(chainId, wallet, {

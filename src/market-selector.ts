@@ -720,6 +720,28 @@ export class MarketSelector {
         reasons.push(`目标排队位置偏离，降权: ${rewardProfile.targetQueueReason}`);
       }
     }
+
+    // Predict.fun LP 积分奖励评分（PP/hr）
+    // API 目前没有暴露精确 PP/hr 字段，先用 is_yield_bearing / is_boosted 做 fallback
+    const predictPpHr = Number(market.lp_reward_pp_hr || 0);
+    const hasPredictReward = market.venue === 'predict' && (predictPpHr > 0 || market.is_yield_bearing || market.is_boosted);
+    if (hasPredictReward) {
+      if (predictPpHr > 0) {
+        // API 返回了精确 PP/hr，直接用
+        const ppBonus = Math.log10(predictPpHr + 1) * 8;
+        score += ppBonus;
+        reasons.push(`Predict 积分: ${predictPpHr} PP/hr (+${ppBonus.toFixed(1)})`);
+      } else if (market.is_boosted) {
+        // Boosted 市场 = 最高权重
+        score += 18;
+        reasons.push('Predict Boosted 市场 (+18)');
+      } else if (market.is_yield_bearing) {
+        // Yield-bearing 市场 = 高权重
+        score += 12;
+        reasons.push('Predict Yield-bearing 市场 (+12)');
+      }
+    }
+
     if (recentRisk && recentRisk.penalty > 0) {
       score -= recentRisk.penalty;
       reasons.push(`近期风险记忆，降权: ${recentRisk.reason}`);

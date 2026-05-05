@@ -288,6 +288,7 @@ export class PredictAPI {
       end_date: raw?.end_date ?? raw?.endsAt,
       is_neg_risk: Boolean(raw?.is_neg_risk ?? raw?.isNegRisk ?? false),
       is_yield_bearing: Boolean(raw?.is_yield_bearing ?? raw?.isYieldBearing ?? false),
+      is_boosted: Boolean(raw?.is_boosted ?? raw?.isBoosted ?? false),
       fee_rate_bps: Number(raw?.fee_rate_bps ?? raw?.feeRateBps ?? 0),
       volume_24h: Number(volume24h ?? 0),
       liquidity_24h: Number(liquidity24h ?? 0),
@@ -329,6 +330,22 @@ export class PredictAPI {
         }
         return undefined;
       })(),
+      // Predict.fun LP reward rate (points per hour)
+      lp_reward_pp_hr: this.firstFiniteNumber(
+        raw?.lp_reward_pp_hr,
+        raw?.lpRewardPpHr,
+        raw?.points_per_hour,
+        raw?.pointsPerHour,
+        raw?.reward_rate,
+        raw?.rewardRate,
+        raw?.pp_hr,
+        raw?.ppHr,
+        raw?.liquidity_reward_rate,
+        raw?.liquidityRewardRate,
+        raw?.stats?.lp_reward_pp_hr,
+        raw?.stats?.points_per_hour,
+        raw?.stats?.reward_rate
+      ) || undefined,
     };
   }
 

@@ -1202,6 +1202,7 @@ export interface Market {
   venue?: 'predict' | 'polymarket';
   is_neg_risk: boolean;
   is_yield_bearing: boolean;
+  is_boosted?: boolean;
   fee_rate_bps: number;
   volume_24h?: number;
   liquidity_24h?: number;
@@ -1299,6 +1300,8 @@ export interface Market {
   // Liquidity Points Activation Rules
   // These fields control when orders qualify for liquidity points
   liquidity_activation?: LiquidityActivation;
+  // Predict.fun LP reward rate (points per hour)
+  lp_reward_pp_hr?: number;
 }
 
 /**
